@@ -1,0 +1,10 @@
+.vercel/
+node_modules/
+screenshots/
+test-results/
+e2e-check.js
+e2e-results.json
+*.log
+*.db
+*.db-journal
+*.tmp

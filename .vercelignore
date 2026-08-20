@@ -1,0 +1,5 @@
+.git/
+.vercel/
+screenshots/
+e2e-check.js
+e2e-results.json

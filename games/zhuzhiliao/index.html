@@ -1,0 +1,1282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0d1117">
+<title>竹知了 · 3D 仿真</title>
+<style>
+  :root{
+    --panel:rgba(24,20,14,.68);
+    --line:rgba(255,255,255,.10);
+    --gold:#e9bb56;
+    --green:#8ed07f;
+    --red:#e46b5c;
+    --text:#f2e8cf;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;overflow:hidden;background:#0d1117;color:var(--text);
+    font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+    touch-action:none;user-select:none;-webkit-user-select:none}
+  #stage{position:fixed;inset:0}
+  canvas#gl{display:block;width:100%;height:100%}
+
+  .card{background:var(--panel);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+    border:1px solid var(--line);border-radius:14px;padding:10px 13px;pointer-events:auto}
+
+  #topL{position:fixed;top:calc(10px + env(safe-area-inset-top));left:10px;width:190px}
+  #topR{position:fixed;top:calc(10px + env(safe-area-inset-top));right:10px;width:190px}
+
+  .kv{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:12px;opacity:.85}
+  .big{font-size:26px;font-weight:700;color:var(--gold);font-variant-numeric:tabular-nums;line-height:1.05}
+  .unit{font-size:11px;opacity:.6;margin-left:3px}
+  .bar{height:7px;background:rgba(255,255,255,.10);border-radius:4px;overflow:hidden;margin:7px 0 9px}
+  .bar>i{display:block;height:100%;width:0;border-radius:4px;
+    background:linear-gradient(90deg,#6fbf74,#e9bb56 55%,#e46b5c);transition:width .07s linear}
+  .sing{font-size:12px;display:flex;justify-content:space-between}
+  .sing b{color:var(--green);font-variant-numeric:tabular-nums}
+  #singDot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#555;margin-right:5px;vertical-align:middle}
+  #singDot.on{background:var(--green);box-shadow:0 0 8px var(--green)}
+
+  h4{margin:0 0 7px;font-size:12px;color:var(--gold);letter-spacing:.5px;font-weight:600}
+  select,button{width:100%;font:inherit;font-size:12px;color:var(--text);background:rgba(255,255,255,.06);
+    border:1px solid var(--line);border-radius:9px;padding:6px 8px;cursor:pointer}
+  select{margin-bottom:6px}
+  button:active{transform:scale(.97)}
+  button.go{background:linear-gradient(135deg,#b8892c,#e9bb56);color:#241a06;font-weight:700;border-color:transparent}
+  #readout{margin-top:7px;font-size:15px;font-weight:700;color:var(--green);text-align:center;min-height:20px;font-variant-numeric:tabular-nums}
+  #best{margin-top:5px;font-size:11px;opacity:.62;line-height:1.5}
+
+  #ctl{position:fixed;right:10px;bottom:calc(58px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:7px;align-items:flex-end}
+  .tg{background:var(--panel);backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:11px;
+    padding:7px 11px;font-size:12px;cursor:pointer;white-space:nowrap;color:var(--text)}
+  .tg.on{border-color:var(--green);color:var(--green);background:rgba(60,110,60,.28)}
+  .tg.busy{opacity:.55}
+  #sensWrap{display:none;align-items:center;gap:7px;cursor:default}
+  #sensWrap.on{display:flex}
+  #sensWrap input{width:82px;accent-color:var(--green);cursor:pointer}
+  #sensWrap b{color:var(--green);font-variant-numeric:tabular-nums;min-width:22px;text-align:right}
+
+  #cam{position:fixed;left:10px;bottom:calc(58px + env(safe-area-inset-bottom));width:136px;height:102px;
+    border-radius:11px;overflow:hidden;border:1px solid var(--line);background:#000;display:none}
+  #cam.on{display:block}
+  #cam video,#cam canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+  #camMsg{position:absolute;left:0;right:0;bottom:0;font-size:10px;background:rgba(0,0,0,.55);padding:2px 5px;text-align:center}
+
+  #hint{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(10px + env(safe-area-inset-bottom));
+    background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:7px 15px;
+    font-size:11.5px;max-width:calc(100vw - 24px);text-align:center;line-height:1.5;backdrop-filter:blur(10px)}
+
+  #combo{position:fixed;left:50%;top:30%;transform:translateX(-50%);opacity:0;pointer-events:none;z-index:30;
+    font-size:24px;font-weight:800;letter-spacing:1px;color:#ffd36b;transition:opacity .2s,transform .12s;
+    text-shadow:0 0 16px rgba(255,150,40,.75),0 2px 6px rgba(0,0,0,.6)}
+  #charge{position:fixed;left:50%;bottom:calc(112px + env(safe-area-inset-bottom));transform:translateX(-50%);
+    width:min(230px,54vw);height:9px;background:rgba(0,0,0,.5);border:1px solid var(--line);border-radius:6px;
+    overflow:hidden;opacity:0;transition:opacity .18s;pointer-events:none;z-index:30}
+  #chargeBar{height:100%;width:0;background:linear-gradient(90deg,#ffd36b,#ff7a3c);transition:width .05s linear}
+
+  #toast{position:fixed;left:50%;top:52%;transform:translate(-50%,-50%);background:rgba(0,0,0,.82);
+    padding:12px 18px;border-radius:11px;font-size:13px;max-width:78vw;text-align:center;white-space:pre-line;
+    opacity:0;transition:opacity .25s;pointer-events:none;z-index:40;line-height:1.6}
+  #toast.on{opacity:1}
+
+  #pop{position:fixed;left:50%;top:16%;transform:translate(-50%,-8px) scale(.85);opacity:0;z-index:50;
+    background:linear-gradient(135deg,#e9bb56,#e46b5c);color:#241a06;font-weight:800;font-size:17px;
+    padding:11px 24px;border-radius:13px;box-shadow:0 10px 30px rgba(0,0,0,.45);pointer-events:none;
+    transition:all .38s cubic-bezier(.34,1.6,.64,1);white-space:nowrap}
+  #pop.on{opacity:1;transform:translate(-50%,0) scale(1)}
+
+  #boot{position:fixed;inset:0;background:#0d1117;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:16px;z-index:100;transition:opacity .45s}
+  #boot.gone{opacity:0;pointer-events:none}
+  #boot h1{margin:0;font-size:30px;letter-spacing:6px;color:var(--gold);font-weight:600}
+  #boot p{margin:0;font-size:12.5px;opacity:.62;max-width:300px;text-align:center;line-height:1.85}
+  #bootTips{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;max-width:320px}
+  #bootTips span{font-size:11.5px;padding:5px 11px;border:1px solid var(--line);border-radius:14px;
+    background:rgba(255,255,255,.05);opacity:.82}
+  #boot button{width:auto;padding:11px 34px;font-size:14px;font-weight:700;
+    background:linear-gradient(135deg,#b8892c,#e9bb56);color:#241a06;border:none;border-radius:26px}
+
+  @media(max-width:560px){
+    #topL,#topR{width:calc(50vw - 15px)}
+    #topR{right:10px}
+    .big{font-size:22px}
+    #ctl,#cam{bottom:calc(92px + env(safe-area-inset-bottom))}
+    #cam{width:104px;height:78px}
+    #hint{font-size:10.5px;padding:6px 12px}
+    .tg{font-size:11px;padding:6px 9px}
+  }
+  @media(max-height:460px){ #hint{display:none} }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="gl"></canvas></div>
+
+<div id="topL" class="card">
+  <div class="kv"><span>转速</span><span id="hzTxt">0.0 Hz</span></div>
+  <div><span class="big" id="rpm">0</span><span class="unit">RPM</span></div>
+  <div class="bar"><i id="rpmBar"></i></div>
+  <div class="sing"><span><i id="singDot"></i>连续鸣叫</span><b id="sing">0.0s</b></div>
+</div>
+
+<div id="topR" class="card">
+  <h4>挑战玩法</h4>
+  <select id="mode">
+    <option value="free">自由把玩</option>
+    <option value="dur">连续鸣叫挑战</option>
+    <option value="rpm">极速冲刺挑战</option>
+  </select>
+  <button id="go" class="go">开始挑战</button>
+  <div id="readout"></div>
+  <div id="best"></div>
+</div>
+
+<div id="cam">
+  <video id="vid" playsinline muted autoplay></video>
+  <canvas id="camc"></canvas>
+  <div id="camMsg">启动中…</div>
+</div>
+
+<div id="ctl">
+  <div class="tg" id="sensWrap">
+    <span>灵敏度</span>
+    <input type="range" id="sens" min="0.6" max="3" step="0.1" value="1.9">
+    <b id="sensVal">1.9</b>
+  </div>
+  <div class="tg" id="tgHand">🖐 摄像头手势</div>
+  <div class="tg" id="tgShake">📳 摇一摇</div>
+  <div class="tg on" id="tgSound">🔊 声音</div>
+  <div class="tg" id="tgView">🔄 复位视角</div>
+</div>
+
+<div id="hint">按住左右<b>来回搓动</b>（往哪边搓都是加速，越连贯倍率越高）· 右键拖动转视角 · 滚轮缩放 · 方向键也能搓</div>
+<div id="combo"></div>
+<div id="charge"><div id="chargeBar"></div></div>
+<div id="toast"></div>
+<div id="pop"></div>
+
+<div id="boot">
+  <h1>竹 知 了</h1>
+  <p>一根竹签串着一片薄竹片<br>搓动竹签，竹片切割空气<br>发出"哇呜——哇呜——"的蝉鸣</p>
+  <div id="bootTips">
+    <span>🖐 摄像头手势</span><span>✊ 握拳蓄力</span><span>🔥 连搓加成</span><span>👑 转速称号</span>
+  </div>
+  <button id="bootBtn">开始把玩</button>
+</div>
+
+<script type="importmap">
+{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js"}}
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
+
+<script type="module">
+import * as THREE from "three";
+
+const $ = id => document.getElementById(id);
+const clamp = (v,a,b)=> v<a?a:(v>b?b:v);
+const lerp = (a,b,t)=> a+(b-a)*t;
+
+/* ══════════════════ 渲染器 / 场景 ══════════════════ */
+const canvas = $('gl');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio||1, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+
+const scene = new THREE.Scene();
+// 渐变背景：上方暖调天光、下方沉稳竹青，比纯黑更能衬出竹材质
+function gradientBG(){
+  const c = document.createElement('canvas'); c.width=8; c.height=256;
+  const g = c.getContext('2d'), lg = g.createLinearGradient(0,0,0,256);
+  lg.addColorStop(0.00,'#35465b');
+  lg.addColorStop(0.12,'#26323f');   // 与雾色一致，消除地平线硬边
+  lg.addColorStop(0.55,'#222d38');
+  lg.addColorStop(1.00,'#1b242e');
+  g.fillStyle=lg; g.fillRect(0,0,8,256);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+scene.background = gradientBG();
+scene.fog = new THREE.Fog(0x26323f, 6, 22);
+
+const camera = new THREE.PerspectiveCamera(42, 1, 0.05, 120);
+
+/* 轨道视角 */
+const HOME = {dist:3.7, theta:0.62, phi:1.02};
+const view = {...HOME, tDist:HOME.dist, tTheta:HOME.theta, tPhi:HOME.phi};
+function applyCam(){
+  const s = Math.sin(view.phi);
+  camera.position.set(view.dist*s*Math.sin(view.theta), view.dist*Math.cos(view.phi)+0.34, view.dist*s*Math.cos(view.theta));
+  camera.lookAt(0, 0.34, 0);
+}
+/* 按画幅自动退到"刚好装下整支竹知了"的距离 —— 竖屏手机不会把竹片切掉两端 */
+let userZoomed = false;
+function fitCamera(){
+  const vHalf = THREE.MathUtils.degToRad(camera.fov/2);
+  const hHalf = Math.atan(Math.tan(vHalf)*camera.aspect);
+  const needH = 1.10 / Math.tan(hHalf);     // 竹片半展 0.84 + 余量
+  const needV = 1.40 / Math.tan(vHalf);     // 竹签全长的一半 + 余量
+  HOME.dist = clamp(Math.max(needH, needV), 3.2, 11);
+  if(!userZoomed){ view.tDist = HOME.dist; view.dist = HOME.dist; }  // 转屏立即到位，不做缓动
+}
+function resize(){
+  const w = Math.max(1, innerWidth), h = Math.max(1, innerHeight);
+  renderer.setSize(w,h,false);
+  camera.aspect = w/h;
+  camera.fov = w/h < 0.75 ? 52 : 42;      // 竖屏手机拉宽视野
+  camera.updateProjectionMatrix();
+  fitCamera();
+}
+addEventListener('resize', resize);
+addEventListener('orientationchange', ()=>setTimeout(resize,120));
+resize(); applyCam();
+
+/* 灯光：三点布光，突出竹子的圆柱高光与纤维质感 */
+scene.add(new THREE.HemisphereLight(0xfff3d8, 0x33404e, 1.25));
+const key = new THREE.DirectionalLight(0xfff2da, 2.2); key.position.set(3.4,5.2,3.0); scene.add(key);
+const fill = new THREE.DirectionalLight(0xbcd4ff, 0.95); fill.position.set(-4.0,1.6,2.2); scene.add(fill);
+const back = new THREE.DirectionalLight(0xffd9a0, 1.15); back.position.set(-1.6,3.0,-4.2); scene.add(back);  // 轮廓光
+const under = new THREE.PointLight(0xffcf8a, 0.85, 9); under.position.set(0,-0.7,0.9); scene.add(under);
+
+/* ══════════════════ 程序化竹材质（竹制质感） ══════════════════ */
+function bambooTexture(base, dark, vertical){
+  const c = document.createElement('canvas'); c.width=128; c.height=512;
+  const g = c.getContext('2d');
+  g.fillStyle = base; g.fillRect(0,0,128,512);
+  // 竹纤维：细密纵向条纹
+  for(let i=0;i<420;i++){
+    const x = Math.random()*128, w = 0.5+Math.random()*2.2;
+    g.globalAlpha = 0.03+Math.random()*0.10;
+    g.fillStyle = Math.random()<0.5 ? dark : '#fff8e0';
+    g.fillRect(x, 0, w, 512);
+  }
+  // 竹节横环
+  g.globalAlpha = 1;
+  for(let k=0;k<4;k++){
+    const y = 40 + k*128 + Math.random()*20;
+    const gr = g.createLinearGradient(0,y-9,0,y+9);
+    gr.addColorStop(0,'rgba(0,0,0,0)'); gr.addColorStop(.42,dark);
+    gr.addColorStop(.58,'rgba(255,245,205,.55)'); gr.addColorStop(1,'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.fillRect(0,y-9,128,18);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  if(vertical) t.rotation = Math.PI/2, t.center.set(.5,.5);
+  return t;
+}
+const texStick = bambooTexture('#d9b475','#8a6530',false);
+const texBlade = bambooTexture('#c2cf82','#7b8a45',true);
+
+const matStick = new THREE.MeshStandardMaterial({map:texStick, roughness:.52, metalness:.02});
+const matNode  = new THREE.MeshStandardMaterial({color:0x9a7639, roughness:.62});
+const matBlade = new THREE.MeshStandardMaterial({map:texBlade, color:0x9fae5c, roughness:.42, metalness:.02,
+                                                 side:THREE.DoubleSide, emissive:0x1e2410, emissiveIntensity:.18});
+
+/* ══════════════════ 竹知了本体 ══════════════════ */
+const toy = new THREE.Group(); scene.add(toy);
+
+// 竹签（下方手持杆，略带上下锥度）
+const STICK_TOP = 1.10, STICK_BOT = -1.20;
+const stick = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.042, 0.056, STICK_TOP-STICK_BOT, 20, 1),
+  matStick);
+stick.position.y = (STICK_TOP+STICK_BOT)/2;
+toy.add(stick);
+// 竹节
+for(let i=0;i<5;i++){
+  const r = new THREE.Mesh(new THREE.TorusGeometry(0.051+i*0.001, 0.0075, 8, 22), matNode);
+  r.rotation.x = Math.PI/2; r.position.y = STICK_BOT+0.24+i*0.46; toy.add(r);
+}
+// 顶端轴销
+const axle = new THREE.Mesh(new THREE.CylinderGeometry(0.021,0.021,0.16,12), matNode);
+axle.position.y = STICK_TOP+0.03; toy.add(axle);
+
+// 旋转组：竹片装在轴销上，绕竖直轴自由旋转
+const spin = new THREE.Group(); spin.position.y = STICK_TOP - 0.02; toy.add(spin);
+
+// 竹片：薄、长、两端带轻微扭角（真实竹片有小攻角，切风才响）
+const BLADE_LEN = 1.68, BLADE_W = 0.255, BLADE_T = 0.028;
+/* 单条连续曲面：沿长度扫掠一个矩形截面，同时收窄、削薄、并按螺旋桨方式
+   左右反向扭转出攻角 —— 有攻角才能切风发声，也才有真实竹片的弯翘感 */
+const TWIST = 0.14;
+function bladeGeometry(N=88){
+  const half = BLADE_LEN/2, pos=[], uv=[], idx=[];
+  const ring = [[-.5,-.5],[.5,-.5],[.5,.5],[-.5,.5]];   // [沿宽度, 沿厚度]
+  for(let i=0;i<=N;i++){
+    const u = -1 + 2*i/N, a = Math.abs(u);
+    let w = BLADE_W * (1 - 0.30*Math.pow(a,1.7));
+    if(a > 0.93) w *= 1 - (a-0.93)/0.07*0.72;           // 端部收圆
+    const th = BLADE_T * (1 - 0.42*a*a);                // 越靠端部越薄
+    const ang = TWIST*u;                                 // 两侧反向 → 螺旋桨
+    const c = Math.cos(ang), s = Math.sin(ang);
+    for(const [fw,ft] of ring){
+      const yw = fw*w, zt = ft*th;
+      pos.push(u*half, zt*c - yw*s, yw*c + zt*s);
+      uv.push(i/N, (fw+0.5));
+    }
+  }
+  for(let i=0;i<N;i++){
+    const A=i*4, B=(i+1)*4;
+    for(let k=0;k<4;k++){
+      const k2=(k+1)%4;
+      idx.push(A+k, B+k, B+k2,  A+k, B+k2, A+k2);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv,2));
+  g.setIndex(idx); g.computeVertexNormals();
+  return g;
+}
+function makeBlade(){
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(bladeGeometry(), matBlade));
+  // 中心加厚的竹质轴套
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.062,0.070,0.085,20), matNode);
+  g.add(hub);
+  return g;
+}
+const blade = makeBlade();
+spin.add(blade);
+
+/* 运动模糊：把"本帧扫过的角度"切成若干片重复绘制（近似快门积分） */
+const GHOSTS = (innerWidth<600 ? 14 : 26);
+const ghostGeo = bladeGeometry(24);
+const ghosts = [];
+for(let i=0;i<GHOSTS;i++){
+  const m = new THREE.Mesh(ghostGeo, new THREE.MeshBasicMaterial({
+    color:0xd6e6a4, transparent:true, opacity:0, depthWrite:false, side:THREE.DoubleSide,
+    blending:THREE.NormalBlending}));
+  spin.add(m); ghosts.push(m);
+}
+/* 极高速时的"风扇圆盘"：径向条纹贴图，比纯色盘更像真实残影 */
+function discTexture(){
+  const c=document.createElement('canvas'); c.width=c.height=256;
+  const g=c.getContext('2d');
+  g.clearRect(0,0,256,256);
+  for(let i=0;i<160;i++){
+    const a=Math.random()*Math.PI*2, r0=20+Math.random()*40, r1=r0+40+Math.random()*80;
+    g.strokeStyle=`rgba(214,230,164,${0.05+Math.random()*0.12})`;
+    g.lineWidth=0.7+Math.random()*1.8;
+    g.beginPath();
+    g.arc(128,128,(r0+r1)/2, a, a+0.5+Math.random()*1.6);
+    g.stroke();
+  }
+  const rg=g.createRadialGradient(128,128,10,128,128,126);
+  rg.addColorStop(0,'rgba(214,230,164,.30)'); rg.addColorStop(.72,'rgba(214,230,164,.14)');
+  rg.addColorStop(1,'rgba(214,230,164,0)');
+  g.globalCompositeOperation='destination-in';
+  g.fillStyle=rg; g.fillRect(0,0,256,256);
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; return t;
+}
+const disc = new THREE.Mesh(
+  new THREE.CircleGeometry(BLADE_LEN/2*1.02, 56),
+  new THREE.MeshBasicMaterial({map:discTexture(), transparent:true, opacity:0, depthWrite:false, side:THREE.DoubleSide}));
+disc.rotation.x = -Math.PI/2;
+spin.add(disc);
+
+/* 空气涡环：高速时在竹片扫过的平面外泛起淡淡气流圈 */
+const airRings = [];
+for(let i=0;i<3;i++){
+  const r = new THREE.Mesh(new THREE.RingGeometry(0.55,0.62,48),
+    new THREE.MeshBasicMaterial({color:0x9fd4ff, transparent:true, opacity:0, side:THREE.DoubleSide, depthWrite:false}));
+  r.rotation.x = -Math.PI/2; scene.add(r); airRings.push({m:r, t:i/3});
+}
+
+/* ══════════════════ 3D 手影：把摄像头识别到的手画进场景里 ══════════════════ */
+const HAND_BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
+                    [9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+const handGroup = new THREE.Group();
+handGroup.visible = false;
+scene.add(handGroup);
+
+const jointGeo = new THREE.SphereGeometry(0.026, 10, 8);
+const hands3D = [];
+for(let h=0;h<2;h++){
+  const g = new THREE.Group(); g.visible=false;
+  const jm = new THREE.MeshBasicMaterial({color:0x8ff0c0, transparent:true, opacity:0.95, depthWrite:false});
+  const joints = [];
+  for(let i=0;i<21;i++){ const m=new THREE.Mesh(jointGeo, jm); g.add(m); joints.push(m); }
+  const bg = new THREE.BufferGeometry();
+  bg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(HAND_BONES.length*6), 3));
+  const bones = new THREE.LineSegments(bg,
+    new THREE.LineBasicMaterial({color:0x5fe0ff, transparent:true, opacity:0.8, depthWrite:false}));
+  g.add(bones);
+  handGroup.add(g);
+  hands3D.push({g, joints, bones, jm});
+}
+/* 归一化关键点 → 世界坐标：手停在竹签前方，左右/上下跟着真手动 */
+const HAND_SX = 2.2, HAND_SY = 1.8, HAND_SZ = 0.7, HAND_Y0 = 0.30, HAND_Z0 = 0.55;
+function placeHands(list){
+  handGroup.visible = !!(list && list.length);
+  for(let h=0;h<2;h++){
+    const H = hands3D[h], lm = list && list[h];
+    H.g.visible = !!lm;
+    if(!lm) continue;
+    const arr = H.bones.geometry.attributes.position.array;
+    const P = i => [ (0.5-lm[i].x)*HAND_SX, (0.5-lm[i].y)*HAND_SY + HAND_Y0, HAND_Z0 - lm[i].z*HAND_SZ ];
+    for(let i=0;i<21;i++){ const p=P(i); H.joints[i].position.set(p[0],p[1],p[2]); }
+    HAND_BONES.forEach(([a,b],k)=>{
+      const pa=P(a), pb=P(b);
+      arr[k*6]=pa[0]; arr[k*6+1]=pa[1]; arr[k*6+2]=pa[2];
+      arr[k*6+3]=pb[0]; arr[k*6+4]=pb[1]; arr[k*6+5]=pb[2];
+    });
+    H.bones.geometry.attributes.position.needsUpdate = true;
+  }
+}
+
+/* ══════════════════ 里程碑特效：从竹片处扩散的光环 ══════════════════ */
+const burst = new THREE.Mesh(new THREE.RingGeometry(0.955, 1.0, 72),
+  new THREE.MeshBasicMaterial({color:0xffe9a8, transparent:true, opacity:0, depthWrite:false,
+                               side:THREE.DoubleSide, blending:THREE.AdditiveBlending}));
+burst.rotation.x = -Math.PI/2; burst.position.y = 1.10; scene.add(burst);
+let burstT = 0, burstScale = 1;
+
+/* 地面：中心亮、边缘融进背景的柔和台面 + 接触阴影，避免硬邦邦的黑饼 */
+function floorTexture(){
+  const c=document.createElement('canvas'); c.width=c.height=512;
+  const g=c.getContext('2d');
+  const rg=g.createRadialGradient(256,256,10,256,256,256);
+  rg.addColorStop(0,'#4a5a6b'); rg.addColorStop(.45,'#33414f');
+  rg.addColorStop(.8,'#222d38'); rg.addColorStop(1,'#1a242e');
+  g.fillStyle=rg; g.fillRect(0,0,512,512);
+  for(let i=0;i<9000;i++){                     // 细微颗粒，避免大面积色带
+    g.fillStyle=`rgba(255,255,255,${Math.random()*0.035})`;
+    g.fillRect(Math.random()*512, Math.random()*512, 1, 1);
+  }
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; return t;
+}
+const floor = new THREE.Mesh(new THREE.CircleGeometry(30,72),
+  new THREE.MeshStandardMaterial({map:floorTexture(), roughness:.88, metalness:.06}));
+floor.rotation.x = -Math.PI/2; floor.position.y = -1.30; scene.add(floor);
+
+function shadowTexture(){
+  const c=document.createElement('canvas'); c.width=c.height=128;
+  const g=c.getContext('2d');
+  const rg=g.createRadialGradient(64,64,2,64,64,64);
+  rg.addColorStop(0,'rgba(0,0,0,.55)'); rg.addColorStop(.45,'rgba(0,0,0,.16)'); rg.addColorStop(1,'rgba(0,0,0,0)');
+  g.fillStyle=rg; g.fillRect(0,0,128,128);
+  return new THREE.CanvasTexture(c);
+}
+const contact = new THREE.Mesh(new THREE.PlaneGeometry(0.95,0.95),
+  new THREE.MeshBasicMaterial({map:shadowTexture(), transparent:true, depthWrite:false}));
+contact.rotation.x = -Math.PI/2; contact.position.y = -1.288; scene.add(contact);
+
+/* ══════════════════ 物理：角速度 + 空气阻力 ══════════════════ */
+/* 竹片绕竖直轴转动。阻力矩来自空气：
+   线性项（低速黏性）+ 二次项（高速形阻，∝ ω²）+ 轴销库仑摩擦（保证能真正停住） */
+/* 竹片有固定攻角，只朝一个方向转：往复搓动靠回程打滑单向驱动。
+   所以**任何方向的搓动都往同一个方向加力** —— 否则来回搓会正负抵消，
+   转速在 0~1200 之间乱跳、停在哪全看最后一下往哪搓，完全没法把握。 */
+const SPIN = 1;
+const W_MAX = 330;                 // rad/s ≈ 3150 RPM
+const D_LIN = 0.30, D_QUAD = 0.00092, D_COUL = 0.75;
+let omega = 0, angle = HOME.theta;   // 静止时竹片横跨屏幕（垂直于视线），两半对称
+let lastInputAt = -1e9;
+
+function physics(dt){
+  const s = Math.sign(omega), a = Math.abs(omega);
+  if(a < 1e-4){ omega = 0; return; }
+  let na = a - (D_LIN*a + D_QUAD*a*a + D_COUL)*dt;
+  omega = na <= 0 ? 0 : s*na;
+}
+function torque(d){
+  if(!isFinite(d) || d===0) return;
+  omega = clamp(omega + d, -W_MAX, W_MAX);
+  lastInputAt = performance.now();
+}
+const rps = ()=> Math.abs(omega)/(2*Math.PI);
+const rpm = ()=> rps()*60;
+
+/* ══════════════════ Web Audio 实时合成（无任何预录音频） ══════════════════
+   依据实物原理：竹片高速切割空气 → 周期性涡脱落形成脉冲列（基频 = 2×转速，
+   薄片每转两次掠过同一方位）→ 竹体/竹片本身的共振峰(formant)把它染成"哇呜"的
+   元音音色 → 叠加宽带气流噪声（中心频率按 Strouhal 数随叶尖速度上移）。
+   转速降 → 基频降、共振峰下移、噪声变暗 → 自然"变闷变低"直到停下。          */
+let AC=null, mixer=null, comp=null, master=null;
+let buzz=null, buzzGain=null, sub=null, subGain=null;
+let F=[], FG=[], noise=null, nBP=null, nHP=null, nGain=null;
+let wh1=null, wh2=null, whBP=null, whGain=null, chop=null, chopDepth=null, chopBus=null;
+let wowLFO=null, wowF1=null, wowF2=null, wowAmp=null;
+let soundOn = true, audioReady = false;
+
+/* 真实竹片尺度（用于气动声学换算，与 3D 模型的观赏尺度解耦） */
+const R_REAL = 0.075;      // 叶尖半径 7.5cm
+const T_REAL = 0.0012;     // 竹片厚度 1.2mm
+const STROUHAL = 0.2;
+
+function initAudio(){
+  if(AC) return;
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if(!Ctx) return;
+  AC = new Ctx();
+
+  master = AC.createGain(); master.gain.value = 0;
+  comp = AC.createDynamicsCompressor();
+  comp.threshold.value=-14; comp.knee.value=22; comp.ratio.value=6;
+  comp.attack.value=0.004; comp.release.value=0.18;
+  mixer = AC.createGain(); mixer.gain.value = 1;
+  mixer.connect(master); master.connect(comp); comp.connect(AC.destination);
+
+  // 脉冲列（锯齿富含谐波，最接近周期性涡脱落的冲击串）
+  buzz = AC.createOscillator(); buzz.type='sawtooth'; buzz.frequency.value=20;
+  buzzGain = AC.createGain(); buzzGain.gain.value=0.9;
+  buzz.connect(buzzGain);
+
+  // 低八度方波：补足低速时的"闷"感与厚度
+  sub = AC.createOscillator(); sub.type='square'; sub.frequency.value=10;
+  subGain = AC.createGain(); subGain.gain.value=0.0;
+  sub.connect(subGain); subGain.connect(mixer);
+
+  // 三个并联共振峰 —— 竹腔/竹片的"哇"元音色
+  const spec = [[520, 7.5, 0.85],[1450, 9.0, 0.62],[2950, 8.0, 0.34]];
+  spec.forEach(([f,q,g])=>{
+    const bp = AC.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=f; bp.Q.value=q;
+    const gn = AC.createGain(); gn.gain.value=g;
+    buzzGain.connect(bp); bp.connect(gn); gn.connect(mixer);
+    F.push(bp); FG.push(gn);
+  });
+  // 直通一点原始脉冲，避免只剩共振峰而失去冲击感
+  const dry = AC.createGain(); dry.gain.value=0.16; buzzGain.connect(dry); dry.connect(mixer);
+
+  /* 叶片通过调制总线：竹片每转两次掠过同一方位，把持续的哨声/气流
+     "斩"成一串脉冲 —— 这正是"知了知了"而不是"嘘——"的原因 */
+  chopBus = AC.createGain(); chopBus.gain.value = 0.5;
+  chop = AC.createOscillator(); chop.type='sine'; chop.frequency.value=10;
+  chopDepth = AC.createGain(); chopDepth.gain.value=0.45;
+  chop.connect(chopDepth); chopDepth.connect(chopBus.gain);
+  chopBus.connect(mixer);
+
+  /* 涡激哨声（Strouhal 音）：薄竹片后缘周期性涡脱落形成的高频哨音，
+     频率 ∝ 叶尖线速度 —— 这是"知了"高音的真正来源 */
+  wh1 = AC.createOscillator(); wh1.type='sine';     wh1.frequency.value=300;
+  wh2 = AC.createOscillator(); wh2.type='triangle'; wh2.frequency.value=302;
+  whBP = AC.createBiquadFilter(); whBP.type='bandpass'; whBP.frequency.value=300; whBP.Q.value=2.6;
+  whGain = AC.createGain(); whGain.gain.value=0;
+  wh1.connect(whBP); wh2.connect(whBP); whBP.connect(whGain); whGain.connect(chopBus);
+
+  // 气流噪声
+  const n = AC.sampleRate*2, b = AC.createBuffer(1,n,AC.sampleRate), d=b.getChannelData(0);
+  let last=0;
+  for(let i=0;i<n;i++){ const w=Math.random()*2-1; last = last*0.32 + w*0.68; d[i]=last; }
+  noise = AC.createBufferSource(); noise.buffer=b; noise.loop=true;
+  nHP = AC.createBiquadFilter(); nHP.type='highpass'; nHP.frequency.value=500;
+  nBP = AC.createBiquadFilter(); nBP.type='bandpass'; nBP.frequency.value=1800; nBP.Q.value=1.1;
+  nGain = AC.createGain(); nGain.gain.value=0;
+  noise.connect(nHP); nHP.connect(nBP); nBP.connect(nGain); nGain.connect(chopBus);
+
+  // "哇呜——哇呜——"：共振峰随低频 LFO 摆动 + 轻微幅度起伏
+  wowLFO = AC.createOscillator(); wowLFO.type='sine'; wowLFO.frequency.value=4.2;
+  wowF1 = AC.createGain(); wowF1.gain.value=0;   // → F[0].frequency
+  wowF2 = AC.createGain(); wowF2.gain.value=0;   // → F[1].frequency
+  wowAmp= AC.createGain(); wowAmp.gain.value=0;  // → mixer.gain
+  wowLFO.connect(wowF1); wowF1.connect(F[0].frequency);
+  wowLFO.connect(wowF2); wowF2.connect(F[1].frequency);
+  wowLFO.connect(wowAmp); wowAmp.connect(mixer.gain);
+
+  buzz.start(); sub.start(); noise.start(); wowLFO.start();
+  wh1.start(); wh2.start(); chop.start();
+  audioReady = true;
+}
+function resumeAudio(){
+  initAudio();
+  if(AC && AC.state==='suspended') AC.resume();
+}
+
+const SING_HZ = 2.2;              // 起鸣阈值：低于此转速只有风声，不成鸣叫
+function audioUpdate(){
+  if(!audioReady) return;
+  const t = AC.currentTime, k = 0.05;
+  const f = rps();
+
+  if(!soundOn){ master.gain.setTargetAtTime(0, t, 0.04); return; }
+
+  // 叶片通过频率 = 2 × 转速（薄片每转两次掠过同一方位）
+  const fBlade = clamp(2*f, 4, 420);
+  buzz.frequency.setTargetAtTime(fBlade, t, k);
+  sub.frequency.setTargetAtTime(clamp(fBlade/2, 32, 210), t, k);   // 别掉进次声区空耗功率
+  chop.frequency.setTargetAtTime(fBlade, t, k);
+
+  // 响度：起鸣阈值以下只有风声；之后随转速增长（气动声功率增长很陡）
+  const drive = clamp((f - SING_HZ) / 34, 0, 1);
+  const vol = Math.pow(drive, 0.62) * 0.62;
+  master.gain.setTargetAtTime(vol, t, k);
+
+  // 涡激哨声：f = St·V/d，V 为叶尖线速度 —— "音调越高"的主要来源
+  const tip = f * 2*Math.PI * R_REAL;                       // m/s
+  const fWhistle = clamp(STROUHAL*tip/T_REAL, 130, 4200);
+  wh1.frequency.setTargetAtTime(fWhistle, t, k);
+  wh2.frequency.setTargetAtTime(fWhistle*2.008, t, k);       // 微失谐二次谐波，增加"沙"味
+  whBP.frequency.setTargetAtTime(fWhistle, t, k);
+  whGain.gain.setTargetAtTime(Math.pow(drive, 0.7)*0.62, t, k);
+
+  // 斩波深度：慢转时"哇—哇—"颗粒分明，快转时融成连续蝉鸣
+  chopDepth.gain.setTargetAtTime(lerp(0.46, 0.24, drive), t, 0.12);
+
+  // 竹体共振峰：随转速上移，减速时下移 → 声音变闷变低
+  F[0].frequency.setTargetAtTime(clamp(300 + f*11.5, 260, 1000), t, k);
+  F[1].frequency.setTargetAtTime(clamp(780 + f*32,  700, 3000), t, k);
+  F[2].frequency.setTargetAtTime(clamp(1900+ f*46, 1700, 6200), t, k);
+  F[0].Q.setTargetAtTime(lerp(9.5, 5.5, drive), t, 0.15);
+  FG[2].gain.setTargetAtTime(0.12 + drive*0.42, t, 0.12);   // 越快越亮
+  subGain.gain.setTargetAtTime(clamp((f-SING_HZ)/3,0,1)*(1-drive)*0.20, t, 0.15);  // 越慢越闷
+  // 高速时低频嗡鸣让位给哨声，避免糊成一片
+  buzzGain.gain.setTargetAtTime(lerp(0.9, 0.34, drive), t, 0.12);
+
+  // 气流噪声：中心频率同样跟随叶尖速度
+  nBP.frequency.setTargetAtTime(clamp(420 + tip*90, 400, 9000), t, k);
+  nHP.frequency.setTargetAtTime(clamp(220 + tip*28, 200, 3600), t, k);
+  nGain.gain.setTargetAtTime(clamp(f*0.020, 0, 0.30) * (0.25+drive*0.9), t, k);
+
+  // 哇呜摆动：慢转时摆得慢而深（"哇——呜——"分明），快转时趋于稳定嗡鸣
+  wowLFO.frequency.setTargetAtTime(clamp(2.6 + f*0.16, 2.6, 11), t, 0.2);
+  wowF1.gain.setTargetAtTime(lerp(150, 40, drive), t, 0.2);
+  wowF2.gain.setTargetAtTime(lerp(420, 120, drive), t, 0.2);
+  wowAmp.gain.setTargetAtTime(lerp(0.30, 0.07, drive)*vol, t, 0.2);
+}
+
+/* ══════════════════ 输入 ①：鼠标 / 触摸搓动 ══════════════════ */
+const pts = new Map();
+let rubX=0, rubT=0, rubDir=0, orbiting=false, oX=0, oY=0, pinch0=0, dist0=0;
+
+function onDown(e){
+  resumeAudio(); dismissBoot();
+  try{ canvas.setPointerCapture(e.pointerId); }catch(_){}   // 抛错不能中断后面的搓动登记
+  pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(e.button===2 || e.button===1) orbiting = true;
+  if(pts.size===1){ rubX=e.clientX; rubT=performance.now(); }
+  if(pts.size===2){
+    orbiting = true;
+    const p=[...pts.values()];
+    oX=(p[0].x+p[1].x)/2; oY=(p[0].y+p[1].y)/2;
+    dist0 = Math.hypot(p[0].x-p[1].x, p[0].y-p[1].y); pinch0 = view.tDist;
+  }
+}
+function onMove(e){
+  if(!pts.has(e.pointerId)) return;
+  pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+
+  if(orbiting){
+    const p=[...pts.values()];
+    const mx = p.length>1 ? (p[0].x+p[1].x)/2 : p[0].x;
+    const my = p.length>1 ? (p[0].y+p[1].y)/2 : p[0].y;
+    view.tTheta -= (mx-oX)*0.0062;
+    view.tPhi = clamp(view.tPhi - (my-oY)*0.0062, 0.30, 2.45);
+    oX=mx; oY=my;
+    if(p.length>1 && dist0>0){
+      const d = Math.hypot(p[0].x-p[1].x, p[0].y-p[1].y);
+      userZoomed = true;
+      view.tDist = clamp(pinch0 * dist0/d, 2.2, 13);
+    }
+    return;
+  }
+
+  if(pts.size===1){
+    const now = performance.now(), dx = e.clientX-rubX, dt = now-rubT;
+    if(dt>4){
+      const sp = Math.abs(dx)/dt;                 // px/ms
+      const sg = Math.sign(dx);
+      if(sg && rubDir && sg!==rubDir) addCombo(); // 方向反转 = 一次完整搓动
+      if(sg) rubDir = sg;
+      // 搓动越快、连搓越多，给的角冲量越大（真实搓竹签就是靠往复摩擦累积）
+      torque(SPIN * sp * 0.26 * comboMul);
+      rubX=e.clientX; rubT=now;
+    }
+  }
+}
+function onUp(e){
+  pts.delete(e.pointerId);
+  if(pts.size<2 && !(e.buttons&6)) orbiting=false;
+  if(pts.size===0) rubDir=0;
+}
+canvas.addEventListener('pointerdown', onDown);
+canvas.addEventListener('pointermove', onMove);
+canvas.addEventListener('pointerup', onUp);
+canvas.addEventListener('pointercancel', onUp);
+canvas.addEventListener('contextmenu', e=>e.preventDefault());
+canvas.addEventListener('wheel', e=>{
+  userZoomed = true;
+  view.tDist = clamp(view.tDist + e.deltaY*0.0032, 2.2, 13);
+}, {passive:true});
+
+// 键盘：←→ 搓动
+const keys = new Set();
+addEventListener('keydown', e=>{
+  if(['ArrowLeft','ArrowRight','a','d','A','D'].includes(e.key)){ resumeAudio(); dismissBoot(); keys.add(e.key); e.preventDefault(); }
+});
+addEventListener('keyup', e=>keys.delete(e.key));
+let kbDir = 0, kbT = 0;
+function keyboardRub(){
+  const L = keys.has('ArrowLeft')||keys.has('a')||keys.has('A');
+  const R = keys.has('ArrowRight')||keys.has('d')||keys.has('D');
+  if(!L && !R) { kbDir=0; return; }
+  const d = R?1:-1;
+  const now = performance.now();
+  if(d!==kbDir && now-kbT>40){ addCombo(); kbDir=d; kbT=now; }
+  torque(SPIN * 0.5 * comboMul);
+}
+
+/* ══════════════════ 输入 ②：摇一摇 (DeviceMotion) ══════════════════ */
+let shakeOn=false, accPrev=0, shakeT=0;
+function onMotion(e){
+  const a = e.accelerationIncludingGravity || e.acceleration;
+  if(!a) return;
+  const mag = Math.hypot(a.x||0, a.y||0, a.z||0);
+  const jerk = mag - accPrev; accPrev = mag;
+  const now = performance.now();
+  if(Math.abs(jerk) > 5 && now-shakeT > 55){
+    torque(SPIN * Math.min(Math.abs(jerk), 45) * 0.55);
+    shakeT = now;
+  }
+}
+$('tgShake').onclick = async ()=>{
+  resumeAudio();
+  if(shakeOn){ shakeOn=false; removeEventListener('devicemotion',onMotion); $('tgShake').classList.remove('on'); return; }
+  try{
+    if(typeof DeviceMotionEvent!=='undefined' && typeof DeviceMotionEvent.requestPermission==='function'){
+      if(await DeviceMotionEvent.requestPermission() !== 'granted'){ toast('未授予设备运动权限'); return; }
+    } else if(typeof DeviceMotionEvent==='undefined'){
+      toast('当前设备不支持重力感应'); return;
+    }
+    addEventListener('devicemotion', onMotion);
+    shakeOn = true; $('tgShake').classList.add('on');
+    toast('摇一摇已开启，左右摇动手机搓动竹签');
+  }catch(err){ toast('无法开启摇一摇：'+(err.message||err)); }
+};
+
+/* ══════════════════ 输入 ③：摄像头手势 (MediaPipe Hands) ══════════════════ */
+let handsOn=false, hands=null, stream=null, camLoop=null, handsFailed=false;
+let lastHandAt = 0;        // 最后一次成功出结果的时刻 —— 看门狗靠它判断识别是否中断
+const vid = $('vid'), camc = $('camc'), cctx = camc.getContext('2d');
+let hDir = 0;
+
+/* 连搓 Combo：来回搓动次数越多倍率越高，停手就慢慢掉 */
+let combo = 0, comboMul = 1, comboDecay = 0;
+function addCombo(){
+  combo++; comboDecay = 1.6;
+  comboMul = clamp(1 + combo*0.22, 1, 4);
+  if(combo===5||combo===12||combo===25||combo===45) pop(`🔥 ${combo} 连搓 · ×${comboMul.toFixed(1)}`);
+}
+function comboTick(dt){
+  if(comboDecay > 0){ comboDecay -= dt; if(comboDecay<=0){ combo=0; comboMul=1; } }
+  const el=$('combo');
+  if(combo>=3){ el.style.opacity=1; el.textContent=`${combo} 连搓  ×${comboMul.toFixed(1)}`;
+                el.style.transform=`translateX(-50%) scale(${1+clamp((comboMul-1)*0.10,0,0.4)})`; }
+  else el.style.opacity=0;
+}
+
+/* 手势语义：张开=刹车罩住竹片，握拳=蓄力，来回搓=加速 */
+function fingersUp(lm){
+  const dist=(a,b)=>Math.hypot(lm[a].x-lm[b].x, lm[a].y-lm[b].y);
+  let n=0;
+  for(const [tip,pip] of [[8,6],[12,10],[16,14],[20,18]]) if(dist(tip,0) > dist(pip,0)*1.12) n++;
+  if(dist(4,0) > dist(3,0)*1.10) n++;
+  return n;
+}
+let chargeT = 0;
+
+/* 每只手单独跟踪。关键：双手对搓时两手反向，取"中心点"会互相抵消，
+   必须用两手的**相对速度**才抓得到搓动。 */
+const TRACK = [{x:null,t:0,v:0},{x:null,t:0,v:0}];
+let gFist = 0, gOpen = 0, gLastT = 0, rubPower = 0, lastRubAt = -1e9;
+let sens = 1.9;                                   // 灵敏度，可在界面上调
+
+const RUB_MIN = 0.16;      // 起效门槛（画面宽度/秒）—— 轻挥就有反应
+const RUB_GAIN = 0.48;     // 冲量增益（单向累积后需要比"会抵消"时小一个量级）
+const HOLD_FIST = 0.22;    // 握拳保持多久才算蓄力
+/* 刹车必须"明确"才生效：摊开手来回挥是最自然的搓动姿势，
+   条件一松就会把正常搓动误判成刹车，手感立刻变得没法把握。 */
+const HOLD_OPEN = 0.50;    // 张掌保持时长
+const BRAKE_STILL = 0.12;  // 且必须几乎完全不动
+const BRAKE_COOL = 700;    // 且距上次搓动至少 0.7s
+
+function clearTrack(i){ TRACK[i].x=null; TRACK[i].t=0; TRACK[i].v=0; }
+/* 逐帧瞬时速度 + 换向即重置的平滑：既不被跨换向的平均值抹平，又不至于抖 */
+function trackVel(i, x, now){
+  const s = TRACK[i];
+  if(s.x===null || now-s.t > 400){ s.x=x; s.t=now; s.v=0; return 0; }
+  const dt = (now-s.t)/1000;
+  if(dt < 0.008) return s.v;
+  const inst = (x-s.x)/dt;
+  s.v = (s.v!==0 && Math.sign(inst)!==Math.sign(s.v)) ? inst : s.v*0.45 + inst*0.55;
+  s.x=x; s.t=now;
+  return s.v;
+}
+
+/* 包一层：手势逻辑里任何异常都不能冒泡回 MediaPipe，
+   否则会把整条识别流水线打挂，表现就是"识别出错"刷屏 + 手影僵住 */
+function onHands(res){
+  lastHandAt = performance.now();
+  try{ handsFrame(res); }
+  catch(err){ $('camMsg').textContent = '手势处理异常'; console.error('[gesture]', err); }
+}
+
+function handsFrame(res){
+  const w = vid.videoWidth||160, h = vid.videoHeight||120;
+  if(camc.width!==w){ camc.width=w; camc.height=h; }
+  cctx.clearRect(0,0,w,h);
+  const L = res.multiHandLandmarks;
+  placeHands(L);
+  const now = performance.now();
+  const dtS = clamp((now-gLastT)/1000 || 0.04, 0.01, 0.2); gLastT = now;
+
+  if(!L || !L.length){
+    $('camMsg').textContent='把手举到画面里';
+    clearTrack(0); clearTrack(1);
+    hDir=0; chargeT=0; gFist=0; gOpen=0; rubPower=0;
+    $('charge').style.opacity=0;
+    return;
+  }
+
+  // 按 x 排序，保证左右手槽位在帧间稳定（MediaPipe 的返回顺序会跳）
+  const hands = L.map(hd=>{
+    let cx=0, cy=0;
+    for(const i of [0,5,9,13,17]){ cx+=hd[i].x; cy+=hd[i].y; }
+    return {hd, cx:cx/5, cy:cy/5, up:fingersUp(hd)};
+  }).sort((a,b)=>a.cx-b.cx);
+  const two = hands.length >= 2;
+
+  cctx.lineWidth = Math.max(1, w/140);
+  const vel = [0,0];
+  hands.forEach((H,i)=>{
+    cctx.strokeStyle='rgba(95,224,255,.8)';
+    for(const [a,b] of HAND_BONES){
+      cctx.beginPath(); cctx.moveTo(H.hd[a].x*w, H.hd[a].y*h); cctx.lineTo(H.hd[b].x*w, H.hd[b].y*h); cctx.stroke();
+    }
+    cctx.fillStyle='#8ff0c0';
+    for(const p of H.hd){ cctx.beginPath(); cctx.arc(p.x*w, p.y*h, Math.max(1.4,w/90), 0, 6.2832); cctx.fill(); }
+    vel[i] = trackVel(i, H.cx, now);
+  });
+  if(!two) clearTrack(1);
+
+  const v0 = vel[0], v1 = two ? vel[1] : 0;
+  let drive;
+  if(two){
+    const rel = (v0 - v1)/2;      // 对搓：两手反向 → 相加，不再抵消
+    const com = (v0 + v1)/2;      // 同向一起挥
+    drive = (Math.abs(rel) > Math.abs(com) ? rel : com) * 1.35;
+  } else drive = v0;
+
+  const speed = Math.abs(drive), sg = Math.sign(drive);
+  const avgUp = hands.reduce((s,H)=>s+H.up,0)/hands.length;
+
+  // 手势必须"保持"一小会儿才生效，避免搓到一半被误判打断
+  gFist = (avgUp<=1 && speed < 0.25) ? gFist+dtS : 0;
+  gOpen = (avgUp>=4 && speed < BRAKE_STILL) ? gOpen+dtS : 0;
+
+  let mode = 'rub';
+  if(gFist > HOLD_FIST) mode = 'charge';
+  else if(chargeT > 0.2 && avgUp >= 3) mode = 'release';
+  else if(gOpen > HOLD_OPEN && now-lastRubAt > BRAKE_COOL && Math.abs(omega) > 0.5) mode = 'brake';
+
+  if(mode === 'charge'){
+    chargeT = Math.min(chargeT + dtS*0.85, 1);
+    $('charge').style.opacity=1; $('chargeBar').style.width=(chargeT*100)+'%';
+    $('camMsg').textContent = chargeT>=1 ? '✊ 蓄满 · 张开手！' : '✊ 蓄力中…';
+    handTint(0xffd36b);
+  } else if(mode === 'release'){
+    const power = chargeT;
+    torque(SPIN * 95 * power);
+    pop(`💥 蓄力爆发 ${Math.round(power*100)}%`);
+    flashBurst();
+    chargeT = 0; $('charge').style.opacity=0; gFist=0;
+    handTint(0xffffff);
+  } else if(mode === 'brake'){
+    omega *= 0.90;
+    chargeT = 0; $('charge').style.opacity=0;
+    $('camMsg').textContent='🖐 刹车中…';
+    handTint(0xff7a6b);
+    combo=0; comboMul=1;
+  } else {
+    chargeT = 0; $('charge').style.opacity=0;
+    if(speed > RUB_MIN){
+      if(sg && hDir && sg!==hDir) addCombo();
+      if(sg) hDir = sg;
+      lastRubAt = now;
+      torque(SPIN * speed * RUB_GAIN * sens * comboMul);
+      $('camMsg').textContent = (two?'双手对搓':'单手挥动')+' '+(sg>0?'▶':'◀');
+      handTint(two?0x8ff0c0:0x9fd4ff);
+    } else {
+      $('camMsg').textContent = two ? '双手就位 · 左右对搓' : '左右来回挥动';
+      handTint(0x8ff0c0);
+    }
+  }
+
+  // 实时力度反馈：看得见摄像头"读到"了多少劲，才好把握
+  rubPower = lerp(rubPower, clamp(speed/2.0, 0, 1), 0.4);
+  drawPowerBar(w, h, sg);
+}
+
+/* 摄像头小窗底部的力度条 + 方向箭头 */
+function drawPowerBar(w, h, sg){
+  const bw = w*0.8, bx = (w-bw)/2, by = h-h*0.16, bh = Math.max(3, h*0.045);
+  cctx.fillStyle = 'rgba(0,0,0,.45)';
+  cctx.fillRect(bx, by, bw, bh);
+  const g = cctx.createLinearGradient(bx,0,bx+bw,0);
+  g.addColorStop(0,'#6fbf74'); g.addColorStop(.55,'#e9bb56'); g.addColorStop(1,'#e46b5c');
+  cctx.fillStyle = g;
+  cctx.fillRect(bx, by, bw*rubPower, bh);
+  cctx.strokeStyle = 'rgba(255,255,255,.35)';
+  cctx.lineWidth = 1;
+  cctx.strokeRect(bx, by, bw, bh);
+  cctx.strokeStyle = 'rgba(255,255,255,.55)';       // RUB_MIN 门槛刻度
+  const tx = bx + bw*clamp(RUB_MIN/2.0,0,1);
+  cctx.beginPath(); cctx.moveTo(tx,by-2); cctx.lineTo(tx,by+bh+2); cctx.stroke();
+  if(rubPower > 0.08 && sg){
+    cctx.fillStyle = '#fff'; cctx.font = `bold ${Math.round(h*0.11)}px sans-serif`;
+    cctx.textAlign='center'; cctx.textBaseline='middle';
+    cctx.fillText(sg>0?'▶':'◀', w/2, by-h*0.10);
+  }
+}
+function handTint(c){ hands3D.forEach(H=>{ H.jm.color.setHex(c); H.bones.material.color.setHex(c); }); }
+
+/* 识别中断时把手影和状态清干净 —— 否则虚线手会永远僵在最后一帧 */
+function dropHandVisuals(msg){
+  handGroup.visible = false;
+  hands3D.forEach(H=>H.g.visible=false);
+  clearTrack(0); clearTrack(1);
+  hDir=0; chargeT=0; gFist=0; gOpen=0; rubPower=0;
+  $('charge').style.opacity=0;
+  if(camc.width) cctx.clearRect(0,0,camc.width,camc.height);
+  if(msg) $('camMsg').textContent = msg;
+}
+function handsWatchdog(now){
+  if(!handsOn) return;
+  // ① 识别中断：别让手影虚线僵在最后一帧
+  if(now - lastHandAt > 600 && handGroup.visible) dropHandVisuals('识别中断，正在恢复…');
+  // ② 送帧循环自己死了（await 被吊死、异常断链）：界面还写着"手势中"其实早停了 → 重新拉起
+  if(now - pumpAt > 2500){
+    $('camMsg').textContent = '识别停摆，正在重启…';
+    startPump();
+  }
+}
+function flashBurst(){ burstT = 1; burstScale = 0.55; }
+
+async function startHands(){
+  if(handsFailed){ toast('MediaPipe Hands 未能加载，请检查网络后刷新'); return; }
+  if(typeof window.Hands !== 'function'){
+    handsFailed = true;
+    toast('MediaPipe Hands 库未加载成功\n（需要联网访问 jsdelivr CDN）');
+    return;
+  }
+  $('tgHand').classList.add('busy'); $('tgHand').textContent='🖐 启动中…';
+  resumeAudio();
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({
+      video:{width:{ideal:320}, height:{ideal:240}, facingMode:'user'}, audio:false});
+  }catch(err){
+    $('tgHand').classList.remove('busy'); $('tgHand').textContent='🖐 摄像头手势';
+    toast('无法访问摄像头：'+(err.name||err.message)); return;
+  }
+  vid.srcObject = stream;
+  await vid.play().catch(()=>{});
+
+  if(!hands) hands = makeHands();
+
+  handsOn = true;
+  lastHandAt = pumpAt = performance.now();
+  $('cam').classList.add('on');
+  $('tgHand').classList.remove('busy'); $('tgHand').classList.add('on'); $('tgHand').textContent='🖐 手势中';
+  $('sensWrap').classList.add('on');
+  $('camMsg').textContent = '加载模型…';
+  toast('左右来回挥手即可 —— 往哪边挥都是加速\n小窗底部力度条越过白刻度就在加速，嫌难就调「灵敏度」\n✊握拳不动=蓄力，张开手爆发 · 🖐摊掌完全不动=刹车', 6500);
+
+  startPump();
+}
+
+/* 送帧循环。三条铁律，否则会出现"界面显示手势中、其实早就不动了"：
+   ①任何路径都必须在 finally 里续上下一轮，链子不能断；
+   ②hands.send() 有概率永不 resolve，必须限时，否则 await 会把整条链吊死；
+   ③连续失败要重建识别器，而不是无限刷"识别出错"。 */
+let pumpBusy=false, pumpErr=0, pumpReviving=false, pumpAt=0, pumpGen=0;
+const SEND_TIMEOUT = 2000;
+
+/* 重启送帧循环。用世代号作废旧链，避免看门狗重启后出现两条链并行送帧 */
+function startPump(){
+  pumpGen++; pumpBusy = false; pumpAt = performance.now();
+  if(camLoop) clearTimeout(camLoop);
+  pumpHands(pumpGen);
+}
+
+async function pumpHands(gen){
+  if(!handsOn || gen !== pumpGen) return;
+  pumpAt = performance.now();
+  try{
+    // 摄像头被别的程序抢走 / 拔掉：轨道会 ended，继续重试没有意义
+    const track = stream && stream.getVideoTracks && stream.getVideoTracks()[0];
+    if(track && track.readyState === 'ended'){
+      dropHandVisuals();
+      toast('摄像头已断开（可能被其它程序占用），已关闭手势');
+      stopHands();
+      return;
+    }
+    if(!pumpBusy && hands && vid.readyState >= 2){
+      pumpBusy = true;
+      try{
+        await Promise.race([
+          hands.send({image:vid}),
+          new Promise((_,rej)=>setTimeout(()=>rej(new Error('send timeout')), SEND_TIMEOUT))
+        ]);
+        pumpErr = 0;
+      }catch(err){
+        pumpErr++;
+        $('camMsg').textContent = `识别出错 ${Math.min(pumpErr,6)}/6`;
+        dropHandVisuals();
+        if(pumpErr >= 6 && !pumpReviving){
+          pumpReviving = true;
+          try{ await reviveHands(); } finally{ pumpReviving = false; pumpErr = 0; }
+        }
+      }finally{ pumpBusy = false; }
+    }
+  }catch(err){
+    console.error('[gesture pump]', err);
+  }finally{
+    if(handsOn && gen === pumpGen) camLoop = setTimeout(()=>pumpHands(gen), 30);
+  }
+}
+
+function makeHands(){
+  const H = new window.Hands({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${f}`});
+  H.setOptions({maxNumHands:2, modelComplexity:0, minDetectionConfidence:.6, minTrackingConfidence:.5});
+  H.onResults(onHands);
+  return H;
+}
+async function reviveHands(){
+  $('camMsg').textContent = '正在重建识别器…';
+  try{ hands && hands.close && hands.close(); }catch(_){}
+  hands = null;
+  try{
+    hands = makeHands();
+    lastHandAt = performance.now();
+    $('camMsg').textContent = '已恢复，继续挥手';
+  }catch(err){
+    toast('手势识别无法恢复，已关闭摄像头手势\n刷新页面可重试');
+    stopHands();
+  }
+}
+function stopHands(){
+  handsOn = false;
+  pumpGen++;                                  // 作废进行中的送帧链
+  if(camLoop) clearTimeout(camLoop);
+  if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; vid.srcObject=null; }
+  $('cam').classList.remove('on');
+  $('tgHand').classList.remove('on','busy'); $('tgHand').textContent='🖐 摄像头手势';
+  $('sensWrap').classList.remove('on');
+  dropHandVisuals();
+}
+$('tgHand').onclick = ()=> handsOn ? stopHands() : startHands();
+
+$('sens').oninput = e=>{
+  sens = parseFloat(e.target.value);
+  $('sensVal').textContent = sens.toFixed(1);
+  localStorage.setItem('zzl.sens', String(sens));
+};
+{ const s = parseFloat(localStorage.getItem('zzl.sens'));
+  if(isFinite(s)){ sens=s; $('sens').value=s; $('sensVal').textContent=s.toFixed(1); } }
+
+/* ══════════════════ UI 开关 ══════════════════ */
+$('tgSound').onclick = ()=>{
+  resumeAudio();
+  soundOn = !soundOn;
+  $('tgSound').classList.toggle('on', soundOn);
+  $('tgSound').textContent = soundOn ? '🔊 声音' : '🔇 静音';
+};
+$('tgView').onclick = ()=>{ userZoomed=false; fitCamera(); view.tTheta=HOME.theta; view.tPhi=HOME.phi; };
+
+function toast(msg, ms=2600){
+  const t=$('toast'); t.textContent=msg; t.classList.add('on');
+  clearTimeout(toast._h); toast._h=setTimeout(()=>t.classList.remove('on'), ms);
+}
+function pop(msg){
+  const p=$('pop'); p.textContent=msg; p.classList.add('on');
+  clearTimeout(pop._h); pop._h=setTimeout(()=>p.classList.remove('on'), 1900);
+}
+// 触屏与桌面给不同的操作提示
+if(matchMedia('(pointer:coarse)').matches){
+  $('hint').innerHTML = '单指左右<b>来回搓动</b>（往哪边搓都是加速）· 双指拖动转视角、捏合缩放';
+}
+function dismissBoot(){
+  const b=$('boot');
+  if(!b.classList.contains('gone')){ b.classList.add('gone'); setTimeout(()=>b.style.display='none', 500); }
+}
+$('bootBtn').onclick = ()=>{ resumeAudio(); dismissBoot(); };
+
+/* ══════════════════ 挑战玩法 + 计分 ══════════════════ */
+const LS_DUR='zzl.best.dur', LS_RPM='zzl.best.rpm';
+let bestDur = parseFloat(localStorage.getItem(LS_DUR)) || 0;
+let bestRpm = parseFloat(localStorage.getItem(LS_RPM)) || 0;
+
+let mode='free', active=false, singT=0, peakRpm=0, runPeakSing=0, startedAt=0;
+
+function showBest(){
+  $('best').innerHTML = `🏆 最长鸣叫 <b style="color:#e9bb56">${bestDur.toFixed(1)}s</b><br>🏆 最高转速 <b style="color:#e9bb56">${Math.round(bestRpm)}</b> RPM`;
+}
+showBest();
+
+$('mode').onchange = e=>{
+  mode = e.target.value; active=false; singT=0; peakRpm=0; runPeakSing=0;
+  $('readout').textContent='';
+  $('go').textContent = mode==='free' ? '自由模式（随便玩）' : '开始挑战';
+  $('go').disabled = mode==='free';
+  $('go').style.opacity = mode==='free' ? .5 : 1;
+};
+$('go').onclick = ()=>{
+  if(mode==='free') return;
+  resumeAudio(); dismissBoot();
+  active=true; startedAt=performance.now(); singT=0; peakRpm=0; runPeakSing=0;
+  toast(mode==='dur' ? '挑战开始！让它尽可能久地连续鸣叫' : '挑战开始！全力搓，冲最高转速');
+};
+$('go').disabled = true; $('go').style.opacity=.5; $('go').textContent='自由模式（随便玩）';
+
+function endDur(){
+  active=false;
+  const r = runPeakSing;
+  if(r > bestDur){ bestDur=r; localStorage.setItem(LS_DUR, String(r)); showBest(); pop(`🎉 新纪录！连续鸣叫 ${r.toFixed(1)}s`); }
+  else toast(`本轮连续鸣叫 ${r.toFixed(1)}s，最佳 ${bestDur.toFixed(1)}s`);
+  $('readout').textContent = `本轮 ${r.toFixed(1)}s`;
+}
+function endRpm(){
+  active=false;
+  const r = peakRpm;
+  if(r > bestRpm){ bestRpm=r; localStorage.setItem(LS_RPM, String(r)); showBest(); pop(`🎉 新纪录！${Math.round(r)} RPM`); }
+  else toast(`本轮峰值 ${Math.round(r)} RPM，最佳 ${Math.round(bestRpm)} RPM`);
+  $('readout').textContent = `本轮峰值 ${Math.round(r)} RPM`;
+}
+
+/* 转速里程碑：突破时给称号 + 光爆，玩起来有奔头 */
+const TITLES = [[400,'🌱 初识蝉鸣'],[900,'🎋 竹韵初成'],[1500,'🐝 夏日狂想'],
+                [2200,'⚡ 声震四野'],[2900,'👑 知了之王']];
+let titleIdx = 0;
+function milestones(){
+  const R = rpm();
+  while(titleIdx < TITLES.length && R >= TITLES[titleIdx][0]){
+    pop(TITLES[titleIdx][1]);
+    flashBurst();
+    titleIdx++;
+  }
+  if(R < 60) titleIdx = 0;                       // 停下后重新开始追称号
+}
+
+function scoring(dt){
+  const f = rps(), R = rpm(), singing = f > SING_HZ;
+
+  if(singing){ singT += dt; runPeakSing = Math.max(runPeakSing, singT); }
+  peakRpm = Math.max(peakRpm, R);
+
+  $('sing').textContent = singT.toFixed(1)+'s';
+  $('singDot').classList.toggle('on', singing);
+
+  if(!active){ if(!singing) singT=0; return; }
+  const elapsed = performance.now()-startedAt;
+
+  if(mode==='dur'){
+    $('readout').textContent = `${singT.toFixed(1)}s`;
+    // 起跑宽限 2.5s；开始鸣叫后一旦停鸣即结算
+    if(!singing && elapsed>2500 && runPeakSing>0.4) endDur();
+  } else if(mode==='rpm'){
+    $('readout').textContent = `${Math.round(R)} RPM`;
+    // 完全停转 + 1.2s 无操作即结算
+    if(peakRpm>50 && Math.abs(omega)<0.6 && performance.now()-lastInputAt>1200) endRpm();
+  }
+  if(!singing) singT=0;
+}
+
+/* ══════════════════ 主循环 ══════════════════ */
+let last = performance.now(), acc = 0;
+const FIXED = 1/240;      // 高速旋转需要小步长，否则角度积分抖动
+
+function frame(now){
+  requestAnimationFrame(frame);
+  let dt = (now-last)/1000; last = now;
+  if(!isFinite(dt) || dt<0) dt = 0;
+  dt = Math.min(dt, 0.1);
+
+  keyboardRub();
+
+  // 固定步长积分物理，视觉与音频用累计角速度
+  acc += dt;
+  let guard = 0;
+  const w0 = omega;
+  while(acc >= FIXED && guard++ < 64){ physics(FIXED); angle += omega*FIXED; acc -= FIXED; }
+  const swept = Math.abs((w0+omega)/2) * dt;    // 本帧扫过的角度 → 运动模糊长度
+
+  spin.rotation.y = angle;
+
+  const f = rps();
+  const blur = clamp(swept/0.45, 0, 1);          // 一帧扫过越多，拖影越强
+  const discAmt = clamp((swept - 0.85)/1.7, 0, 1);
+
+  // 运动模糊：把本帧角位移切片，越靠后越淡（模拟快门积分尾迹）
+  for(let i=0;i<GHOSTS;i++){
+    const g = ghosts[i], u = (i+1)/GHOSTS;
+    g.rotation.y = -Math.sign(omega) * swept * u * 0.94;
+    g.material.opacity = blur * 0.19 * (1-u*0.85) * (1-discAmt*0.9);
+    g.visible = g.material.opacity > 0.005;
+  }
+  disc.material.opacity = discAmt*0.78;
+  disc.visible = discAmt > 0.01;
+  disc.rotation.z = angle*0.35;                  // 让盘面纹理也在动，避免"贴纸感"
+  blade.visible = discAmt < 0.97;
+
+  // 竹片高速时轻微上翘（升力）+ 竹签因反作用轻微摆动
+  const lift = clamp(f/40, 0, 1);
+  spin.position.y = STICK_TOP - 0.02 + lift*0.05;
+  toy.rotation.z = Math.sin(now*0.0011)*0.012 + Math.sin(now*0.021)*0.004*lift;
+  toy.rotation.x = Math.cos(now*0.0009)*0.010;
+  matBlade.emissiveIntensity = 0.22 + lift*0.30;
+
+  // 气流涡环
+  airRings.forEach(r=>{
+    r.t = (r.t + dt*(0.5+f*0.06)) % 1;
+    r.m.scale.setScalar(0.62 + r.t*0.85);            // 只在叶尖附近，别糊满地板
+    r.m.position.y = spin.position.y - r.t*0.34;     // 被叶片下洗的气流向下走
+    r.m.material.opacity = clamp((f-8)/26,0,1) * (1-r.t) * 0.13;
+    r.m.visible = r.m.material.opacity > 0.004;
+  });
+  under.intensity = 0.5 + lift*0.5;
+
+  // 平滑相机
+  view.dist  = lerp(view.dist,  view.tDist,  1-Math.pow(0.001, dt));
+  view.theta = lerp(view.theta, view.tTheta, 1-Math.pow(0.0005, dt));
+  view.phi   = lerp(view.phi,   view.tPhi,   1-Math.pow(0.0005, dt));
+  applyCam();
+
+  // 里程碑光环：从竹片处向外扩散一圈后淡出
+  if(burstT > 0){
+    burstT = Math.max(0, burstT - dt*1.5);
+    burstScale += dt*3.2;
+    burst.scale.setScalar(burstScale);
+    burst.material.opacity = burstT*burstT*0.75;
+    burst.position.y = spin.position.y;
+    burst.visible = true;
+  } else burst.visible = false;
+
+  handsWatchdog(now);
+  audioUpdate();
+  comboTick(dt);
+  milestones();
+  scoring(dt);
+
+  // HUD
+  const R = rpm();
+  $('rpm').textContent = Math.round(R);
+  $('hzTxt').textContent = f.toFixed(1)+' Hz';
+  $('rpmBar').style.width = clamp(R/(W_MAX/(2*Math.PI)*60)*100, 0, 100)+'%';
+
+  renderer.render(scene, camera);
+}
+requestAnimationFrame(frame);
+
+/* WebGL 上下文丢失兜底 */
+canvas.addEventListener('webglcontextlost', e=>{ e.preventDefault(); toast('图形上下文丢失，正在恢复…'); });
+canvas.addEventListener('webglcontextrestored', ()=> location.reload());
+
+/* 页面隐藏时静音，避免后台还在响 */
+document.addEventListener('visibilitychange', ()=>{
+  if(document.hidden && AC && master) master.gain.setTargetAtTime(0, AC.currentTime, 0.05);
+});
+
+</script>
+</body>
+</html>
