@@ -6,6 +6,7 @@ e2e-check.js
 e2e-results.json
 public-e2e-check.js
 public-e2e-results.json
+tank-strike-e2e-results.json
 *.log
 *.db
 *.db-journal

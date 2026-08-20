@@ -1,6 +1,6 @@
 # Alex 的游戏厅
 
-持续扩展的浏览器游戏统一入口，当前包含 Minecraft、深渊圣所、zhuzhiliao、Haven、Nebula Strike 和三国塔防。
+持续扩展的浏览器游戏统一入口，当前包含 Minecraft、深渊圣所、zhuzhiliao、Haven、Nebula Strike、三国塔防和钢铁前线。
 
 ## 公网游玩
 
@@ -26,6 +26,7 @@ npx serve .
 - `/games/haven/`
 - `/games/nebula/`
 - `/games/three-kingdoms/`
+- `/games/tank-strike/`
 
 ## 部署
 
