@@ -4,6 +4,7 @@ screenshots/
 test-results/
 e2e-check.js
 e2e-results.json
+games/abyss/assets/
 *.log
 *.db
 *.db-journal
