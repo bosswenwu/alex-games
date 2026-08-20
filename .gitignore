@@ -11,3 +11,6 @@ tank-strike-e2e-results.json
 *.db
 *.db-journal
 *.tmp
+
+.vercel
+.env*
