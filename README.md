@@ -1,6 +1,6 @@
 # Alex 的游戏厅
 
-五款浏览器游戏的统一入口：Minecraft、深渊圣所、zhuzhiliao、Haven 和 Nebula Strike。
+六款浏览器游戏的统一入口：Minecraft、深渊圣所、zhuzhiliao、Haven、Nebula Strike 和三国塔防。
 
 ## 本地运行
 
@@ -19,6 +19,7 @@ npx serve .
 - `/games/zhuzhiliao/`
 - `/games/haven/`
 - `/games/nebula/`
+- `/games/three-kingdoms/`
 
 ## 部署
 
