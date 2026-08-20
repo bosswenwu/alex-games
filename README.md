@@ -2,6 +2,12 @@
 
 六款浏览器游戏的统一入口：Minecraft、深渊圣所、zhuzhiliao、Haven、Nebula Strike 和三国塔防。
 
+## 公网游玩
+
+https://bosswenwu.github.io/alex-five-games/
+
+点击首页游戏封面即可直接进入。深渊圣所为电脑游戏，使用鼠标与键盘操作，不需要横置手机。
+
 ## 本地运行
 
 在本目录执行：
@@ -23,4 +29,4 @@ npx serve .
 
 ## 部署
 
-这是纯静态网站，可部署到 Vercel、Netlify 或 GitHub Pages。
+当前已通过 GitHub Pages 部署，HTTPS 公网可访问。仓库的 `main` 分支根目录为发布源。
