@@ -6,7 +6,5 @@ body{touch-action:none;overscroll-behavior:none}
 canvas{display:block;margin:auto;box-shadow:0 0 90px #000,0 0 220px #0b0d16 inset}
 #game{position:relative;display:grid;place-items:center}
 #game:after{content:"";position:absolute;inset:0;pointer-events:none;z-index:2;background:radial-gradient(115% 85% at 50% 50%,rgba(0,0,0,0) 52%,rgba(0,0,0,.42) 82%,rgba(0,0,0,.72) 100%)}
-#rotate-tip{display:none;position:fixed;inset:0;z-index:20;place-items:center;padding:28px;background:#090b10;color:#e6d8b8;font:700 22px "ZCOOL XiaoWei",KaiTi,STKaiti,serif;letter-spacing:3px}
-@media(orientation:portrait)and (max-width:700px){#rotate-tip{display:grid}}
 #boot-veil{position:fixed;inset:0;z-index:30;display:grid;place-items:center;background:#050609;color:#b99a60;font:600 15px "Noto Sans SC","Microsoft YaHei",sans-serif;letter-spacing:6px;transition:opacity .6s ease}
 #boot-veil.gone{opacity:0;pointer-events:none}
