@@ -1,10 +1,10 @@
 # Alex 的游戏厅
 
-六款浏览器游戏的统一入口：Minecraft、深渊圣所、zhuzhiliao、Haven、Nebula Strike 和三国塔防。
+持续扩展的浏览器游戏统一入口，当前包含 Minecraft、深渊圣所、zhuzhiliao、Haven、Nebula Strike 和三国塔防。
 
 ## 公网游玩
 
-https://bosswenwu.github.io/alex-six-games/
+https://bosswenwu.github.io/alex-games/
 
 点击首页游戏封面即可直接进入。深渊圣所为电脑游戏，使用鼠标与键盘操作，不需要横置手机。
 
