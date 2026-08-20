@@ -4,7 +4,7 @@
 
 ## 公网游玩
 
-https://bosswenwu.github.io/alex-five-games/
+https://bosswenwu.github.io/alex-six-games/
 
 点击首页游戏封面即可直接进入。深渊圣所为电脑游戏，使用鼠标与键盘操作，不需要横置手机。
 
