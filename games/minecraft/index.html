@@ -64,6 +64,28 @@
              background:radial-gradient(circle at 50% 40%,rgba(60,40,20,.92),rgba(12,10,20,.96)); color:#ffe9c4; text-align:center; padding:30px; }
   #stats { position:absolute; right:8px; top:8px; color:#fff; font:bold 15px/1.5 "Microsoft YaHei",sans-serif; text-shadow:2px 2px 0 #000; text-align:right; }
   #stats .kills { color:#ffd23f; }
+  #compass { position:absolute; right:8px; top:96px; width:118px; padding:7px 6px 6px; border-radius:10px;
+             background:rgba(14,10,20,.42); box-shadow:0 0 0 1px rgba(255,220,150,.18) inset; text-align:center;
+             font:bold 12px/1.35 "Microsoft YaHei",sans-serif; color:#ffe9c4; text-shadow:1px 1px 0 #000; display:none; }
+  #compass .cring { position:relative; width:56px; height:56px; margin:1px auto 4px; border-radius:50%;
+                    background:radial-gradient(circle at 50% 42%,rgba(70,52,30,.55),rgba(10,8,16,.7));
+                    box-shadow:0 0 0 2px rgba(255,220,150,.30) inset; }
+  #compass .cN { position:absolute; left:50%; top:1px; transform:translateX(-50%); font-size:8px; color:#9fd8ff; opacity:.7; }
+  #compass .carrow { position:absolute; left:50%; top:50%; width:0; height:0; transform-origin:50% 50%;
+                     transition:transform .12s linear; }
+  #compass .carrow i { position:absolute; left:-6px; top:-22px; width:0; height:0;
+                       border-left:6px solid transparent; border-right:6px solid transparent; border-bottom:20px solid #ffd23f;
+                       filter:drop-shadow(0 0 3px rgba(255,180,60,.8)); }
+  #compass .clabel { color:#ffe9c4; }
+  #compass .cdist { color:#a8e6a0; font-size:11px; }
+  #fullhelp { position:fixed; inset:0; z-index:60; display:none; align-items:center; justify-content:center;
+              background:rgba(6,5,12,.66); backdrop-filter:blur(2px); padding:20px; }
+  #fullhelp .fh-card { max-width:640px; max-height:86vh; overflow:auto; padding:20px 22px; border-radius:14px;
+              background:radial-gradient(circle at 50% 0%,rgba(60,44,24,.97),rgba(14,11,22,.98));
+              box-shadow:0 0 0 1px rgba(255,220,150,.25) inset, 0 12px 40px rgba(0,0,0,.6);
+              color:#ffe9c4; font:15px/1.9 "Microsoft YaHei",sans-serif; text-shadow:1px 1px 0 #000; }
+  #fullhelp .fh-card b { color:#ffd23f; }
+  #fullhelp .fh-title { font-size:17px; font-weight:bold; color:#fff; margin-bottom:10px; cursor:pointer; text-align:center; }
   #bossbar { position:absolute; left:50%; top:18px; transform:translateX(-50%); width:min(560px,74%); display:none; text-align:center; }
   #bossbar .bn { color:#e050e0; font:bold 17px "Microsoft YaHei",sans-serif; text-shadow:2px 2px 0 #000; letter-spacing:2px; margin-bottom:3px; }
   #bossbar .bg { height:15px; background:rgba(0,0,0,.55); border:2px solid #000; box-shadow:0 0 0 1px #555; }
@@ -144,6 +166,11 @@
   <div id="xpbar"><div class="xf"></div><div class="xl">Lv 1</div></div>
   <div id="bossbar"><div class="bn"></div><div class="bg"><div class="bf"></div></div></div>
   <div id="stats"></div>
+  <div id="compass">
+    <div class="cring"><div class="cN">视线</div><div class="carrow"><i></i></div></div>
+    <div class="clabel">—</div>
+    <div class="cdist"></div>
+  </div>
   <div id="questbox">
     <div class="qh">当前任务</div>
     <div class="qt" id="questTitle">—</div>
@@ -174,6 +201,20 @@
   <button id="victoryBtn" class="btn" style="margin-top:22px">继续自由探索</button>
 </div>
 <div id="rotateHint">📱 请把手机横过来<br><span style="font-size:14px;opacity:.75">横屏体验更佳</span></div>
+<div id="fullhelp">
+  <div class="fh-card">
+    <div class="fh-title">完整帮助 · 按 <b>H</b> 或点此关闭</div>
+    <b>F5</b> 第三人称　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成　<b>Esc</b> 暂停<br>
+    <b>物品栏</b>：1烟花 2钩爪 3可乐 4铁剑 5机关枪 6火箭筒 7弓 8=TNT(右键放·左键点燃) 9弹跳板<br>
+    <b>2 钩爪</b>甩向准星把你拉过去；<b>3 可乐</b>回血+加速；<b>9 弹跳板</b>踩上去高高弹飞不摔伤<br>
+    击杀获得<b>经验</b>升级(提升生命与伤害)。白天长、夜晚短而亮，敌人只是点缀<br>
+    <b>群系</b>：沙海·红土台地·干草原为主，另有 <b>枯骨盐湖·风蚀峡谷·黑沙火山</b> 三处奇观<br>
+    　🌋 黑沙火山地表高温灼人(泡水/进洞躲避)　🧂 盐湖可采盐晶　🏜 峡谷层理岩壁可攀上台地<br>
+    <b>地标</b>：金字塔(墓室石棺唤醒法老王Boss)·斗兽场·宫殿·绿洲·彩虹桥·机场·赛车场·陨石坑·游乐场<br>
+    <b>尼罗河</b>穿过沙漠(有鱼与鳄鱼)；天上有<b>浮空岛</b>藏钻石；地底 y&lt;10 是岩浆海，越深越凶险<br>
+    <b>第3晚起 Boss 轮换</b>：僵尸王 / 飞龙 / 钢铁泰坦 / 烈焰凤凰　拖动模式下移动鼠标瞄准
+  </div>
+</div>
 
 <div id="overlay">
   <canvas id="brandmark" width="120" height="120"></canvas>
@@ -186,38 +227,10 @@
     <button id="newworldbtn" class="btn sub" style="display:none">开启新世界</button>
   </div>
   <div id="help">
-    <b>W A S D</b> 移动　<b>空格</b> 跳跃　<b>双击空格</b> 飞行　<b>双击W</b> 疾跑　<b>Shift</b> 潜行/下降<br>
-    <b>鼠标左键</b> 攻击/破坏　<b>鼠标右键</b> 使用道具/放置方块　<b>鼠标中键</b> 选取方块<br>
-    <b>1-9 / 滚轮</b> 切换物品栏　<b>F5</b> 第三人称　<b>M</b> 音乐　<b>F3</b> 调试　<b>Esc</b> 暂停<br>
-    <b>物品栏</b>：<b>1烟花</b> 2钩爪 3可乐 4铁剑 5机关枪 6火箭筒 7弓 <b>8=TNT</b> <b>9弹跳板</b><br>
-    <b>1 烟花</b>：右键朝天发射, 在高空炸开成一大团七彩火星(纯观赏, 不伤人)<br>
-    <b>2 钩爪</b>：右键甩向准星处的方块, 把你猛地拉过去(翻墙/速降/跨河神器)<br>
-    <b>3 可乐</b>：右键畅饮, 回血并获得 12 秒加速<br>
-    <b>9 弹跳板</b>：右键放在地上, 踩上去被高高弹飞, 落地不摔伤——铺一串能一路弹着走<br>
-    <b>8 TNT</b>：右键放置, 再用左键点燃!　<b>5 机关枪</b> 按住左键持续扫射<br>
-    击杀获得<b>经验</b>，升级提升最大生命与全部伤害(左下角绿色经验条)<br>
-    <b>以沙漠为主的世界</b>：沙海/红土台地/干草原为主，几乎没有树木花草，视野开阔, 地形平坦<br>
-    <b>蜿蜒的河流</b>穿过沙漠(尼罗河风格)，河里有<b>鱼</b>，岸边潜伏着<b>鳄鱼</b>——小心靠近!<br>
-    <b>埃及金字塔</b>：入口走廊·墓室·上层藏宝室·方尖碑·狮身人面像(大量金子与钻石)<br>
-    　　⚠ <b>挖开墓室里的法老石棺 → 唤醒「法老王」Boss</b>(200血) 与陪葬木乃伊卫队!<br>
-    <b>白天很长, 夜晚又短又亮</b>——不再是没完没了的黑夜僵尸survival, 敌人只是点缀<br>
-    <b>游乐场</b>：巨型摩天轮·旋转木马·马戏帐篷·彩灯步道<br>
-    <b>彩虹桥</b>：七色巨拱横跨天际, 拱下有弹跳板, 可以弹上去走一走<br>
-    <b>热闹集市</b>：一排排彩色摊位·彩旗·灯笼, 中央小广场有一圈弹跳板<br>
-    天上常年飘着<b>彩色气球</b>, 明亮又热闹<br>
-    <b>机场</b>：52格长跑道·塔台·机库·风向袋——开车冲上跑道, 或把天上的飞机打下来<br>
-    <b>赛车场</b>：椭圆环形赛道·红白护栏·看台·起点门架——开着车来跑圈<br>
-    <b>沙漠绿洲</b>：清水潭·睡莲·仙人掌·商队驿站残柱, 沙海中的补给地标<br>
-    <b>陨石坑</b>：焦黑碗状凹地, 坑底陨铁富含<b>钻石/黄金</b>, 中心水晶远远就能看见<br>
-    <b>城市街区</b>：柏油马路·楼房·霓虹招牌，街上有<b>汽车</b>——<b>按 E 上车驾驶</b>(W/S 油门 A/D 转向)<br>
-    <b>按 E 骑乘</b>：<b>马</b>(草原上找)贴地奔跑 · <b>悬浮摩托/飞机</b>直接在空中飞行<br>
-    动物：骆驼·马·大象·非洲狮·老虎·鳄鱼·熊猫·小狗·奶牛·狼·兔·狐·鹿·猪·羊·鸡<br>
-    天上有<b>小鸟·蝴蝶·蜜蜂</b>与巡航的<b>飞机</b>(可以打下来)，夜里<b>蝙蝠</b>出没<br>
-    <b>空中单位不会攻击你</b>——安心欣赏, 想打就打<br>
-    <b>往地下挖矿</b>会惊动<b>洞穴老鼠·毒蝎·甲虫</b>，越深越凶险!<br>
-    地底 y&lt;10 是<b>岩浆海</b>(掉进去会着火!)，洞穴里有<b>荧光水晶</b>照明<br>
-    抬头找找天上的<b>浮空岛</b>(岛心水晶祭坛藏钻石)<br>
-    <b>第3晚起 Boss 轮换</b>：僵尸王 / 飞龙 / 钢铁泰坦 / 烈焰凤凰　拖动模式下移动鼠标瞄准
+    <b>W A S D</b> 移动　<b>空格</b> 跳跃(双击飞行)　<b>Shift</b> 潜行/下降　<b>E</b> 上车/骑乘<br>
+    <b>左键</b> 挖掘/攻击　<b>右键</b> 放置/使用道具　<b>1–9 / 滚轮</b> 切换物品栏<br>
+    <b>探索</b>：右上角<b>指南针</b>指向最近地标——朝它走，寻访金字塔·绿洲·奇观群系<br>
+    <span style="opacity:.7">走进不同群系会有天色与怪物变化，进游戏后随时会有提示 · <b>H</b> 查看完整帮助</span>
   </div>
   <div id="legal">
     《沙海奇境 Sandsea》是一个独立的开源体素游戏，向 Minecraft 致敬。<br>
@@ -239,6 +252,7 @@ let RENDER = 9;           // 渲染距离(区块); 低帧率时会自动下调, 
 const DAY_LEN = 600;      // 昼夜循环秒数(拉长, 节奏更悠闲)
 let SEED = (new URLSearchParams(location.search).get("seed")|0) || (Date.now()%1000000);
 let dayShift=0.28, dayT=0.3, sunH=1; // 世界时间
+let _atmoCol=[0.5,0.6,0.8], _atmoAmt=0, _atmoDay=1; // 群系氛围: 平滑过渡的天空色/混合量/亮度系数
 
 /* ---------- 方块定义 ---------- */
 const AIR=0, GRASS=1, DIRT=2, STONE=3, SAND=4, WATER=5, LOG=6, LEAVES=7,
@@ -257,6 +271,8 @@ const SARCO=47;                               // 法老石棺(挖开会唤醒法
 const JUMPPAD=48;                             // 弹跳板: 踩上去把玩家高高弹起
 // 罗马建材: 让罗马建筑不再是灰混凝土, 和埃及砂岩形成材质对比
 const MARBLE=49, ROOFTILE=50;
+// 新群系建材: 盐壳/盐晶(枯骨盐湖) · 玄武岩/黑沙(黑沙火山) · 风蚀岩(峡谷) · 发光矿脉
+const SALTCRUST=51, SALTCRYSTAL=52, BLACKSAND=53, BASALT=54, WINDROCK=55, GLOWVEIN=56;
 // t=顶面贴图 b=底面 s=侧面 (图集编号)
 const BLOCKS = {
   [GRASS]:  {name:"草方块",   t:0,  b:2,  s:1},
@@ -309,13 +325,19 @@ const BLOCKS = {
   [JUMPPAD]:{name:"弹跳板 (踩上去弹飞!)", t:204,b:148,s:205},
   [MARBLE]: {name:"罗马大理石", t:233,b:233,s:233},
   [ROOFTILE]:{name:"陶瓦屋顶",  t:234,b:234,s:234},
+  [SALTCRUST]:{name:"盐壳",     t:250,b:250,s:251},
+  [SALTCRYSTAL]:{name:"盐晶",   t:252,b:252,s:252},
+  [BLACKSAND]:{name:"黑沙",     t:253,b:253,s:253},
+  [BASALT]: {name:"玄武岩",     t:254,b:254,s:255},
+  [WINDROCK]:{name:"风蚀岩",    t:99, b:99, s:99},
+  [GLOWVEIN]:{name:"发光矿脉",  t:159,b:159,s:159},
 };
 // 植物可以直接走过去; 冰/玻璃/树叶不完全遮挡; 岩浆会陷进去
 const SOLID   = id => id!==AIR && id!==WATER && id!==LAVA && !PLANT(id);   // 碰撞
 const OPAQUE  = id => id!==AIR && id!==WATER && id!==LEAVES && id!==GLASS
                       && id!==PINE_LEAF && id!==ICE && !PLANT(id);  // 完全遮挡
 const OCCLUDE = id => SOLID(id) && id!==GLASS && id!==ICE;          // 产生环境光遮蔽
-const EMISSIVE= id => id===LANTERN || id===LAVA || id===CRYSTAL || id===MAGMA || id===NEON || id===WINDOW; // 自发光
+const EMISSIVE= id => id===LANTERN || id===LAVA || id===CRYSTAL || id===MAGMA || id===NEON || id===WINDOW || id===GLOWVEIN || id===SALTCRYSTAL; // 自发光
 /* 物品栏: 常用道具全部落在 1-9 键上, TNT 固定在 9 键 */
 const HOTBAR_ITEMS = ["firework", "grapple", "cola", "sword", "gun", "rpg", "bow", TNT, JUMPPAD];
 
@@ -356,8 +378,10 @@ function smoothstep(e0,e1,x){ const t=clamp((x-e0)/(e1-e0),0,1); return t*t*(3-2
 
 /* ---------- 生物群系 ---------- */
 const BIO_PLAIN=0, BIO_FOREST=1, BIO_DESERT=2, BIO_SNOW=3, BIO_TAIGA=4,
-      BIO_SAVANNA=5, BIO_SWAMP=6, BIO_MESA=7;
-const BIOME_NAME=["平原","森林","沙漠","雪原","针叶林","热带草原","沼泽","红土台地"];
+      BIO_SAVANNA=5, BIO_SWAMP=6, BIO_MESA=7,
+      BIO_SALTLAKE=8, BIO_CANYON=9, BIO_VOLCANO=10;   // 新增: 枯骨盐湖 / 风蚀峡谷 / 黑沙火山
+const BIOME_NAME=["平原","森林","沙漠","雪原","针叶林","热带草原","沼泽","红土台地",
+                  "枯骨盐湖","风蚀峡谷","黑沙火山"];
 /* heightAt/biomeAt 在生成一个区块时会对同一坐标反复调用(地形+树+建筑),
    做一层记忆化, 世界生成速度提升明显。缓存过大时整体清空即可。 */
 const _bioCache=new Map(), _hCache=new Map();
@@ -367,12 +391,15 @@ function biomeAt(x,z){
   if(c!==undefined) return c;
   const t = fbm2(x*0.0016+912.3, z*0.0016-455.1, 3);   // 温度
   const w = fbm2(x*0.0021-338.7, z*0.0021+706.4, 3);   // 湿度
+  const e = fbm2(x*0.0033+77.7,  z*0.0033-22.2,  2);   // 地貌变体噪声(切出峡谷/盐湖斑块)
   let r;
-  // 以沙漠为主的"古埃及"世界: 大片沙海与红土台地, 绿色地带很少
-  if(t<0.28) r = BIO_SNOW;                             // 极北才有雪
+  // 以沙漠为主的"古埃及"世界: 大片沙海与红土台地, 再点缀三种奇观群系
+  if(t<0.26) r = BIO_SNOW;                             // 极北才有雪
+  else if(t>0.72 && w<0.40) r = BIO_VOLCANO;           // 炎热干燥处: 黑沙火山
+  else if(w<0.24) r = BIO_SALTLAKE;                    // 最干旱的低地: 枯骨盐湖
   else if(t<0.38) r = BIO_SAVANNA;                     // 干草原过渡带
-  else if(w<0.42) r = BIO_DESERT;                      // 主体: 沙漠
-  else if(w<0.60) r = BIO_MESA;                        // 红土台地/峡谷
+  else if(w<0.42) r = (e>0.63 ? BIO_CANYON : BIO_DESERT); // 沙漠带里切出风蚀峡谷
+  else if(w<0.60) r = BIO_MESA;                        // 红土台地
   else if(w<0.74) r = BIO_SAVANNA;                     // 稀树草原(几乎无树)
   else r = t>0.60 ? BIO_SWAMP : BIO_PLAIN;             // 少量湿地/平原
   if(_bioCache.size>400000) _bioCache.clear();
@@ -401,6 +428,19 @@ function heightAt(x, z){
   // 沼泽: 在水位线上下起伏, 形成"浅水+小岛"的湿地, 而不是压成一条平线
   else if(bio===BIO_SWAMP) h = WATER_Y - 3.2 + (h-WATER_Y)*0.42;
   else if(bio===BIO_MESA)  h = h*0.82 + 6;
+  // 枯骨盐湖: 极度平坦的干盐盘, 略高于水位, 几乎无起伏
+  else if(bio===BIO_SALTLAKE) h = WATER_Y + 1 + fbm2(x*0.02+3,z*0.02-5,2)*1.3;
+  // 风蚀峡谷: 阶梯化台地 → 平顶高差极大, 形成可攀爬的垂直岩壁与深谷
+  else if(bio===BIO_CANYON){
+    const cn = fbm2(x*0.017+7.1, z*0.017-3.3, 3);
+    const terr = Math.floor(cn*6)/6;                       // 台阶化: 一段段平台+悬崖
+    h = 33 + terr*34;
+  }
+  // 黑沙火山: 崎岖上隆的火山地貌, 低洼处将在 genChunk 灌熔岩
+  else if(bio===BIO_VOLCANO){
+    const vn = fbm2(x*0.021+51.3, z*0.021-19.7, 4);
+    h = 33 + Math.pow(vn,1.4)*26;
+  }
   const rInf=riverInfluence(x,z);
   if(rInf>0) h = h*(1-rInf) + (WATER_Y-3)*rInf;             // 平滑下压到河床, 自然形成河岸坡度
   const r=Math.min(90, Math.floor(h));
@@ -437,20 +477,27 @@ function genChunk(cx, cz){
         id=STONE;
         // 矿脉: 越深越贵
         const o=hash3(gx*2+y*7, y*3, gz*2-y*5);
-        if(o<0.010 && y<16) id=GEM_ORE;
+        if(o<0.006 && y<52) id=GLOWVEIN;                  // 发光矿脉: 稀有, 给洞穴天然照明
+        else if(o<0.010 && y<16) id=GEM_ORE;
         else if(o<0.022 && y<26) id=GOLD_ORE;
         else if(o<0.048 && y<40) id=IRON_ORE;
         else if(o<0.090) id=COAL_ORE;
         else if(o<0.105) id=GRAVEL;
       }
       else if(y<h){
-        if(beach) id=SAND;
+        if(bio===BIO_SALTLAKE)    id = (y<h-1?SANDSTONE:SALTCRUST);  // 盐盘下是砂岩
+        else if(bio===BIO_CANYON) id = WINDROCK;                     // 峡谷通体层理岩
+        else if(bio===BIO_VOLCANO)id = BASALT;                       // 火山地下玄武岩
+        else if(beach) id=SAND;
         else if(bio===BIO_DESERT) id = (y<h-1?SANDSTONE:SAND);
         else if(bio===BIO_MESA)   id = CLAY;
         else id=DIRT;
       }
       else { // 顶层
-        if(h>=64) id=SNOW;
+        if(bio===BIO_SALTLAKE)     id=SALTCRUST;                     // 盐壳平原
+        else if(bio===BIO_CANYON)  id=WINDROCK;                      // 风蚀岩台顶
+        else if(bio===BIO_VOLCANO) id=BLACKSAND;                     // 黑沙覆盖
+        else if(h>=64) id=SNOW;
         else if(beach) id = (bio===BIO_SWAMP? DIRT : SAND);
         else if(bio===BIO_DESERT) id=SAND;
         else if(bio===BIO_MESA)   id=CLAY;
@@ -459,7 +506,7 @@ function genChunk(cx, cz){
       }
       b[col+y]=id;
     }
-    for(let y=h+1; y<=WATER_Y; y++) b[col+y] = (bio===BIO_SNOW && y===WATER_Y) ? ICE : WATER; // 灌水/结冰
+    for(let y=h+1; y<=WATER_Y; y++) b[col+y] = (bio===BIO_SNOW && y===WATER_Y) ? ICE : (bio===BIO_VOLCANO ? LAVA : WATER); // 灌水/结冰; 火山低洼灌熔岩
     // 洞穴
     const capY = Math.min(h-4, H-1);
     for(let y=6; y<=capY; y++){
@@ -493,6 +540,22 @@ function genChunk(cx, cz){
         const ch=2+Math.floor(hash2(gx*3,gz*5)*3);
         for(let k=1;k<=ch;k++) put(gx,h+k,gz,SANDSTONE,true);
         if(hash2(gx,gz)<0.4) put(gx,h+ch+1,gz,CLAY,true);
+      }
+    }
+    // ---- 新群系专属地表资源 ----
+    if(b[col+h]!==AIR && h>0){
+      const rr=hash2(gx*13-7, gz*9+21);
+      if(bio===BIO_SALTLAKE){
+        if(rr<0.012){                                  // 盐晶簇: 盐盘里长出的白晶(可采)
+          const ch=1+Math.floor(hash2(gx-3,gz+4)*3);
+          for(let k=1;k<=ch;k++) put(gx,h+k,gz,SALTCRYSTAL,true);
+        } else if(rr<0.016) put(gx,h+1,gz,DEADBUSH,true); // 枯骨盐湖的枯木
+      } else if(bio===BIO_VOLCANO){
+        if(rr<0.008) b[col+h]=GLOWVEIN;                // 裸露发光矿脉
+        else if(rr>0.985 && b[col+h]===BLACKSAND) b[col+h]=MAGMA; // 零星岩浆岩喷口
+      } else if(bio===BIO_CANYON){
+        if(rr<0.006) b[col+h]=GLOWVEIN;               // 崖壁矿脉
+        else if(rr<0.010) put(gx,h+1,gz,DEADBUSH,true);
       }
     }
   }
@@ -1848,6 +1911,47 @@ drawTile(233,(x,y)=>{                                                     // 罗
 drawTile(234,(x,y)=>{                                                     // 陶瓦屋顶(半圆瓦楞)
   const w=x%4; const ridge=(w===0);
   return ridge? vary(126,54,34,6) : vary(176,80,50,9); });
+/* ---- 新群系材质 (free tiles 250-255 / 99 / 159) ---- */
+drawTile(250,(x,y)=>{                                                     // 盐壳顶: 龟裂多边形盐盘
+  // 用一组伪随机胞格中心画出多边形裂纹网(枯盐湖典型花纹)
+  const cx=Math.floor(x/4)*4+2, cy=Math.floor(y/4)*4+2;
+  const edge = (x%4===0)||(y%4===0)||((x+y)%7===0);
+  if(edge) return vary(150,150,158,6);                                    // 裂缝(灰盐)
+  const glint=Math.random()<0.05;
+  return glint? [244,246,250] : vary(226,224,214,7); });                  // 盐白+偶尔亮晶
+drawTile(251,(x,y)=>{                                                     // 盐壳侧: 沉积层理
+  const band=Math.floor(y/2)%2;
+  if(y>12) return vary(150,142,120,8);                                    // 底部含泥
+  return band? vary(220,216,204,7) : vary(232,230,222,6); });
+drawTile(252,(x,y)=>{                                                     // 盐晶: 半透微光晶体
+  const d=Math.abs(x-8)+Math.abs(y-8);
+  const facet=((x*2+y)%5===0)||((x-y*2)%5===0);
+  if(d<3) return [250,240,246];                                          // 高光核
+  if(facet) return vary(214,196,214,10);                                 // 晶棱(淡粉)
+  return vary(236,224,236,9); });
+drawTile(253,(x,y)=>{                                                     // 黑沙: 火山细砂+风纹
+  const ripple=Math.sin(x*0.8+y*0.3)*1.2;
+  if(Math.random()<0.05) return vary(90,70,66,6);                        // 铁锈斑点
+  const v=34+ripple*4; return vary(v,v-4,v-2,7); });
+drawTile(254,(x,y)=>{                                                     // 玄武岩顶: 六棱柱截面
+  const cx=(Math.floor(x/5))*5+2, cz=(Math.floor(y/5))*5+2;
+  const seam=(x%5===0)||(y%5===0)||((x+y)%9===0);
+  if(seam) return vary(26,26,30,5);                                       // 柱缝
+  return vary(58,58,66,8); });
+drawTile(255,(x,y)=>{                                                     // 玄武岩侧: 竖直柱身
+  const col=x%5;
+  if(col===0) return vary(24,24,28,4);                                    // 柱与柱之间的暗缝
+  const shade=col===1?-6:(col===4?6:0);
+  return vary(56+shade,56+shade,64+shade,7); });
+drawTile(99,(x,y)=>{                                                      // 风蚀岩: 水平层理砂岩(峡谷)
+  const band=Math.floor(y/2)%4;
+  const pal=[[196,120,74],[214,150,96],[176,98,60],[206,134,84]][band];
+  const grit=Math.random()<0.08? -14 : 0;
+  return vary(pal[0]+grit,pal[1]+grit,pal[2]+grit,7); });
+drawTile(159,(x,y)=>{                                                     // 发光矿脉: 暗岩+青蓝荧光脉络
+  const vein=((x*3+y*2)%9<2)||((x-y*2)%11===0)||(Math.abs(x-y)<2);
+  if(vein){ const p=Math.random(); return p<0.5? [90,240,220] : (p<0.8?[150,255,240]:[60,200,255]); }
+  return vary(40,42,50,7); });
 /* ---- 古生物材质 (tiles 235-249): 埃及与罗马神话里的野兽 ---- */
 const PAL_SPX={s:[224,190,128],S:[188,152,96],b:[46,60,132],g:[236,198,84],B:[24,20,16]};
 mobTile(235,["ssssssss","sSssssSs","ssssssss","ssssssss","sSssssSs","ssssssss","ssssssss","sSssssSs"],PAL_SPX); // 斯芬克斯狮身
@@ -2115,6 +2219,7 @@ function eyeInWater(){ return getBlock(Math.floor(player.x), Math.floor(player.y
 function inLava(){ return getBlock(Math.floor(player.x), Math.floor(player.y+0.4), Math.floor(player.z))===LAVA; }
 function eyeInLava(){ return getBlock(Math.floor(player.x), Math.floor(player.y+EYE), Math.floor(player.z))===LAVA; }
 let burnT=0, lavaDmgT=0;                 // 玩家着火/岩浆灼烧计时
+let heatDmgT=0, _lastBiome=-1;           // 火山高温灼烤计时 / 上一帧所在群系(用于进入提示)
 let jumpPadGrace=false;                  // 被弹跳板弹起后, 直到落地都不计摔落伤害
 
 /* ---------- 生命值 / 死亡 ---------- */
@@ -2360,7 +2465,42 @@ function toggleCraft(){
     if(document.pointerLockElement) document.exitPointerLock();
   } else if(!softLock) enterPointerLock();
 }
+/* ---------- 指南针: 指向最近的显眼地标, 给探索一个方向 ---------- */
+const LANDMARKS={ pyramid:"🔺金字塔", colosseum:"🏛斗兽场", palace:"🏰宫殿", city:"🌆城市",
+  oasis:"🌴绿洲", rainbow:"🌈彩虹桥", airport:"✈机场", racetrack:"🏁赛车场", crater:"☄陨石坑",
+  park:"🎡游乐场", forum:"🏟广场", castrum:"🛡军团要塞", bazaar:"🏮集市" };
+let _compass={t:-1e9, land:null};
+function nearestLandmark(px,pz){
+  // 以玩家所在格子为中心, 向外扫描 16 格(~1536 方块)找最近的地标; 每 0.6s 才重算一次
+  const now=performance.now();
+  if(now-_compass.t < 600) return _compass.land;
+  _compass.t=now;
+  const pcx=Math.floor(px/CELL), pcz=Math.floor(pz/CELL);
+  let best=null, bestD=Infinity;
+  for(let sx=pcx-16; sx<=pcx+16; sx++) for(let sz=pcz-16; sz<=pcz+16; sz++){
+    const s=structureAt(sx,sz);
+    if(!s || !LANDMARKS[s.type]) continue;
+    const d=(s.x-px)*(s.x-px)+(s.z-pz)*(s.z-pz);
+    if(d<bestD){ bestD=d; best={x:s.x,z:s.z,type:s.type,dist:Math.sqrt(d)}; }
+  }
+  _compass.land=best;
+  return best;
+}
+function updateCompassHUD(){
+  const el=document.getElementById("compass");
+  const land=nearestLandmark(player.x,player.z);
+  if(!land){ el.style.display="none"; return; }
+  el.style.display="block";
+  const dx=land.x-player.x, dz=land.z-player.z;
+  const bearing=Math.atan2(dx,-dz);        // forward=(sin yaw,-cos yaw) ⇒ 世界方位角
+  const rel=bearing-player.yaw;             // 相对视线的角度; 0=正前方
+  el.querySelector(".carrow").style.transform="rotate("+rel+"rad)";
+  el.querySelector(".clabel").textContent=LANDMARKS[land.type];
+  const m=Math.round(land.dist);
+  el.querySelector(".cdist").textContent = m>=1000 ? (m/1000).toFixed(1)+"km" : m+"m";
+}
 function updateStatsHUD(){
+  updateCompassHUD();
   const st=document.getElementById("stats");
   const tod = sunH<0.02 ? "🌙夜" : "☀昼";
   const bio=BIOME_NAME[biomeAt(Math.floor(player.x),Math.floor(player.z))];
@@ -2573,7 +2713,29 @@ function setTitleChrome(show){
     const el=document.getElementById(id); if(el) el.style.display=d;
   }
 }
-function enterGame(){ overlay.style.display="none"; hud.style.display="block"; }
+function enterGame(){ overlay.style.display="none"; hud.style.display="block"; showIntro(); }
+/* 完整帮助浮层: H 键或点击标题切换; 打开时若在指针锁定中先释放, 方便阅读 */
+function toggleFullHelp(){
+  const el=document.getElementById("fullhelp");
+  const show = el.style.display!=="flex";
+  el.style.display = show ? "flex" : "none";
+  if(show && document.pointerLockElement) document.exitPointerLock();
+}
+/* 首次进入世界的引导: 分几条依次提示, 只在本次会话弹一次 */
+let _introShown=false;
+function showIntro(){
+  if(_introShown) return; _introShown=true;
+  const seq=[
+    [200,  "🐫 欢迎来到沙海奇境！WASD 移动 · 空格跳跃 · 左键挖掘/攻击"],
+    [4200, "🧭 右上角指南针指向最近地标——朝它走去探索金字塔·绿洲·奇观"],
+    [8400, "🌵 走远些能遇到 枯骨盐湖 / 风蚀峡谷 / 黑沙火山，天色与怪物各异 · 按 H 看完整帮助"],
+  ];
+  for(const [d,t] of seq) setTimeout(()=>{ if(playing()) showName(t); }, d);
+}
+document.getElementById("fullhelp").addEventListener("click",e=>{
+  // 点击半透明背景或标题栏关闭; 点正文不关, 方便阅读
+  if(e.target.id==="fullhelp" || e.target.classList.contains("fh-title")) toggleFullHelp();
+});
 function pauseGame(){
   softLock=false;
   for(const k in keys) keys[k]=false;
@@ -2594,6 +2756,7 @@ function enterSoft(){ // 指针锁定不可用时的降级模式(用鼠标指针
 document.addEventListener("keydown",e=>{
   if(e.code==="F3"){ e.preventDefault(); const d=document.getElementById("debug"); d.style.display=d.style.display==="block"?"none":"block"; return; }
   if(e.code==="F5"){ e.preventDefault(); camMode=(camMode+1)%3; showName(["第一人称","第三人称(背后)","第三人称(正面)"][camMode]); return; }
+  if(e.code==="KeyH" && !e.repeat){ e.preventDefault(); toggleFullHelp(); return; }
   if(e.code==="Escape" && craftOpen){ toggleCraft(); return; }
   if(e.code==="Escape" && softLock){ pauseGame(); return; }
   if(!playing()) return;
@@ -4142,7 +4305,19 @@ function trySpawns(dt){
       const r=Math.random();
       // 敌人按群系分化, 不再永远是僵尸
       // 去掉圣甲虫/虫豸类, 保留少量有辨识度的对手
-      if(bio===BIO_DESERT||bio===BIO_MESA){
+      if(bio===BIO_VOLCANO){                        // 火山: 焦土亡魂 + 岩浆史莱姆
+        if(r<0.4) spawnMob("slime",20,42);
+        else if(r<0.7) spawnMob("skeleton",22,46);
+        else spawnMob("creeper",22,46);
+      } else if(bio===BIO_SALTLAKE){                 // 枯骨盐湖: 白骨遍地, 以骷髅/圣甲虫为主
+        if(r<0.5) spawnMob("skeleton",20,44);
+        else if(r<0.8) spawnMob("scarab",16,34);
+        else spawnMob("mummy",22,44);
+      } else if(bio===BIO_CANYON){                   // 风蚀峡谷: 岩缝里的巨蝎与圣甲虫
+        if(r<0.45) spawnMob("serqet",18,38);
+        else if(r<0.75) spawnMob("scarab",16,34);
+        else spawnMob("skeleton",22,46);
+      } else if(bio===BIO_DESERT||bio===BIO_MESA){
         if(r<0.45) spawnMob("mummy",22,46);
         else if(r<0.75) spawnMob("skeleton",22,46);
         else spawnMob("slime",22,44);
@@ -5148,6 +5323,22 @@ function render(now){
     daylight=Math.max(daylight, 0.6+f*0.9);
     sky=mix3(sky,[0.92,0.94,1.0],f*0.85);
   }
+  // ---- 群系氛围: 站到不同群系, 天空/雾/亮度平滑改变 ----
+  {
+    let tgtCol=[0,0,0], tgtAmt=0, tgtDay=1;
+    if(playing()){
+      const pbio=biomeAt(Math.floor(player.x),Math.floor(player.z));
+      if(pbio===BIO_VOLCANO){      tgtCol=[0.50,0.25,0.19]; tgtAmt=0.55; tgtDay=0.86; } // 灰烬橙红·烟尘压暗
+      else if(pbio===BIO_SALTLAKE){tgtCol=[0.87,0.89,0.94]; tgtAmt=0.46; tgtDay=1.16; } // 惨白高反光·刺眼
+      else if(pbio===BIO_CANYON){  tgtCol=[0.74,0.51,0.33]; tgtAmt=0.42; tgtDay=1.02; } // 沙尘橙黄
+      else if(pbio===BIO_SNOW){    tgtCol=[0.82,0.88,0.98]; tgtAmt=0.24; tgtDay=1.05; } // 雪域冷蓝
+    }
+    if(_atmoAmt<0.02 && tgtAmt>0){ _atmoCol=tgtCol.slice(); }  // 首次切入直接取色, 避免从黑过渡
+    _atmoAmt += (tgtAmt-_atmoAmt)*0.06;
+    _atmoDay += (tgtDay-_atmoDay)*0.06;
+    for(let i=0;i<3;i++) _atmoCol[i]+=(tgtCol[i]-_atmoCol[i])*0.06;
+    if(_atmoAmt>0.004){ sky=mix3(sky,_atmoCol,_atmoAmt); daylight*=_atmoDay; }
+  }
   const uw=eyeInWater();
   const fogCol = uw ? [0.08,0.22,0.55] : sky;
   const fogFar = uw ? 22 : RENDER*CS*1.05;
@@ -5603,6 +5794,21 @@ function frame(now){
           vx:0,vy:1.8+Math.random(),vz:0,life:.4,size:.1,u:15*TS,v:0,l:1.8});
       }
       if(water && burnT>0) burnT=0;                     // 跳水灭火
+      // 黑沙火山: 地表暴露在高温下持续掉血, 泡水/进洞可躲避
+      const curBio=biomeAt(Math.floor(player.x),Math.floor(player.z));
+      if(!water && !lava && player.y>WATER_Y && curBio===BIO_VOLCANO){
+        heatDmgT-=dt;
+        if(heatDmgT<=0){ heatDmgT=2.4; damagePlayer(1,0,0); burnT=Math.max(burnT,0.4); }
+        if(Math.random()<dt*4) particles.push({x:player.x+(Math.random()-.5)*.9,y:player.y+0.2+Math.random()*1.6,z:player.z+(Math.random()-.5)*.9,
+          vx:0,vy:0.9+Math.random(),vz:0,life:.5,size:.08,u:15*TS,v:0,l:1.6});
+      } else heatDmgT=0;
+      // 进入新群系: 顶部提示当前群系(方便探索定位, 也印证氛围切换)
+      if(curBio!==_lastBiome){
+        _lastBiome=curBio;
+        const tips={[BIO_VOLCANO]:"🌋 黑沙火山 — 地表高温灼人, 小心熔岩!",[BIO_SALTLAKE]:"🧂 枯骨盐湖 — 惨白盐盘, 盐晶可采",
+                    [BIO_CANYON]:"🏜 风蚀峡谷 — 层理岩壁, 攀上台地俯瞰"};
+        showName(tips[curBio] || ("🧭 进入"+BIOME_NAME[curBio]));
+      }
     }
     eatCd=Math.max(0,eatCd-dt);
     arrowCd=Math.max(0,arrowCd-dt);
@@ -5868,6 +6074,8 @@ window.__game = {
   get dayCount(){ return dayCount; },
   get blockDiffSize(){ return blockDiff.size; },
   get renderDist(){ return RENDER; },
+  get biome(){ return biomeAt(Math.floor(player.x), Math.floor(player.z)); },        // 当前所在群系 id
+  get biomeName(){ return BIOME_NAME[biomeAt(Math.floor(player.x), Math.floor(player.z))]; },
   getBlock, setBlock, groundY, heightAt, biomeAt,
   save:()=>saveGame(true), load:()=>loadGame(), hasSave, deleteSave,
   teleport(x,y,z){ player.x=x; player.y=y; player.z=z; player.vx=player.vy=player.vz=0; pcx=1e9; refreshChunks(); },
