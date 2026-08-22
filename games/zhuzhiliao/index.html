@@ -164,13 +164,34 @@
   <button id="bootBtn">开始把玩</button>
 </div>
 
+<!-- three.js：优先本地（可离线），importmap 指向随附的 three.module.js（r160，与线上同版） -->
 <script type="importmap">
-{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js"}}
+{"imports":{"three":"./three.module.js"}}
 </script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
+<!-- MediaPipe Hands：优先本地 vendor（可离线），本地缺失/损坏再回退 jsdelivr CDN -->
+<script>
+// 精简本地化：只随仓库附带 SIMD 版 wasm + lite 模型（覆盖 Chrome/Edge）。
+// 极老的无 SIMD 浏览器本地没有对应 wasm，改从 CDN 取运行时资源，避免 404。
+(function(){
+  var SIMD = false;
+  try{ SIMD = WebAssembly.validate(new Uint8Array([0,97,115,109,1,0,0,0,1,5,1,96,0,1,123,3,2,1,0,10,10,1,8,0,65,0,253,15,253,98,11])); }catch(e){}
+  window.MP_HANDS_BASE = SIMD ? 'vendor/mediapipe/' : 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/';
+})();
+</script>
+<script src="vendor/mediapipe/hands.js" crossorigin="anonymous"></script>
+<script>
+if(typeof window.Hands === 'undefined'){
+  // 本地 hands.js 未加载成功 → 库和运行时资源一起回退 CDN，保持同源一致
+  window.MP_HANDS_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/';
+  document.write('<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"><\/script>');
+}
+</script>
 
 <script type="module">
-import * as THREE from "three";
+// three.js 本地优先，加载失败（如本地文件缺失）再回退 CDN
+let THREE;
+try{ THREE = await import('three'); }
+catch(_){ THREE = await import('https://unpkg.com/three@0.160.0/build/three.module.js'); }
 
 const $ = id => document.getElementById(id);
 const clamp = (v,a,b)=> v<a?a:(v>b?b:v);
@@ -954,10 +975,10 @@ function handsWatchdog(now){
 function flashBurst(){ burstT = 1; burstScale = 0.55; }
 
 async function startHands(){
-  if(handsFailed){ toast('MediaPipe Hands 未能加载，请检查网络后刷新'); return; }
+  if(handsFailed){ toast('MediaPipe Hands 未能加载\n本地 vendor 缺失且 CDN 也不可达，刷新页面可重试'); return; }
   if(typeof window.Hands !== 'function'){
     handsFailed = true;
-    toast('MediaPipe Hands 库未加载成功\n（需要联网访问 jsdelivr CDN）');
+    toast('MediaPipe Hands 库未加载成功\n本地 vendor/mediapipe/hands.js 缺失，且回退的 jsdelivr CDN 也无法访问');
     return;
   }
   $('tgHand').classList.add('busy'); $('tgHand').textContent='🖐 启动中…';
@@ -1037,7 +1058,7 @@ async function pumpHands(gen){
 }
 
 function makeHands(){
-  const H = new window.Hands({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${f}`});
+  const H = new window.Hands({locateFile:f=>`${window.MP_HANDS_BASE||'vendor/mediapipe/'}${f}`});
   H.setOptions({maxNumHands:2, modelComplexity:0, minDetectionConfidence:.6, minTrackingConfidence:.5});
   H.onResults(onHands);
   return H;
