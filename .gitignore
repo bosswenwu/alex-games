@@ -14,3 +14,9 @@ tank-strike-e2e-results.json
 
 .vercel
 .env*
+
+# 本地开发产物 / 未完成的本地化(暂不入库)
+.claude/
+*PROGRESS*.md
+games/zhuzhiliao/vendor/
+games/zhuzhiliao/three.module.js
