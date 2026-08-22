@@ -1,7 +1,7 @@
 {
   "headers": [
     {
-      "source": "/(games|covers|assets)/(.*)",
+      "source": "/(games|covers)/(.*)",
       "headers": [
         {
           "key": "Cache-Control",
