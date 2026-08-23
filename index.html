@@ -80,8 +80,8 @@
     /* 游戏清单 —— 以后新增一款游戏只需在这里加一行；卡片与首页 hero 均由此渲染 */
     const GAMES = [
       { id:'minecraft',      name:'沙海奇境',            genre:'沙盒 · 冒险', desc:'在无边黄沙中探索、建造与飞行',            cover:'covers/minecraft.jpg' },
-      { id:'abyss',          name:'深渊圣所',            genre:'肉鸽 · 射击', desc:'随机地图、遗物构筑与地牢战斗',            cover:'covers/abyss.jpg' },
-      { id:'zhuzhiliao',     name:'竹知了',              genre:'体感 · 互动', desc:'打开摄像头，用手势操控仿真昆虫',          cover:'covers/zhuzhiliao.jpg' },
+      { id:'abyss',          name:'深渊圣所',            genre:'肉鸽 · 射击', desc:'随机地图、遗物构筑与地牢战斗',            cover:'covers/abyss.jpg', req:'⌨️ 键鼠' },
+      { id:'zhuzhiliao',     name:'竹知了',              genre:'体感 · 互动', desc:'打开摄像头，用手势操控仿真昆虫',          cover:'covers/zhuzhiliao.jpg', req:'📷 摄像头' },
       { id:'haven',          name:'Haven',               genre:'体素 · 生存', desc:'创建世界，生存或自由建造',                cover:'covers/haven.jpg' },
       { id:'nebula',         name:'Nebula Strike',       genre:'太空 · 射击', desc:'驾驶战机突破星云与 Boss 封锁',            cover:'covers/nebula.jpg' },
       { id:'three-kingdoms', name:'三国塔防',            genre:'三国 · 塔防', desc:'调遣名将布阵，守住三十波进攻',            cover:'covers/three-kingdoms.jpg' },
@@ -95,7 +95,7 @@
       grid.innerHTML = GAMES.map((g, i) => {
         const badge = g.badge || `GAME ${String(i + 1).padStart(2, '0')}`;
         return `<a class="game" href="${href(g)}"><img src="${esc(g.cover)}" alt="${esc(g.name)}游戏画面" loading="lazy">`
-          + `<div class="game-top"><span class="num">${esc(badge)}</span><span class="genre">${esc(g.genre)}</span></div>`
+          + `<div class="game-top"><span class="num">${esc(badge)}</span><span style="display:flex;gap:7px">${g.req?`<span class="genre">${esc(g.req)}</span>`:''}<span class="genre">${esc(g.genre)}</span></span></div>`
           + `<div class="game-info"><h3>${esc(g.name)}</h3><p>${esc(g.desc)}</p>`
           + `<div class="play-row"><span class="play-now">立即游玩</span><span class="arrow">↗</span></div></div></a>`;
       }).join('');
