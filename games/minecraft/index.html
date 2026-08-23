@@ -208,8 +208,8 @@
     <b>物品栏</b>：1烟花 2钩爪 3可乐 4铁剑 5机关枪 6火箭筒 7弓 8=TNT(右键放·左键点燃) 9弹跳板<br>
     <b>2 钩爪</b>甩向准星把你拉过去；<b>3 可乐</b>回血+加速；<b>9 弹跳板</b>踩上去高高弹飞不摔伤<br>
     击杀获得<b>经验</b>升级(提升生命与伤害)。白天长、夜晚短而亮，敌人只是点缀<br>
-    <b>群系</b>：沙海·红土台地·干草原为主，另有 <b>枯骨盐湖·风蚀峡谷·黑沙火山</b> 三处奇观<br>
-    　🌋 黑沙火山地表高温灼人(泡水/进洞躲避)　🧂 盐湖可采盐晶　🏜 峡谷层理岩壁可攀上台地<br>
+    <b>群系</b>：沙海·红土台地·干草原为主，另有盐湖·峡谷·火山·<b>晶洞高地·古代遗迹带</b><br>
+    　💎 晶洞高地：地表紫晶标出入口，地下方解石洞可采　⛵ 遗迹带：沉船/商队残骸藏金<br>
     <b>地标</b>：金字塔(墓室石棺唤醒法老王Boss)·斗兽场·宫殿·绿洲·彩虹桥·机场·赛车场·陨石坑·游乐场<br>
     <b>尼罗河</b>穿过沙漠(有鱼与鳄鱼)；天上有<b>浮空岛</b>藏钻石；地底 y&lt;10 是岩浆海，越深越凶险<br>
     <b>第3晚起 Boss 轮换</b>：僵尸王 / 飞龙 / 钢铁泰坦 / 烈焰凤凰　拖动模式下移动鼠标瞄准
@@ -225,6 +225,7 @@
     <button id="startbtn" class="btn" disabled>生成世界中… 0%</button>
     <button id="continuebtn" class="btn sub" style="display:none">继续上次的世界</button>
     <button id="newworldbtn" class="btn sub" style="display:none">开启新世界</button>
+    <a href="../../index.html" style="display:inline-block;margin-top:12px;color:#ffe08a;text-decoration:none;font-size:14px">← 返回游戏厅</a>
   </div>
   <div id="help">
     <b>W A S D</b> 移动　<b>空格</b> 跳跃(双击飞行)　<b>Shift</b> 潜行/下降　<b>E</b> 上车/骑乘<br>
@@ -273,6 +274,7 @@ const JUMPPAD=48;                             // 弹跳板: 踩上去把玩家�
 const MARBLE=49, ROOFTILE=50;
 // 新群系建材: 盐壳/盐晶(枯骨盐湖) · 玄武岩/黑沙(黑沙火山) · 风蚀岩(峡谷) · 发光矿脉
 const SALTCRUST=51, SALTCRYSTAL=52, BLACKSAND=53, BASALT=54, WINDROCK=55, GLOWVEIN=56;
+const CAVECALC=57, AMETHYST=58, WRECKWOOD=59; // 晶洞方解石/紫晶 · 沉船朽木（图集 235-237）
 // t=顶面贴图 b=底面 s=侧面 (图集编号)
 const BLOCKS = {
   [GRASS]:  {name:"草方块",   t:0,  b:2,  s:1},
@@ -331,13 +333,16 @@ const BLOCKS = {
   [BASALT]: {name:"玄武岩",     t:254,b:254,s:255},
   [WINDROCK]:{name:"风蚀岩",    t:99, b:99, s:99},
   [GLOWVEIN]:{name:"发光矿脉",  t:159,b:159,s:159},
+  [CAVECALC]:{name:"方解石",    t:235,b:235,s:235},
+  [AMETHYST]:{name:"紫晶簇",    t:236,b:236,s:236},
+  [WRECKWOOD]:{name:"沉船朽木", t:237,b:237,s:237},
 };
 // 植物可以直接走过去; 冰/玻璃/树叶不完全遮挡; 岩浆会陷进去
 const SOLID   = id => id!==AIR && id!==WATER && id!==LAVA && !PLANT(id);   // 碰撞
 const OPAQUE  = id => id!==AIR && id!==WATER && id!==LEAVES && id!==GLASS
                       && id!==PINE_LEAF && id!==ICE && !PLANT(id);  // 完全遮挡
 const OCCLUDE = id => SOLID(id) && id!==GLASS && id!==ICE;          // 产生环境光遮蔽
-const EMISSIVE= id => id===LANTERN || id===LAVA || id===CRYSTAL || id===MAGMA || id===NEON || id===WINDOW || id===GLOWVEIN || id===SALTCRYSTAL; // 自发光
+const EMISSIVE= id => id===LANTERN || id===LAVA || id===CRYSTAL || id===MAGMA || id===NEON || id===WINDOW || id===GLOWVEIN || id===SALTCRYSTAL || id===AMETHYST; // 自发光
 /* 物品栏: 常用道具全部落在 1-9 键上, TNT 固定在 9 键 */
 const HOTBAR_ITEMS = ["firework", "grapple", "cola", "sword", "gun", "rpg", "bow", TNT, JUMPPAD];
 
@@ -380,7 +385,7 @@ function smoothstep(e0,e1,x){ const t=clamp((x-e0)/(e1-e0),0,1); return t*t*(3-2
 const BIO_PLAIN=0, BIO_FOREST=1, BIO_DESERT=2, BIO_SNOW=3, BIO_TAIGA=4,
       BIO_SAVANNA=5, BIO_SWAMP=6, BIO_MESA=7,
       BIO_SALTLAKE=8, BIO_CANYON=9, BIO_VOLCANO=10;   // 新增: 枯骨盐湖 / 风蚀峡谷 / 黑沙火山
-const BIOME_NAME=["平原","森林","沙漠","雪原","针叶林","热带草原","沼泽","红土台地",
+const BIOME_NAME=["平原","晶洞高地","沙漠","雪原","古代遗迹带","热带草原","沼泽","红土台地",
                   "枯骨盐湖","风蚀峡谷","黑沙火山"];
 /* heightAt/biomeAt 在生成一个区块时会对同一坐标反复调用(地形+树+建筑),
    做一层记忆化, 世界生成速度提升明显。缓存过大时整体清空即可。 */
@@ -400,6 +405,8 @@ function biomeAt(x,z){
   else if(t<0.38) r = BIO_SAVANNA;                     // 干草原过渡带
   else if(w<0.42) r = (e>0.63 ? BIO_CANYON : BIO_DESERT); // 沙漠带里切出风蚀峡谷
   else if(w<0.60) r = BIO_MESA;                        // 红土台地
+  else if(t>0.40 && t<0.64 && w>0.80) r = BIO_FOREST;  // 复用 FOREST: 湿润高地=晶洞入口
+  else if(e>0.74 && w>0.50 && t>0.34 && t<0.64) r = BIO_TAIGA; // 复用 TAIGA: 古代遗迹带
   else if(w<0.74) r = BIO_SAVANNA;                     // 稀树草原(几乎无树)
   else r = t>0.60 ? BIO_SWAMP : BIO_PLAIN;             // 少量湿地/平原
   if(_bioCache.size>400000) _bioCache.clear();
@@ -441,6 +448,8 @@ function heightAt(x, z){
     const vn = fbm2(x*0.021+51.3, z*0.021-19.7, 4);
     h = 33 + Math.pow(vn,1.4)*26;
   }
+  else if(bio===BIO_FOREST) h = 36 + n1*9;             // 晶洞高地: 略隆起的湿丘
+  else if(bio===BIO_TAIGA)  h = 34 + n1*5;             // 遗迹带: 缓坡台地，方便铺沉船/商队
   const rInf=riverInfluence(x,z);
   if(rInf>0) h = h*(1-rInf) + (WATER_Y-3)*rInf;             // 平滑下压到河床, 自然形成河岸坡度
   const r=Math.min(90, Math.floor(h));
@@ -501,7 +510,9 @@ function genChunk(cx, cz){
         else if(beach) id = (bio===BIO_SWAMP? DIRT : SAND);
         else if(bio===BIO_DESERT) id=SAND;
         else if(bio===BIO_MESA)   id=CLAY;
-        else if(bio===BIO_SNOW||bio===BIO_TAIGA) id=SNOW;
+        else if(bio===BIO_SNOW) id=SNOW;
+        else if(bio===BIO_FOREST) id=MOSSY;
+        else if(bio===BIO_TAIGA) id=SANDSTONE;
         else id=GRASS;
       }
       b[col+y]=id;
@@ -525,7 +536,9 @@ function genChunk(cx, cz){
     for(let y=6; y<=Math.min(capY,44); y++){
       if(b[col+y]!==AIR) continue;
       if(b[col+y-1]===AIR || b[col+y-1]===LAVA) continue;          // 要长在实地上
-      if(hash3(gx*3+y, y*7, gz*3-y) < 0.006) b[col+y]=CRYSTAL;
+      const caveR = hash3(gx*3+y, y*7, gz*3-y);
+      if(caveR < (bio===BIO_FOREST ? 0.034 : 0.006)) b[col+y]= (bio===BIO_FOREST && caveR>0.018 ? AMETHYST : CRYSTAL);
+      else if(bio===BIO_FOREST && caveR<0.08 && b[col+y-1]===STONE) b[col+y-1]=CAVECALC;
     }
     // ---- 地表装饰: 不再生成花/草/树, 改用岩石与遗迹点缀荒野 ----
     if(h>WATER_Y+1 && h<64 && b[col+h]!==AIR){
@@ -556,6 +569,14 @@ function genChunk(cx, cz){
       } else if(bio===BIO_CANYON){
         if(rr<0.006) b[col+h]=GLOWVEIN;               // 崖壁矿脉
         else if(rr<0.010) put(gx,h+1,gz,DEADBUSH,true);
+      } else if(bio===BIO_FOREST){
+        if(rr<0.014){                                 // 地表晶簇: 标出地下晶洞
+          const ch=1+Math.floor(hash2(gx+2,gz-6)*2);
+          for(let k=1;k<=ch;k++) put(gx,h+k,gz,AMETHYST,true);
+        } else if(rr<0.022) b[col+h]=CAVECALC;
+      } else if(bio===BIO_TAIGA){
+        if(rr<0.010) put(gx,h+1,gz,MARBLE,true);      // 散落的大理石残件
+        else if(rr<0.016) put(gx,h+1,gz,WRECKWOOD,true);
       }
     }
   }
@@ -700,12 +721,14 @@ function structureAt(sx,sz){                 // 返回 {type,x,z,h} 或 null
   if(bio===BIO_DESERT||bio===BIO_MESA){
     // 沙漠 = 埃及本土 + 罗马远征军的前线: 金字塔与军团要塞/渡槽同框
     const T=[["pyramid",0.20],["castrum",0.26],["aqueduct",0.31],["oasis",0.37],["bazaar",0.42],
-             ["crater",0.47],["airport",0.52],["rainbow",0.57],["ruin",0.62]];
+             ["crater",0.47],["airport",0.52],["rainbow",0.57],["wreck",0.60],["caravan",0.62],["ruin",0.66]];
     type="hut";
     for(const [t,thr] of T) if(r<thr){ type=t; break; }
   }
-  else if(bio===BIO_SNOW||bio===BIO_TAIGA) type = r<0.14 ? "tower" : (r<0.24 ? "factory" : (r<0.32 ? "rainbow" : (r<0.38 ? "crater" : "cabin")));
-  else if(bio===BIO_SWAMP) type = r<0.30 ? "rainbow" : (r<0.60 ? "ruin" : "hut");
+  else if(bio===BIO_SNOW) type = r<0.14 ? "tower" : (r<0.24 ? "factory" : (r<0.32 ? "rainbow" : (r<0.38 ? "crater" : "cabin")));
+  else if(bio===BIO_FOREST) type = r<0.28 ? "grotto" : (r<0.46 ? "ruin" : (r<0.58 ? "crater" : "hut"));
+  else if(bio===BIO_TAIGA) type = r<0.22 ? "wreck" : (r<0.40 ? "caravan" : (r<0.58 ? "ruin" : "hut"));
+  else if(bio===BIO_SWAMP) type = r<0.22 ? "wreck" : (r<0.50 ? "ruin" : "hut");
   else {
     const TABLE=[["city",0.02],["colosseum",0.04],["palace",0.052],["forum",0.066],["park",0.11],
                  ["bazaar",0.16],["rainbow",0.22],["racetrack",0.28],["airport",0.33],["tower",0.38],
@@ -722,7 +745,7 @@ function buildStructures(bx,bz,put){
     const s=structureAt(sx,sz);
     if(!s) continue;
     const RADII={city:34,pyramid:30,airport:32,racetrack:30,park:22,rainbow:22,crater:18,bazaar:17,factory:16,oasis:15,
-                 colosseum:20,forum:16,castrum:19,aqueduct:38,palace:20};
+                 colosseum:20,forum:16,castrum:19,aqueduct:38,palace:20,wreck:16,caravan:12,grotto:14};
     const rad = RADII[s.type]||12;
     if(s.x+rad<bx || s.x-rad>=bx+CS || s.z+rad<bz || s.z-rad>=bz+CS) continue;
     drawStructure(s,put);
@@ -996,6 +1019,48 @@ function drawStructure(s,put){
       for(let y=h+1;y<=h+ch;y++) put(x+dx,y,z+dz,MOSSY,true);
     }
     put(x,h+1,z,MOSSY,true);
+  }
+  else if(type==="wreck"){
+    // 半埋沉船: 朽木船体 + 断桅 + 舱内金币/图纸感(金矿+灯笼)
+    clearAbove(x-7,z-3,x+7,z+3,h+1,h+8);
+    for(let i=-6;i<=6;i++){
+      const beam = i===-6||i===6;
+      const y0 = h + (Math.abs(i)>4 ? 0 : 1);
+      put(x+i,y0,z-2,WRECKWOOD,true); put(x+i,y0,z+2,WRECKWOOD,true);
+      if(!beam){ put(x+i,h,z,WRECKWOOD,true); put(x+i,h,z-1,WRECKWOOD,true); put(x+i,h,z+1,WRECKWOOD,true); }
+    }
+    for(let y=h+1;y<=h+5;y++) put(x,y,z,WRECKWOOD,true); // 桅杆
+    put(x,h+6,z,WOOL,true);
+    put(x-2,h+1,z,GOLD_ORE,true); put(x+2,h+1,z,GOLD_ORE,true);
+    put(x,h+1,z,LANTERN,true);
+  }
+  else if(type==="caravan"){
+    // 商队残骸: 三顶帐篷 + 货箱 + 灯
+    clearAbove(x-6,z-5,x+6,z+5,h+1,h+5);
+    const tents=[[-4,-2],[-4,2],[3,0]];
+    for(const [ox,oz] of tents){
+      box(x+ox-1,h,z+oz-1,x+ox+1,h,z+oz+1,SANDSTONE,false);
+      box(x+ox-1,h+1,z+oz-1,x+ox+1,h+2,z+oz+1,WOOL,true);
+      put(x+ox,h+3,z+oz,WOOL,true);
+    }
+    put(x,h+1,z,LANTERN,true);
+    put(x+1,h+1,z,GOLD_ORE,true);
+    put(x-1,h+1,z,HAY,true);
+  }
+  else if(type==="grotto"){
+    // 晶洞入口: 下凹坑 + 方解石/紫晶壁，指南针可指到
+    const R=5;
+    clearAbove(x-R,z-R,x+R,z+R,h-6,h+4);
+    for(let X=x-R;X<=x+R;X++) for(let Z=z-R;Z<=z+R;Z++){
+      const d=Math.hypot(X-x,Z-z);
+      if(d>R+0.2) continue;
+      const floor=h-4-Math.floor((R-d)*0.4);
+      put(X,floor,Z, d<1.6?AMETHYST:CAVECALC, true);
+      if(d>R-1.2){
+        for(let y=floor+1;y<=h+1;y++) put(X,y,Z, hash2(X*3,Z*5+y)<0.35?AMETHYST:CAVECALC, true);
+      }
+    }
+    put(x,h-3,z,CRYSTAL,true); put(x,h-2,z,LANTERN,true);
   }
   else if(type==="city"){
     /* ===== 城市街区: 井字形马路 + 多栋高楼 + 路灯霓虹 ===== */
@@ -1911,6 +1976,16 @@ drawTile(233,(x,y)=>{                                                     // 罗
 drawTile(234,(x,y)=>{                                                     // 陶瓦屋顶(半圆瓦楞)
   const w=x%4; const ridge=(w===0);
   return ridge? vary(126,54,34,6) : vary(176,80,50,9); });
+drawTile(235,(x,y)=>{                                                     // 方解石: 乳白层理
+  const band=Math.floor(y/3)%2;
+  return band? vary(232,226,214,8) : vary(214,208,196,7); });
+drawTile(236,(x,y)=>{                                                     // 紫晶簇: 晶面高光
+  const d=Math.max(Math.abs(x-7.5),Math.abs(y-7.5));
+  if(d<2.2) return vary(230,210,255,16);
+  return Math.random()<0.18? vary(210,160,255,18) : vary(92,48,148,12); });
+drawTile(237,(x,y)=>{                                                     // 沉船朽木: 深褐+盐白裂纹
+  const crack=((x+y*2)%7===0);
+  return crack? vary(168,156,132,8) : vary(86,58,36,9); });
 /* ---- 新群系材质 (free tiles 250-255 / 99 / 159) ---- */
 drawTile(250,(x,y)=>{                                                     // 盐壳顶: 龟裂多边形盐盘
   // 用一组伪随机胞格中心画出多边形裂纹网(枯盐湖典型花纹)
@@ -2468,7 +2543,8 @@ function toggleCraft(){
 /* ---------- 指南针: 指向最近的显眼地标, 给探索一个方向 ---------- */
 const LANDMARKS={ pyramid:"🔺金字塔", colosseum:"🏛斗兽场", palace:"🏰宫殿", city:"🌆城市",
   oasis:"🌴绿洲", rainbow:"🌈彩虹桥", airport:"✈机场", racetrack:"🏁赛车场", crater:"☄陨石坑",
-  park:"🎡游乐场", forum:"🏟广场", castrum:"🛡军团要塞", bazaar:"🏮集市" };
+  park:"🎡游乐场", forum:"🏟广场", castrum:"🛡军团要塞", bazaar:"🏮集市",
+  wreck:"⛵沉船", caravan:"🐫商队残骸", grotto:"💎晶洞" };
 let _compass={t:-1e9, land:null};
 function nearestLandmark(px,pz){
   // 以玩家所在格子为中心, 向外扫描 16 格(~1536 方块)找最近的地标; 每 0.6s 才重算一次
@@ -2728,7 +2804,7 @@ function showIntro(){
   const seq=[
     [200,  "🐫 欢迎来到沙海奇境！WASD 移动 · 空格跳跃 · 左键挖掘/攻击"],
     [4200, "🧭 右上角指南针指向最近地标——朝它走去探索金字塔·绿洲·奇观"],
-    [8400, "🌵 走远些能遇到 枯骨盐湖 / 风蚀峡谷 / 黑沙火山，天色与怪物各异 · 按 H 看完整帮助"],
+    [8400, "🌵 走远些能遇到盐湖/峡谷/火山，还有晶洞高地与沉船遗迹 · 按 H 看完整帮助"],
   ];
   for(const [d,t] of seq) setTimeout(()=>{ if(playing()) showName(t); }, d);
 }
@@ -3009,6 +3085,7 @@ function doPick(){
 
 /* ---------- 粒子 ---------- */
 const particles=[];
+function partCap(){ return RENDER<=6 ? 90 : (RENDER<=8 ? 220 : 420); }
 function spawnParticles(bx,by,bz,id){
   const tile=BLOCKS[id].s;
   for(let i=0;i<16;i++){
@@ -3023,6 +3100,8 @@ function spawnParticles(bx,by,bz,id){
 }
 const partVbo=gl.createBuffer();
 function updateParticles(dt){
+  const cap=partCap();
+  if(particles.length>cap) particles.splice(0, particles.length-cap);
   for(let i=particles.length-1;i>=0;i--){
     const p=particles[i];
     p.life-=dt;
@@ -4428,8 +4507,8 @@ function trySpawns(dt){
     const r=Math.random();
     let pick;
     switch(bio){
-      case BIO_FOREST: pick = r<0.18?"deer":(r<0.34?"fox":(r<0.48?"wolf":(r<0.62?"rabbit":(r<0.80?"pig":"puppy")))); break;
-      case BIO_TAIGA:  pick = r<0.24?"wolf":(r<0.44?"deer":(r<0.60?"fox":(r<0.78?"rabbit":"panda"))); break;
+      case BIO_FOREST: pick = r<0.28?"bat":(r<0.50?"fox":(r<0.70?"wolf":(r<0.86?"rabbit":"deer"))); break;
+      case BIO_TAIGA:  pick = r<0.22?"camel":(r<0.42?"horse":(r<0.62?"wolf":(r<0.80?"fox":"rabbit"))); break;
       case BIO_SNOW:   pick = r<0.40?"rabbit":(r<0.65?"wolf":(r<0.85?"fox":"panda")); break;
       case BIO_DESERT: pick = r<0.34?"camel":(r<0.54?"rabbit":(r<0.74?"chicken":"lion")); break;
       case BIO_MESA:   pick = r<0.30?"camel":(r<0.55?"rabbit":(r<0.78?"chicken":"tiger")); break;
@@ -5331,6 +5410,8 @@ function render(now){
       if(pbio===BIO_VOLCANO){      tgtCol=[0.50,0.25,0.19]; tgtAmt=0.55; tgtDay=0.86; } // 灰烬橙红·烟尘压暗
       else if(pbio===BIO_SALTLAKE){tgtCol=[0.87,0.89,0.94]; tgtAmt=0.46; tgtDay=1.16; } // 惨白高反光·刺眼
       else if(pbio===BIO_CANYON){  tgtCol=[0.74,0.51,0.33]; tgtAmt=0.42; tgtDay=1.02; } // 沙尘橙黄
+      else if(pbio===BIO_FOREST){  tgtCol=[0.42,0.62,0.78]; tgtAmt=0.38; tgtDay=0.94; } // 晶洞高地冷青
+      else if(pbio===BIO_TAIGA){   tgtCol=[0.62,0.48,0.36]; tgtAmt=0.34; tgtDay=1.00; } // 遗迹带暮色褐
       else if(pbio===BIO_SNOW){    tgtCol=[0.82,0.88,0.98]; tgtAmt=0.24; tgtDay=1.05; } // 雪域冷蓝
     }
     if(_atmoAmt<0.02 && tgtAmt>0){ _atmoCol=tgtCol.slice(); }  // 首次切入直接取色, 避免从黑过渡
@@ -5563,7 +5644,7 @@ let weather="clear", weatherT=260+Math.random()*200, lightT=0, thunderT=0;
 function weatherName(){
   if(weather==="clear") return "☀ 晴";
   const snowy = biomeAt(Math.floor(player.x),Math.floor(player.z));
-  const isSnow = snowy===BIO_SNOW||snowy===BIO_TAIGA;
+  const isSnow = snowy===BIO_SNOW;
   if(weather==="storm") return "⛈ 雷暴";
   return isSnow ? "🌨 降雪" : "🌧 下雨";
 }
@@ -5575,8 +5656,9 @@ function updateWeather(dt){
     else { weather="clear"; weatherT=240+Math.random()*260; showName("☀ 天放晴了"); }
   }
   if(weather==="clear") return;
+  if(RENDER<=6) return; // 低配砍天气粒子，只留色调/雷闪
   const bio=biomeAt(Math.floor(player.x),Math.floor(player.z));
-  const snowing = bio===BIO_SNOW||bio===BIO_TAIGA;
+  const snowing = bio===BIO_SNOW;
   // 在玩家四周撒降水粒子(只在露天处)
   const n = weather==="storm"? 12 : 6;
   for(let i=0;i<n;i++){
