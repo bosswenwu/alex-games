@@ -21,6 +21,7 @@
 | 共享(追加式) | `BACKLOG.md` |
 
 ## Cursor 任务队列（按优先级）
+0. **竹知了改回方案B（用户已拍板 2026-08-22）**：`git rm -r games/zhuzhiliao/vendor` + 删 `three.module.js`；importmap 的 three 指回本地**仅保留 three.module.js(1.3MB)**（若也想去掉就连 three 一起 CDN 化，但本地 three 收益/体积划算，建议留）；MediaPipe 改 **jsdelivr 主 + unpkg 备 + 8s 超时**，启动层检测 `window.Hands` 失败出中文提示「手势库加载失败，可继续用手指搓动」+ 重试；摄像头错误按 拒绝/无设备/非HTTPS 分流；游戏本体不依赖手势也能玩。**注意**：新提交删 vendor 只让**部署体积**回落(~20M→~7M)，`.git` 历史里的 14MB 需日后 `git filter-repo` 才真正清除（线上只发 HEAD，不受影响，非紧急）。
 1. **Haven 拆包**（P0 唯一未动项）：入口改外链已拆好的 `haven.js`+`styles.css`+`assets/`，删 `haven.html` 4 处 base64，**拆完不要双维护两份**。验收：旧存档 `haven.world.v1` 能读、建造/世界/UI 正常、console 零报错。
 2. **修自己的一致性债**：①三国把界面「25 波」统一成「30 波」（已核实 337 行=25、`FINAL_WAVE=30`）；②坦克「矢量履带·推进冷却缩短」升级——真去缩短 `dashCooldown`（现硬编码 4.2）或删掉该文案，别留假信息。
 3. **性能补漏**：三国 `victory`/`gameover` 后只画一帧即停 rAF；沙海 `particles` 加上限（抄三国 `QUAL.cap`，低配砍天气粒子）。
@@ -45,5 +46,5 @@
 - 把无头浏览器当手感验收。
 - `git add -A`（见协议 4）。
 
-## 待用户决策
-- **竹知了方案A(已上线) vs 方案B**：现状是方案A——MediaPipe+three 全本地化，vendor 约 14MB 入库，仓库 6.6M→20M。Cursor 自己的建议书主张方案B（只本地化 three 1.3MB、MediaPipe 保 CDN+超时+中文兜底、不入库 25MB）。这是仓库体积 vs 抗墙离线的取舍，待用户拍板；在此之前 `games/zhuzhiliao/` 冻结不动。
+## 已决策
+- **竹知了：用户已选方案B（2026-08-22）**。执行见 Cursor 队列第 0 项。
