@@ -82,6 +82,15 @@
 ## Cursor 进度（2026-08-23 队列 1→4，追加）
 
 - **① 沙海探索兑现**：指南针所指沉船/商队/晶洞/遗迹首次抵达给真实背包掉落+XP；图纸锁「沉船灯塔」「晶脉提纯」。挖掘按群系额外产材。干旱带可滚沙暴（雾距压到约 16、露天掉 1 血，头顶有实心方块则免）。不重做图鉴。`landSeen` 写入 `sandsea_save_v1`，老存档缺字段不崩。
-- **② 音频**：三国已在 main。坦克/Haven 混音器+变体随本 PR 带上（WebAudio，不下 mp3）。
+- **② 音频**：三国已在 main。坦克/Haven 混音器+变体已随 PR #3 上 main（WebAudio，不下 mp3）。
 - **③ 坦克步骤 2**：已在 main（`recoilV`/`turretRecoil`/`hullPitch`/`muzzle`、装填环、炮口烟），本波核实后未再改手感。
 - **④ BACKLOG**：顶部与 P0 不再写方案 A / 20M vendor /「haven.html 保留为离线单文件包」。
+
+## Cursor 进度（2026-08-23 音频波，追加）
+
+- **分工拍板**：沙海深化 / `games/minecraft/index.html` 归 Claude（群系图鉴已上 main）。Cursor 本波不碰沙海，避免双写冲突。
+- **坦克步骤 2 已在 main**：开火已写 `recoilV` / `turretRecoil` / `hullPitch` / `muzzle`，`drawReloadRing()` 在 playing 时绘制，炮口有火光+烟圈。本波不再重做手感。
+- **坦克音频**：暂停面板音乐/音效滑条 + 静音，分轨 `ironveil_audio_v1`。开火/命中等有变体；胜/负/Boss 节点换独立音色；BGM 遇巨像加快。`__game.audio` / `setAudio` 可断言。
+- **Haven 音频**：只改 `haven.js` + `styles.css`（不双维护 `haven.html`）。暂停层注入混音器，persist `haven.audio.v1`，不改 `haven.world.v1`。音效变体 + 暴击/吼/胜负区分；环境脉冲随威胁/Boss 变紧。
+- **三国**：音频栈已在 main（独立音量/静音/变体/自适应 BGM），本波未改。
+- **2026-08-29 rebase**：PR #2 变脏只撞 `BACKLOG.md`。坦克 / Haven 混音器 blob 已与 main 完全一致（经 PR #3 入库），`games/minecraft/index.html` 未改。
