@@ -719,6 +719,9 @@
   const pad = { x: 0, z: 0 };
   let jumpQueued = false;
   let hitStop = 0;
+  // Wall-clock epoch for the sky's cloud drift + star twinkle. Kept modulo a few
+  // minutes so uTime never grows large enough to lose precision in mediump floats.
+  const skyT0 = (typeof performance !== "undefined" ? performance.now() : 0);
   // --- game feel: camera shake, damage floaters, hit flash tint ---
   let shake = 0, shakeT = 0;
   const floats = [];
@@ -1448,12 +1451,44 @@
     "void main(){ float f=clamp((vD-uFn)/(uFf-uFn),0.0,1.0);" +
     "gl_FragColor=vec4(mix(vC,uFog,f),1.0); }"
   );
+  // The sky is a single full-screen quad. Beyond the gradient + sun/moon discs it
+  // now grows a living layer: drifting fBm clouds, a twinkling star field at night,
+  // and a soft glow halo around the sun. Coordinates use vP (NDC, [-1,1]); x is
+  // scaled by uAspect so clouds and stars stay round on a wide canvas instead of
+  // smearing sideways. uOvercast (0..1) fattens the clouds and kills the stars when
+  // a storm rolls in, so the existing rain/snow weather is finally visible overhead.
   const P_SKY = prog(
     "attribute vec2 aP; varying vec2 vP; void main(){ vP=aP; gl_Position=vec4(aP,0.999,1.0); }",
-    "precision mediump float; varying vec2 vP; uniform vec3 uTop; uniform vec3 uBot; uniform vec3 uSun; uniform float uNight;" +
-    "void main(){ float h=vP.y*0.5+0.5; vec3 col=mix(uBot,uTop,h); " +
-    "vec2 sp=uSun.xy; float sun=smoothstep(0.12,0.0,length(vP-sp)); col+=sun*vec3(1.0,0.85,0.5)*(1.0-uNight);" +
-    "float moon=smoothstep(0.05,0.0,length(vP-vec2(-sp.x,-sp.y*0.4))); col+=moon*vec3(0.8,0.85,1.0)*uNight;" +
+    "precision mediump float; varying vec2 vP;" +
+    "uniform vec3 uTop; uniform vec3 uBot; uniform vec3 uSun; uniform float uNight;" +
+    "uniform float uTime; uniform float uAspect; uniform vec3 uCloud; uniform float uOvercast;" +
+    "float h21(vec2 p){ p=fract(p*vec2(123.34,345.45)); p+=dot(p,p+34.345); return fract(p.x*p.y); }" +
+    "float vn(vec2 p){ vec2 i=floor(p),f=fract(p); vec2 u=f*f*(3.0-2.0*f);" +
+    "float a=h21(i),b=h21(i+vec2(1.0,0.0)),c=h21(i+vec2(0.0,1.0)),d=h21(i+vec2(1.0,1.0));" +
+    "return mix(mix(a,b,u.x),mix(c,d,u.x),u.y); }" +
+    "float fbm(vec2 p){ float v=0.0,a=0.5; for(int k=0;k<5;k++){ v+=a*vn(p); p=p*2.02+7.3; a*=0.5; } return v; }" +
+    "void main(){ float h=vP.y*0.5+0.5; vec3 col=mix(uBot,uTop,h);" +
+    "vec2 sp=uSun.xy;" +
+    // soft halo first, sharp disc on top — sunset spills warm light into the sky
+    "float halo=smoothstep(0.55,0.0,length(vP-sp)); col+=halo*vec3(1.0,0.68,0.34)*0.16*(1.0-uNight);" +
+    "float sun=smoothstep(0.13,0.0,length(vP-sp)); col+=sun*vec3(1.0,0.86,0.55)*(1.0-uNight);" +
+    "float moon=smoothstep(0.055,0.0,length(vP-vec2(-sp.x,-sp.y*0.4))); col+=moon*vec3(0.85,0.9,1.0)*uNight;" +
+    // star field: one candidate per grid cell, only the rare bright ones survive,
+    // twinkling out of phase; faded near the horizon and washed out by overcast
+    "vec2 st=vec2(vP.x*uAspect,vP.y)*70.0; vec2 gid=floor(st); vec2 gf=fract(st)-0.5;" +
+    "float r=h21(gid); float star=step(0.977,r);" +
+    "vec2 off=(vec2(h21(gid+1.7),h21(gid+9.1))-0.5)*0.7; float sd=length(gf-off);" +
+    "float tw=0.55+0.45*sin(uTime*2.5+r*52.0);" +
+    "float sv=star*smoothstep(0.16,0.0,sd)*tw;" +
+    "col+=sv*uNight*smoothstep(0.12,0.5,h)*(1.0-uOvercast)*vec3(0.9,0.95,1.0);" +
+    // clouds: two octaves of drifting fBm, thresholded into puffs. uOvercast lowers
+    // the threshold so more of the sky fills in; they fade toward the horizon and
+    // dim (not vanish) at night so a full moon still catches their edges.
+    "vec2 cuv=vec2(vP.x*uAspect,vP.y);" +
+    "float cd=fbm(cuv*2.3+vec2(uTime*0.010,uTime*0.003))*0.66+fbm(cuv*4.9+vec2(uTime*0.019,0.0))*0.34;" +
+    "float cover=mix(0.30,0.82,uOvercast); float clouds=smoothstep(1.0-cover,1.0-cover+0.26,cd);" +
+    "float cmask=smoothstep(0.06,0.5,h)*(0.45+0.55*(1.0-uNight));" +
+    "col=mix(col,uCloud,clamp(clouds*cmask,0.0,0.96));" +
     "gl_FragColor=vec4(col,1.0); }"
   );
 
@@ -1533,7 +1568,11 @@
     top: gl.getUniformLocation(P_SKY, "uTop"),
     bot: gl.getUniformLocation(P_SKY, "uBot"),
     sun: gl.getUniformLocation(P_SKY, "uSun"),
-    night: gl.getUniformLocation(P_SKY, "uNight")
+    night: gl.getUniformLocation(P_SKY, "uNight"),
+    time: gl.getUniformLocation(P_SKY, "uTime"),
+    aspect: gl.getUniformLocation(P_SKY, "uAspect"),
+    cloud: gl.getUniformLocation(P_SKY, "uCloud"),
+    overcast: gl.getUniformLocation(P_SKY, "uOvercast")
   };
 
   // wire cube for selection
@@ -3736,7 +3775,36 @@
         bot[i] = lerp(bot[i], hazeBot[i] * (0.35 + d * 0.65), k);
       }
     }
-    return { top, bot, fog: bot, night: 1 - d, ash: ai };
+    // How much cloud cover the sky shader should paint. Rain/snow crank it up and
+    // simultaneously grey the whole dome down, so a storm is legible from indoors
+    // by the light alone. Ashfall keeps a moderate murk over its own haze tint.
+    let overcast = 0.15;
+    if (ai > 0.02) {
+      overcast = clamp(0.35 + ai * 0.4, 0.15, 0.7);
+    } else if (G.weather === 1 || G.weather === 2) {
+      overcast = G.weather === 1 ? 0.82 : 0.7;
+      const g = lerp(0.10, 0.60, d);                 // storm grey, dark at night
+      const greyTop = [g * 0.90, g * 0.95, g * 1.02];
+      const greyBot = [g * 1.02, g * 1.05, g * 1.10];
+      const kk = G.weather === 1 ? 0.62 : 0.5;
+      for (let i = 0; i < 3; i++) {
+        top[i] = lerp(top[i], greyTop[i], kk);
+        bot[i] = lerp(bot[i], greyBot[i], kk);
+      }
+    }
+    // Cloud lit colour: bright and near-white by day, tinted warm along the terminator,
+    // and a dim slate at night so they read as silhouettes against the stars.
+    const cb = lerp(0.26, 1.0, d);
+    const cloud = [
+      clamp(cb + glow * 0.28, 0, 1.05),
+      clamp(cb * 0.985 + glow * 0.12, 0, 1.05),
+      clamp(cb * 1.02 - glow * 0.04, 0, 1.05)
+    ];
+    if (overcast > 0.4) {                              // storm clouds flatten toward grey
+      const flat = lerp(0.12, 0.66, d);
+      for (let i = 0; i < 3; i++) cloud[i] = lerp(cloud[i], flat, 0.55);
+    }
+    return { top, bot, fog: bot, night: 1 - d, ash: ai, cloud, overcast };
   }
 
   // =====================================================================
@@ -3930,6 +3998,9 @@
   }
 
   function weatherTick() {
+    // A test may pin the weather channel; when pinned we leave G.weather alone
+    // (the sky/overcast still respond) and skip spawning the ambient particles.
+    if (G.weatherLock) return;
     const cycle = (G.time * 5 + G.seed * 0.0001) % 1;
     const raining = cycle > 0.68 && cycle < 0.92;
     const bio = biomeAt(wf(P.x), wf(P.z));
@@ -4485,6 +4556,10 @@
     const ang = (G.time - 0.25) * Math.PI * 2;
     gl.uniform3fv(locS.sun, [Math.sin(ang) * 0.55, Math.cos(ang) * 0.7, 0]);
     gl.uniform1f(locS.night, sky.night);
+    gl.uniform1f(locS.time, ((performance.now() - skyT0) / 1000) % 600);
+    gl.uniform1f(locS.aspect, canvas.width / Math.max(1, canvas.height));
+    gl.uniform3fv(locS.cloud, sky.cloud);
+    gl.uniform1f(locS.overcast, sky.overcast);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
     gl.depthMask(true);
@@ -5937,6 +6012,18 @@
     actors() { return mobs.map((m) => ({ kind: m.kind, name:m.name||null, story:m.story||null, x: m.x, y: m.y, z: m.z, hp: m.hp, npc: !!m.npc, hostile: !!m.hostile })); },
     killall() { mobs.length = 0; },
     god() { G.creative = true; P.hp = 20; P.food = 20; P.dead = false; },
+    // Teleport the player to an absolute position and park them there. Zeroes
+    // velocity and switches on flight so they hover instead of dropping — the sky
+    // harness uses this to rise clear of the spawn arena into open air before it
+    // reads pixels straight out of the sky shader.
+    tp(x, y, z) {
+      if (x != null) P.x = +x;
+      if (y != null) P.y = +y;
+      if (z != null) P.z = +z;
+      P.vx = 0; P.vy = 0; P.vz = 0;
+      P.onGround = false; P.flying = true;
+      return { x: P.x, y: P.y, z: P.z };
+    },
     survival() { G.creative = false; P.flying = false; drawVitals(); return true; },
     waypoint: questWaypoint,
     // --- debug levers for feel / difficulty / flow ---
@@ -6033,8 +6120,15 @@
     // frame is torch-lit wall, not sky, and the test read the wall.
     skyColors() {
       const s = skyColors();
-      return { top: Array.from(s.top), bot: Array.from(s.bot), fog: Array.from(s.fog), night: s.night };
+      return { top: Array.from(s.top), bot: Array.from(s.bot), fog: Array.from(s.fog), night: s.night,
+        cloud: Array.from(s.cloud), overcast: s.overcast, ash: s.ash };
     },
+    // Force the time-of-day (0..1) so a test can inspect the sky at high noon or
+    // deep midnight without waiting out the day cycle.
+    setTime(t) { G.time = ((t % 1) + 1) % 1; return G.time; },
+    // Force the weather channel (0 clear, 1 rain, 2 snow, 3 ashfall) so the storm
+    // sky can be asserted without steering the world into a rain window.
+    setWeather(w) { if (w == null) { G.weatherLock = false; } else { G.weather = w | 0; G.weatherLock = true; } return G.weather; },
     emittedAt(x, y, z) { return emittedAt(x, y, z); },
     lightRig() {
       const r = lightRig();
