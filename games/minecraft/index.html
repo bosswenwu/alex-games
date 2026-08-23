@@ -2295,6 +2295,7 @@ function inLava(){ return getBlock(Math.floor(player.x), Math.floor(player.y+0.4
 function eyeInLava(){ return getBlock(Math.floor(player.x), Math.floor(player.y+EYE), Math.floor(player.z))===LAVA; }
 let burnT=0, lavaDmgT=0;                 // 玩家着火/岩浆灼烧计时
 let heatDmgT=0, _lastBiome=-1;           // 火山高温灼烤计时 / 上一帧所在群系(用于进入提示)
+const bioSeen=new Set(); const CODEX_TOTAL=BIOME_NAME.length;   // 群系探索图鉴: 已发现群系集合 / 总数
 let jumpPadGrace=false;                  // 被弹跳板弹起后, 直到落地都不计摔落伤害
 
 /* ---------- 生命值 / 死亡 ---------- */
@@ -5889,7 +5890,13 @@ function frame(now){
         _lastBiome=curBio;
         const tips={[BIO_VOLCANO]:"🌋 黑沙火山 — 地表高温灼人, 小心熔岩!",[BIO_SALTLAKE]:"🧂 枯骨盐湖 — 惨白盐盘, 盐晶可采",
                     [BIO_CANYON]:"🏜 风蚀峡谷 — 层理岩壁, 攀上台地俯瞰"};
-        showName(tips[curBio] || ("🧭 进入"+BIOME_NAME[curBio]));
+        if(curBio>=0 && !bioSeen.has(curBio)){          // 首次踏入该群系: 记入图鉴 + 奖励
+          bioSeen.add(curBio); addXP(15);
+          showName("🗺️ 新发现 "+BIOME_NAME[curBio]+" · 图鉴 "+bioSeen.size+"/"+CODEX_TOTAL+"  (+15 XP)");
+          if(bioSeen.size===CODEX_TOTAL) setTimeout(()=>{ addXP(100); showName("🏆 探索大师 · 所有群系已踏遍  (+100 XP)"); },1700);
+        } else {
+          showName(tips[curBio] || ("🧭 进入"+BIOME_NAME[curBio]));
+        }
       }
     }
     eatCd=Math.max(0,eatCd-dt);
@@ -5936,7 +5943,7 @@ function collectSave(){
     v:1, seed:SEED, ts:Date.now(),
     px:+player.x.toFixed(2), py:+player.y.toFixed(2), pz:+player.z.toFixed(2),
     yaw:+player.yaw.toFixed(3), pitch:+player.pitch.toFixed(3),
-    hp, maxHp, lvl, xp, armor, kills, dayCount,
+    hp, maxHp, lvl, xp, armor, kills, dayCount, bioSeen:[...bioSeen],
     // 同时写 id 与下标: 以后往 QUESTS 中间插关卡时, 老存档靠 id 仍能落回正确的关
     bag:(function(){ const o={}; for(const [k,v] of bag) o[k]=v; return o; })(),
     dmgMul:+dmgMul.toFixed(3),
@@ -5984,6 +5991,7 @@ function loadGame(){
   player.vx=player.vy=player.vz=player.kbx=player.kbz=0;
   hp=s.hp??20; maxHp=s.maxHp??20; lvl=s.lvl??1; xp=s.xp??0;
   armor=s.armor??0; kills=s.kills??0; dayCount=s.dayCount??1;
+  bioSeen.clear(); if(Array.isArray(s.bioSeen)) for(const b of s.bioSeen) bioSeen.add(b|0);   // 恢复图鉴(老存档缺字段→空,自然兼容)
   if(s.dmgMul) dmgMul=s.dmgMul;
   bag.clear(); if(s.bag) for(const k in s.bag) bag.set(+k, s.bag[k]);
   // 优先用 id 定位关卡(抗关卡表变动), 没有 id 的老存档才退回下标
@@ -6158,6 +6166,7 @@ window.__game = {
   get renderDist(){ return RENDER; },
   get biome(){ return biomeAt(Math.floor(player.x), Math.floor(player.z)); },        // 当前所在群系 id
   get biomeName(){ return BIOME_NAME[biomeAt(Math.floor(player.x), Math.floor(player.z))]; },
+  get codex(){ return { seen:[...bioSeen], total:CODEX_TOTAL, names:[...bioSeen].map(b=>BIOME_NAME[b]) }; },
   getBlock, setBlock, groundY, heightAt, biomeAt,
   save:()=>saveGame(true), load:()=>loadGame(), hasSave, deleteSave,
   teleport(x,y,z){ player.x=x; player.y=y; player.z=z; player.vx=player.vy=player.vz=0; pcx=1e9; refreshChunks(); },
