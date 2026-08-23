@@ -88,6 +88,96 @@
   @keyframes popUp{0%{opacity:1;transform:translate(-50%,-50%)}100%{opacity:0;transform:translate(-50%,-160%)}}
   #toast{position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:99;font-size:12px;
     background:rgba(0,0,0,.85);padding:9px 16px;border-radius:8px;color:#f88;display:none}
+
+  /* ===== P2 首因体验：标题入场演出 ===== */
+  #startOv .card{animation:cardIn .9s cubic-bezier(.16,1,.3,1) both}
+  #startOv h1{animation:titleIn 1.1s cubic-bezier(.16,1,.3,1) both;position:relative}
+  #startOv h1::after{content:'';position:absolute;left:0;right:0;bottom:-8px;height:2px;
+    background:linear-gradient(90deg,transparent,#7ec8ff,#ff7edb,transparent);
+    transform:scaleX(0);transform-origin:center;animation:lineIn 1.2s .5s cubic-bezier(.16,1,.3,1) both}
+  #startOv .en{animation:fadeUp 1s .35s both}
+  @keyframes cardIn{from{opacity:0;transform:translateY(18px) scale(.985)}to{opacity:1;transform:none}}
+  @keyframes titleIn{from{opacity:0;letter-spacing:38px;filter:blur(8px)}to{opacity:1;letter-spacing:14px;filter:none}}
+  @keyframes lineIn{to{transform:scaleX(1)}}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+  /* ===== 开始 warp 过渡（不硬切）===== */
+  #warp{position:fixed;inset:0;z-index:40;pointer-events:none;opacity:0;
+    background:radial-gradient(ellipse at 50% 50%,rgba(180,140,255,.0) 0%,rgba(126,200,255,.0) 60%,rgba(2,4,10,0) 100%);
+    transition:opacity .25s}
+  #warp.on{opacity:1}
+  #warp .streak{position:absolute;left:50%;top:50%;width:2px;height:0;transform-origin:top center;
+    background:linear-gradient(180deg,rgba(126,200,255,.9),transparent)}
+  #warpFlash{position:fixed;inset:0;z-index:41;pointer-events:none;background:#cfe4ff;opacity:0;transition:opacity .18s}
+
+  /* ===== 载入反馈 ===== */
+  .spin{display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,.35);
+    border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px;margin-right:8px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  #boot{position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:#03040a;color:#8b96b4;
+    font-size:12px;letter-spacing:4px;transition:opacity .5s}
+  #boot.hide{opacity:0;pointer-events:none}
+  #boot .ring{width:44px;height:44px;border:3px solid rgba(126,200,255,.18);border-top-color:#7ec8ff;
+    border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px}
+
+  /* ===== 通用次级按钮 / 按钮行 ===== */
+  .btn2{background:rgba(120,150,220,.10);border:1px solid rgba(140,170,230,.28);color:#c4cee6;
+    font-family:inherit;font-size:13px;letter-spacing:5px;padding:11px 30px;border-radius:999px;cursor:pointer;transition:.18s}
+  .btn2:hover{background:rgba(120,150,220,.22);border-color:#7ec8ff;transform:translateY(-1px)}
+  .btnrow{display:flex;flex-direction:column;gap:11px;align-items:center;margin-top:6px}
+  .menu-tools{display:flex;gap:10px;justify-content:center;margin-top:14px}
+  .icobtn{background:rgba(120,150,220,.10);border:1px solid rgba(140,170,230,.25);color:#9aa6c4;
+    font-family:inherit;font-size:11px;letter-spacing:2px;padding:7px 16px;border-radius:9px;cursor:pointer;transition:.18s}
+  .icobtn:hover{background:rgba(120,150,220,.2);color:#fff}
+
+  /* ===== 设置面板 ===== */
+  #setOv .card{max-width:520px;text-align:left}
+  #setOv h1{font-size:30px;letter-spacing:10px;text-align:center}
+  .set-sec{margin:20px 0 6px;font-size:11px;letter-spacing:4px;color:#7ec8ff;
+    border-bottom:1px solid rgba(126,200,255,.18);padding-bottom:6px}
+  .set-row{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:12px 2px;font-size:13px;color:#c4cee6}
+  .qseg{display:flex;gap:6px}
+  .qbtn{background:rgba(120,150,220,.10);border:1px solid rgba(140,170,230,.25);color:#9aa6c4;
+    font-family:inherit;font-size:12px;letter-spacing:2px;padding:7px 15px;border-radius:8px;cursor:pointer;transition:.16s}
+  .qbtn:hover{background:rgba(120,150,220,.2)}
+  .qbtn.on{background:linear-gradient(135deg,rgba(63,111,255,.35),rgba(138,92,246,.35));color:#fff;border-color:#7ec8ff}
+  .set-row input[type=range]{-webkit-appearance:none;appearance:none;width:150px;height:5px;border-radius:99px;
+    background:rgba(120,150,220,.25);outline:none;cursor:pointer}
+  .set-row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;
+    background:linear-gradient(135deg,#7ec8ff,#b48cff);cursor:pointer;box-shadow:0 0 8px rgba(126,200,255,.7)}
+  .set-row input[type=range]::-moz-range-thumb{width:16px;height:16px;border:none;border-radius:50%;
+    background:linear-gradient(135deg,#7ec8ff,#b48cff);cursor:pointer}
+  .volwrap{display:flex;align-items:center;gap:10px}
+  .volval{font-size:11px;color:#8b96b4;width:34px;text-align:right;font-variant-numeric:tabular-nums}
+  .mutebtn{background:rgba(120,150,220,.1);border:1px solid rgba(140,170,230,.25);color:#9aa6c4;
+    font-family:inherit;font-size:12px;padding:5px 9px;border-radius:7px;cursor:pointer;transition:.16s;min-width:30px}
+  .mutebtn.on{background:rgba(255,90,90,.18);border-color:#ff7a7a;color:#ff9c9c}
+  .keys{font-size:12px;color:#9aa6c4;line-height:2}
+  .keys kbd{display:inline-block;background:rgba(120,150,220,.15);border:1px solid rgba(140,170,230,.3);
+    border-radius:5px;padding:1px 8px;margin:0 3px;font-family:inherit;color:#dfe6f5;font-size:11px;letter-spacing:1px}
+
+  /* ===== 新手引导 coach mark ===== */
+  #coach{position:fixed;left:50%;bottom:110px;transform:translateX(-50%);z-index:9;pointer-events:none;
+    display:none;min-width:280px;max-width:88vw;text-align:center}
+  #coach.on{display:block;animation:coachIn .4s cubic-bezier(.16,1,.3,1) both}
+  #coach .box{background:rgba(6,10,22,.92);border:1px solid rgba(126,200,255,.4);border-radius:14px;
+    padding:14px 20px 12px;box-shadow:0 0 30px rgba(126,200,255,.25);backdrop-filter:blur(4px)}
+  #coach .step{font-size:10px;letter-spacing:3px;color:#7ec8ff;margin-bottom:6px}
+  #coach .msg{font-size:15px;color:#fff;letter-spacing:1px;line-height:1.5}
+  #coach .msg b{color:#ffd98c}
+  #coach .hintkeys{margin-top:9px;font-size:12px;color:#9aa6c4}
+  #coach .hintkeys kbd{display:inline-block;background:rgba(120,150,220,.16);border:1px solid rgba(140,170,230,.35);
+    border-radius:5px;padding:2px 9px;margin:0 3px;color:#dfe6f5;font-size:12px;animation:kbdPulse 1.1s infinite}
+  @keyframes kbdPulse{0%,100%{box-shadow:0 0 0 rgba(126,200,255,0)}50%{box-shadow:0 0 12px rgba(126,200,255,.8)}}
+  #coach .prog{margin-top:10px;display:flex;gap:6px;justify-content:center}
+  #coach .prog i{width:20px;height:3px;border-radius:99px;background:rgba(140,170,230,.3)}
+  #coach .prog i.done{background:#38e0a0}
+  #coach .prog i.cur{background:#7ec8ff}
+  #coach .skip{pointer-events:auto;margin-top:11px;display:inline-block;background:rgba(120,150,220,.12);
+    border:1px solid rgba(140,170,230,.3);color:#9aa6c4;font-family:inherit;font-size:11px;letter-spacing:2px;
+    padding:6px 16px;border-radius:8px;cursor:pointer;transition:.16s}
+  #coach .skip:hover{background:rgba(120,150,220,.25);color:#fff}
+  @keyframes coachIn{from{opacity:0;transform:translate(-50%,14px)}to{opacity:1;transform:translate(-50%,0)}}
 </style>
 </head>
 <body>
@@ -139,6 +229,10 @@
     </div>
     <div id="hi"></div>
     <button class="btn" id="startBtn">出 击</button>
+    <div class="menu-tools">
+      <button class="icobtn" id="setBtn">⚙ 设 置</button>
+      <button class="icobtn" id="tutBtn">↺ 重看引导</button>
+    </div>
   </div>
 </div>
 
@@ -155,9 +249,80 @@
 
 <div class="ov hide" id="pauseOv">
   <div class="card"><h1 style="font-size:30px;letter-spacing:10px">暂 停</h1>
-  <p style="margin-top:14px">按 P 或点击按钮继续</p>
-  <button class="btn" id="resumeBtn">继 续</button></div>
+  <p style="margin-top:12px;margin-bottom:20px">按 <b>P</b> 或点击继续</p>
+  <div class="btnrow">
+    <button class="btn" id="resumeBtn">继 续</button>
+    <button class="btn2" id="pauseSetBtn">设 置</button>
+    <button class="btn2" id="pauseRestartBtn">重新开始</button>
+    <button class="btn2" id="pauseHallBtn">回 游 戏 厅</button>
+  </div></div>
 </div>
+
+<!-- ===== 设置面板（开始菜单与暂停共用）===== -->
+<div class="ov hide" id="setOv">
+  <div class="card">
+    <h1>设 置</h1>
+    <div class="en" style="text-align:center">SETTINGS</div>
+
+    <div class="set-sec">画 质 GRAPHICS</div>
+    <div class="set-row">
+      <span>画质档位</span>
+      <div class="qseg" id="qSeg">
+        <button class="qbtn" data-q="low">低</button>
+        <button class="qbtn" data-q="mid">中</button>
+        <button class="qbtn" data-q="high">高</button>
+        <button class="qbtn" data-q="auto">自动</button>
+      </div>
+    </div>
+    <div class="set-row" style="font-size:11px;color:#66708c;margin-top:-4px">
+      <span id="qDesc">低配可关闭泛光/降低粒子与分辨率，真实降低渲染量</span>
+    </div>
+
+    <div class="set-sec">声 音 AUDIO</div>
+    <div class="set-row">
+      <span>音乐音量</span>
+      <div class="volwrap">
+        <button class="mutebtn" id="musMute" title="静音">🔊</button>
+        <input type="range" id="musVol" min="0" max="100" step="1">
+        <span class="volval" id="musVal">70</span>
+      </div>
+    </div>
+    <div class="set-row">
+      <span>音效音量</span>
+      <div class="volwrap">
+        <button class="mutebtn" id="sfxMute" title="静音">🔊</button>
+        <input type="range" id="sfxVol" min="0" max="100" step="1">
+        <span class="volval" id="sfxVal">90</span>
+      </div>
+    </div>
+
+    <div class="set-sec">键 位 CONTROLS</div>
+    <div class="keys">
+      <div><kbd>WASD</kbd>/<kbd>鼠标</kbd> 驾驶 · <kbd>左键</kbd>/<kbd>空格</kbd> 射击</div>
+      <div><kbd>Shift</kbd>/<kbd>右键</kbd> 过载 · <kbd>P</kbd> 暂停 · <kbd>M</kbd> 总静音 · <kbd>B</kbd> 泛光</div>
+    </div>
+
+    <div class="btnrow" style="margin-top:22px">
+      <button class="btn" id="setCloseBtn">返 回</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 新手引导 ===== -->
+<div id="coach">
+  <div class="box">
+    <div class="step" id="coachStep">引导 1 / 4</div>
+    <div class="msg" id="coachMsg"></div>
+    <div class="hintkeys" id="coachKeys"></div>
+    <div class="prog" id="coachProg"></div>
+    <button class="skip" id="coachSkip">跳过引导</button>
+  </div>
+</div>
+
+<!-- ===== 首因：warp 过渡 + 载入 ===== -->
+<div id="warp"></div>
+<div id="warpFlash"></div>
+<div id="boot"><div><div class="ring"></div>星 际 突 围 · 载 入 中</div></div>
 
 <!-- Three.js：优先本地文件（可完全离线运行），失败再回退 CDN -->
 <script src="three.min.js"></script>
@@ -705,16 +870,21 @@ function dropPickup(x,y,z,forceKind){
 }
 
 /* ================= 音效 / BGM ================= */
-let AC=null,masterGain=null,muted=false;
+let AC=null,masterGain=null,musicGain=null,sfxGain=null,muted=false;
 function audio(){
   if(!AC){
     AC=new (window.AudioContext||window.webkitAudioContext)();
     masterGain=AC.createGain();masterGain.gain.value=muted?0:1;masterGain.connect(AC.destination);
+    /* 音乐/音效分离，便于独立音量与静音；起始为 0 用于淡入 */
+    musicGain=AC.createGain();sfxGain=AC.createGain();
+    musicGain.connect(masterGain);sfxGain.connect(masterGain);
+    applyAudioSettings(true);
   }
   if(AC.state==='suspended')AC.resume();
   return AC;
 }
-function dest(){audio();return masterGain;}
+/* sfx 走 sfxGain，BGM 走 musicGain */
+function dest(){audio();return sfxGain;}
 function sfxLaser(){
   try{const a=audio(),t=a.currentTime;
   const o=a.createOscillator(),g=a.createGain();
@@ -787,7 +957,7 @@ function bgmTick(){
       const o=a.createOscillator(),g=a.createGain();
       o.type='triangle';o.frequency.setValueAtTime(boss.alive?55:49,tt);
       g.gain.setValueAtTime(.16,tt);g.gain.exponentialRampToValueAtTime(.001,tt+beat*2.4);
-      o.connect(g).connect(masterGain);o.start(tt);o.stop(tt+beat*2.5);
+      o.connect(g).connect(musicGain);o.start(tt);o.stop(tt+beat*2.5);
     }
     /* 琶音 */
     if(s%2===0){
@@ -796,7 +966,7 @@ function bgmTick(){
       f.type='lowpass';f.frequency.setValueAtTime(1400,tt);
       o.type='square';o.frequency.setValueAtTime(220*Math.pow(2,n/12),tt);
       g.gain.setValueAtTime(.035,tt);g.gain.exponentialRampToValueAtTime(.001,tt+beat*1.1);
-      o.connect(f).connect(g).connect(masterGain);o.start(tt);o.stop(tt+beat*1.2);
+      o.connect(f).connect(g).connect(musicGain);o.start(tt);o.stop(tt+beat*1.2);
     }
     /* hi-hat */
     const len=(a.sampleRate*.03)|0,buf=a.createBuffer(1,len,a.sampleRate),d=buf.getChannelData(0);
@@ -804,7 +974,7 @@ function bgmTick(){
     const src=a.createBufferSource();src.buffer=buf;
     const hp=a.createBiquadFilter();hp.type='highpass';hp.frequency.value=6000;
     const hg=a.createGain();hg.gain.value=s%2?.05:.02;
-    src.connect(hp).connect(hg).connect(masterGain);src.start(BGM.next);
+    src.connect(hp).connect(hg).connect(musicGain);src.start(BGM.next);
     BGM.next+=beat;
   }
 }
@@ -869,6 +1039,160 @@ const enFill=$('enFill'),enBar=$('enBar'),enHint=$('enHint');
 const bossWrap=$('bossWrap'),bossFill=$('bossFill'),bossPh=$('bossPh');
 const perfEl=$('perf'),hiSmall=$('hiSmall'),diffTag=$('diffTag');
 
+/* ==================== P2：设置 / 引导 / 首因 ==================== */
+const SET_KEY='nebula_settings_v1';
+const TUT_KEY='nebula_tutorial_done';
+const settings={quality:'auto',musicVol:70,sfxVol:90,musicMuted:false,sfxMuted:false};
+function loadSettings(){
+  try{const s=JSON.parse(localStorage.getItem(SET_KEY));
+    if(s&&typeof s==='object')Object.assign(settings,s);}catch(e){}
+}
+function saveSettings(){try{localStorage.setItem(SET_KEY,JSON.stringify(settings));}catch(e){}}
+
+/* ---- 画质档位（真实影响渲染量：粒子/泛光/分辨率） ---- */
+let qualityMode='auto';
+let rtReady=false;   /* 渲染目标就绪前不要 resize（rtBase 尚在 TDZ） */
+function particleMul(){return quality===0?.45:quality===1?.75:1;}
+function applyQuality(mode,persist){
+  qualityMode=mode;
+  if(mode!=='auto'){
+    quality=mode==='low'?0:mode==='mid'?1:2;
+    bloomOn=(quality===2);
+    pixR=quality===0?1:Math.min(devicePixelRatio,2);
+    if(rtReady&&typeof resize==='function')resize();
+  }
+  if(persist){settings.quality=mode;saveSettings();}
+  syncQualityUI();
+}
+function syncQualityUI(){
+  document.querySelectorAll('#qSeg .qbtn').forEach(b=>b.classList.toggle('on',b.dataset.q===qualityMode));
+  const d=$('qDesc');if(d)d.textContent=
+    qualityMode==='low' ?'低：关泛光·粒子×0.45·渲染分辨率降低（最省电）':
+    qualityMode==='mid' ?'中：关泛光·粒子×0.75·全分辨率':
+    qualityMode==='high'?'高：开泛光·粒子×1.0·全特效':
+                         '自动：按实时帧率在低/中/高间调节';
+}
+
+/* ---- 音量（音乐/音效独立 + 静音） ---- */
+function applyAudioSettings(instant){
+  if(!AC)return;
+  const mt=settings.musicMuted?0:settings.musicVol/100;
+  const st=settings.sfxMuted?0:settings.sfxVol/100;
+  const now=AC.currentTime;
+  try{
+    if(instant){musicGain.gain.setValueAtTime(mt,now);}
+    else{musicGain.gain.cancelScheduledValues(now);musicGain.gain.setTargetAtTime(mt,now,.12);}
+    sfxGain.gain.cancelScheduledValues(now);sfxGain.gain.setTargetAtTime(st,now,.05);
+  }catch(e){}
+}
+function musicFadeIn(){ /* 首因：开始游戏音乐淡入 */
+  if(!AC)return;const now=AC.currentTime;const mt=settings.musicMuted?0:settings.musicVol/100;
+  try{musicGain.gain.cancelScheduledValues(now);musicGain.gain.setValueAtTime(0.0001,now);
+    musicGain.gain.linearRampToValueAtTime(mt,now+1.3);}catch(e){}
+}
+function syncAudioUI(){
+  $('musVol').value=settings.musicVol;$('musVal').textContent=settings.musicVol;
+  $('sfxVol').value=settings.sfxVol;$('sfxVal').textContent=settings.sfxVol;
+  $('musMute').classList.toggle('on',settings.musicMuted);
+  $('musMute').textContent=settings.musicMuted?'🔇':'🔊';
+  $('sfxMute').classList.toggle('on',settings.sfxMuted);
+  $('sfxMute').textContent=settings.sfxMuted?'🔇':'🔊';
+}
+
+/* ---- 设置面板开合（开始菜单 / 暂停共用） ---- */
+let setReturn='start';
+function openSettings(from){setReturn=from;$('setOv').classList.remove('hide');syncQualityUI();syncAudioUI();}
+function closeSettings(){$('setOv').classList.add('hide');}
+
+loadSettings();
+applyQuality(settings.quality,false);
+syncAudioUI();
+
+/* 画质按钮 */
+document.querySelectorAll('#qSeg .qbtn').forEach(b=>{
+  b.addEventListener('click',()=>{applyQuality(b.dataset.q,true);});
+});
+/* 音量控件 */
+$('musVol').addEventListener('input',e=>{settings.musicVol=+e.target.value;$('musVal').textContent=settings.musicVol;applyAudioSettings(false);saveSettings();});
+$('sfxVol').addEventListener('input',e=>{settings.sfxVol=+e.target.value;$('sfxVal').textContent=settings.sfxVol;applyAudioSettings(false);sfxGraze&&sfxGraze();saveSettings();});
+$('musMute').addEventListener('click',()=>{settings.musicMuted=!settings.musicMuted;applyAudioSettings(false);syncAudioUI();saveSettings();});
+$('sfxMute').addEventListener('click',()=>{settings.sfxMuted=!settings.sfxMuted;applyAudioSettings(false);syncAudioUI();saveSettings();});
+/* 面板按钮 */
+$('setBtn').addEventListener('click',()=>openSettings('start'));
+$('setCloseBtn').addEventListener('click',closeSettings);
+$('pauseSetBtn').addEventListener('click',()=>openSettings('pause'));
+$('pauseRestartBtn').addEventListener('click',()=>{$('pauseOv').classList.add('hide');G.paused=false;startGame();});
+$('pauseHallBtn').addEventListener('click',()=>{location.href='../../index.html';});
+
+/* ---- 新手引导 ---- */
+const tut={active:false,step:0,t:0,moved:false,fired:false,paused:false,replay:false};
+const tutSteps=[
+  {msg:'先<b>移动飞船</b>，学会走位躲避',keys:'<kbd>W A S D</kbd> 或 移动<kbd>鼠标</kbd>',done:()=>tut.moved},
+  {msg:'<b>开火</b>，击落来袭的敌机',keys:'<kbd>左键</kbd> 或 <kbd>空格</kbd>',done:()=>tut.fired},
+  {msg:'贴着<b>敌弹</b>擦身而过来擦弹，积攒<b>过载</b>能量',keys:'满槽按 <kbd>Shift</kbd>/<kbd>右键</kbd> 清屏',done:()=>G.graze>0||G.od>0},
+  {msg:'需要喘口气时随时<b>暂停</b>',keys:'<kbd>P</kbd> 暂停 / 打开菜单',done:()=>tut.paused}
+];
+function tutorialDone(){return localStorage.getItem(TUT_KEY)==='1';}
+function startTutorial(){
+  tut.active=true;tut.step=0;tut.t=0;tut.moved=false;tut.fired=false;tut.paused=false;
+  renderCoach();$('coach').classList.add('on');
+}
+function renderCoach(){
+  const s=tutSteps[tut.step];if(!s)return;
+  $('coachStep').textContent='引导 '+(tut.step+1)+' / '+tutSteps.length;
+  $('coachMsg').innerHTML=s.msg;
+  $('coachKeys').innerHTML=s.keys;
+  $('coachProg').innerHTML=tutSteps.map((_,i)=>
+    '<i class="'+(i<tut.step?'done':i===tut.step?'cur':'')+'"></i>').join('');
+}
+function finishTutorial(skipped){
+  tut.active=false;tut.replay=false;
+  $('coach').classList.remove('on');
+  try{localStorage.setItem(TUT_KEY,'1');}catch(e){}
+  toast(skipped?'已跳过引导':'引导完成 · 祝好运，指挥官');
+}
+function tutTick(dt){
+  if(!tut.active||!G.playing||G.paused)return;
+  if(!tut.moved&&(Math.hypot(ship.position.x,ship.position.y)>0.6||
+     keys.KeyW||keys.KeyA||keys.KeyS||keys.KeyD||keys.ArrowUp||keys.ArrowDown||keys.ArrowLeft||keys.ArrowRight))tut.moved=true;
+  if(!tut.fired&&G.firing)tut.fired=true;
+  tut.t+=dt;
+  const s=tutSteps[tut.step];
+  if(s&&(s.done()||tut.t>16)){        /* 完成或超时 16s 自动推进，不卡住玩家 */
+    tut.step++;tut.t=0;
+    if(tut.step>=tutSteps.length){finishTutorial(false);}
+    else renderCoach();
+  }
+}
+$('coachSkip').addEventListener('click',()=>finishTutorial(true));
+$('tutBtn').addEventListener('click',()=>{try{localStorage.removeItem(TUT_KEY);}catch(e){}tut.replay=true;toast('下次出击将重新播放新手引导');});
+
+/* ---- 首因：warp 过渡 + 载入反馈 ---- */
+function buildWarp(){
+  const w=$('warp');if(w.dataset.built)return;w.dataset.built='1';
+  for(let i=0;i<28;i++){
+    const s=document.createElement('i');s.className='streak';
+    const ang=(i/28)*360+Math.random()*8;
+    s.style.transform='rotate('+ang+'deg)';
+    s.dataset.ang=ang;w.appendChild(s);
+  }
+}
+function playWarp(cb){
+  buildWarp();const w=$('warp');w.classList.add('on');
+  w.querySelectorAll('.streak').forEach((s,i)=>{
+    s.style.height='0';s.style.transition='none';
+    requestAnimationFrame(()=>{s.style.transition='height .5s cubic-bezier(.5,0,.9,.6) '+(i*4)+'ms';s.style.height='60vh';});
+  });
+  setTimeout(()=>{const f=$('warpFlash');f.style.opacity='.85';
+    setTimeout(()=>{f.style.opacity='0';},160);
+    if(cb)cb();
+  },420);
+  setTimeout(()=>{w.classList.remove('on');
+    w.querySelectorAll('.streak').forEach(s=>{s.style.height='0';});},760);
+}
+/* 载入反馈：Three 就绪即隐藏 boot（本地文件，通常瞬时） */
+addEventListener('load',()=>{setTimeout(()=>{$('boot').classList.add('hide');},260);});
+
 let popCount=0;
 function popText(worldPos,text,color){
   if(popCount>16)return;
@@ -930,8 +1254,11 @@ function startGame(){
   diffTag.textContent=DIFF.n;
   hiSmall.textContent='最高 '+getHi(diffKey).toLocaleString();
   scoreV.textContent=0;syncHp();syncGear();syncEnergy();
-  audio();BGM.next=0;BGM.step=0;
+  audio();applyAudioSettings(true);musicFadeIn();BGM.next=0;BGM.step=0;
   nextWave();
+  /* 新手引导：首玩或重看时触发 */
+  if(tut.replay||!tutorialDone())startTutorial();
+  else{tut.active=false;$('coach').classList.remove('on');}
 }
 function nextWave(){
   G.wave++;waveV.textContent=G.wave;
@@ -978,9 +1305,20 @@ function gameOver(){
 function togglePause(){
   G.paused=!G.paused;
   $('pauseOv').classList.toggle('hide',!G.paused);
+  if(G.paused&&tut.active)tut.paused=true;
+  if(!G.paused)closeSettings();
 }
-$('startBtn').addEventListener('click',startGame);
-$('retryBtn').addEventListener('click',startGame);
+/* 首因：出击不硬切——载入反馈 + warp 过渡后再进入 */
+function launch(btn){
+  audio();                         /* 用户手势内解锁音频 */
+  if(btn){btn.disabled=true;btn.dataset.txt=btn.textContent;btn.innerHTML='<span class="spin"></span>出 击 中';}
+  playWarp(()=>{
+    startGame();
+    if(btn){btn.disabled=false;btn.innerHTML=btn.dataset.txt;}
+  });
+}
+$('startBtn').addEventListener('click',e=>launch(e.currentTarget));
+$('retryBtn').addEventListener('click',e=>launch(e.currentTarget));
 $('resumeBtn').addEventListener('click',togglePause);
 
 /* ================= 生成 ================= */
@@ -1189,6 +1527,7 @@ function resizeTargets(){
   rtB=new THREE.WebGLRenderTarget(hw,hh,{minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,format:THREE.RGBAFormat,depthBuffer:false,stencilBuffer:false});
 }
 resize();
+rtReady=true;   /* 之后 applyQuality 可安全触发 resize */
 function pass(mat,target){
   quad.material=mat;
   renderer.setRenderTarget(target||null);
@@ -1219,6 +1558,8 @@ function adaptive(dt){
   fpsAcc+=dt;fpsN++;
   if(fpsAcc>=1){
     fpsShow=Math.round(fpsN/fpsAcc);fpsAcc=0;fpsN=0;
+    perfEl.textContent=fpsShow+' FPS';
+    if(qualityMode!=='auto')return;   /* 手动档位：不再自动升降 */
     qCool-=1;
     if(qCool<=0){
       if(fpsShow<44&&quality>0){
@@ -1231,7 +1572,6 @@ function adaptive(dt){
         else bloomOn=true;
       }
     }
-    perfEl.textContent=fpsShow+' FPS';
   }
 }
 
@@ -1283,6 +1623,7 @@ function step(now){
   if(G.hitStop>0){G.hitStop-=dt;dt*=.18;}
   whiteFlash=Math.max(0,whiteFlash-dt*3);
   G.t+=dt;
+  tutTick(dt);
   planet.rotation.y+=dt*.02;
 
   /* 背景舰队 */
@@ -1808,6 +2149,24 @@ window.NS={G,boss,enemies,rocks,pickups,drones,bullets,eBolts,missiles,waves,
   applyPickup,dropPickup,addEnergy,renderer,scene,camera,ship,
   setT(v){last=v;},get quality(){return quality;},get fps(){return fpsShow;},
   get info(){return{calls:renderer.info.render.calls,tris:renderer.info.render.triangles};}};
+
+/* ===== 统一自检句柄：设置 / 引导 / 画质均可断言 ===== */
+window.__game={
+  get state(){return G.playing?(G.paused?'paused':'playing'):'menu';},
+  G,
+  settings,
+  applyQuality,openSettings,closeSettings,startTutorial,startGame,togglePause,
+  get quality(){return quality;},           /* 0/1/2 数值 */
+  get qualityMode(){return qualityMode;},    /* low/mid/high/auto */
+  get bloom(){return bloomOn;},
+  get pixR(){return pixR;},
+  get particleMul(){return particleMul();},  /* 粒子倍率，画质切换后应变化 */
+  get audio(){return AC?{music:musicGain.gain.value,sfx:sfxGain.gain.value,master:masterGain.gain.value}:null;},
+  get tutorial(){return{active:tut.active,step:tut.step,total:tutSteps.length,done:tutorialDone(),
+    moved:tut.moved,fired:tut.fired,paused:tut.paused};},
+  get settingsOpen(){return !$('setOv').classList.contains('hide');},
+  get coachOpen(){return $('coach').classList.contains('on');}
+};
 </script>
 </body>
 </html>
