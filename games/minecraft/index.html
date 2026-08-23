@@ -38,6 +38,21 @@
   .recipe .rn { color:#ffe0a0; font-weight:bold; }
   .recipe .rd { color:#a99b82; font-size:11px; margin-top:2px; }
   .recipe .rc { color:#b8c9e8; font-size:11px; white-space:nowrap; }
+  #npcPanel { position:absolute; inset:0; margin:auto; width:min(680px,92vw); max-height:80vh;
+    display:none; flex-direction:column; gap:10px; padding:16px 18px; z-index:41;
+    background:rgba(22,15,26,.96); border:2px solid #7a5a3a; border-radius:10px;
+    color:#f0e6d2; font-size:13px; overflow:auto; box-shadow:0 12px 48px rgba(0,0,0,.6); }
+  #npcHead { font-size:17px; font-weight:bold; color:#e8bb6a; letter-spacing:1px;
+    border-bottom:1px solid #4a3f2a; padding-bottom:8px; display:flex; justify-content:space-between; align-items:baseline; }
+  #npcGreet { color:#c9b184; font-size:12px; margin:2px 0 6px; }
+  #npcList { display:flex; flex-direction:column; gap:6px; }
+  #npcPrompt { position:absolute; left:50%; bottom:94px; transform:translateX(-50%); display:none;
+    background:rgba(20,14,26,.82); border:1px solid #7a5a3a; border-radius:20px; padding:6px 16px;
+    color:#f0e6d2; font-size:13px; z-index:30; pointer-events:none; white-space:nowrap; }
+  #npcPrompt b { color:#ffd98a; }
+  #buffHud { position:absolute; left:12px; bottom:118px; display:none; z-index:30;
+    background:rgba(30,20,44,.7); border:1px solid #9a7ad0; border-radius:6px; padding:4px 10px;
+    color:#e6d9ff; font-size:12px; font-weight:bold; pointer-events:none; }
   #hotbar { position:absolute; left:50%; bottom:10px; transform:translateX(-50%); display:flex; background:rgba(0,0,0,.35); border:2px solid rgba(0,0,0,.55); padding:2px; }
   .slot { width:50px; height:50px; border:2px solid #8b8b8b; border-right-color:#555; border-bottom-color:#555; background:rgba(139,139,139,.28); margin:1px; display:flex; align-items:center; justify-content:center; position:relative; }
   .slot.sel { border:3px solid #fff; box-shadow:0 0 0 2px #000 inset; }
@@ -155,7 +170,14 @@
   <div id="bagWrap"><div id="bagTitle">背包</div><div id="bagGrid"></div></div>
   <div id="recipeWrap"><div id="bagTitle">配方（点击合成）</div><div id="recipeList"></div></div>
 </div>
+<div id="npcPanel">
+  <div id="npcHead"><span id="npcTitle">NPC</span><span id="craftHint">按 F / Esc 关闭</span></div>
+  <div id="npcGreet"></div>
+  <div id="npcList"></div>
+</div>
 <div id="hud">
+  <div id="npcPrompt"></div>
+  <div id="buffHud"></div>
   <div id="watertint"></div>
   <div id="lavatint"></div>
   <div id="firetint"></div>
@@ -2607,6 +2629,155 @@ function toggleCraft(){
     if(document.pointerLockElement) document.exitPointerLock();
   } else if(!softLock) enterPointerLock();
 }
+/* =========================================================
+   NPC 人物系统 + 神谕祝福 + 沙漠考古  (全部为增量, 复用背包/合成/经验/地标)
+   - 商队商人: 用沙漠材料/文物换货物与图纸
+   - 神谕祭司: 献供品换祝福 buff 与预言
+   - 沙漠考古: 在沙漠挖沙有几率出土文物碎片
+   ========================================================= */
+const npcState={ relics:0, traderMet:false, oracleMet:false, trades:0, blessings:0 };
+let talkNpc=null, npcPanelOpen=false, npcSpawnT=0;
+let blessT=0, blessKind="";                       // 神谕祝福: 剩余秒数 / 类型 regen|ward|might
+const BLESS_INFO={ regen:{n:"丰饶祝福",tag:"❤",d:"生命快速回复"},
+                   ward:{n:"庇护祝福",tag:"🛡",d:"受到伤害减半"},
+                   might:{n:"战意祝福",tag:"⚔",d:"近战伤害 +35%"} };
+function applyBless(kind,secs){ blessKind=kind; blessT=Math.max(blessT,secs); npcState.blessings++; updateBuffHUD(); }
+function updateBuffHUD(){
+  const el=document.getElementById("buffHud"); if(!el) return;
+  if(blessT>0 && BLESS_INFO[blessKind]){
+    const b=BLESS_INFO[blessKind];
+    el.style.display="block";
+    el.textContent=b.tag+" "+b.n+" "+Math.ceil(blessT)+"s";
+  } else el.style.display="none";
+}
+const NPC_ROLES={
+  trader:{ name:"商队商人", tag:"🐫", greet:"沙海无垠，旅人。可有货物交换？" },
+  oracle:{ name:"神谕祭司", tag:"𓂀", greet:"神明垂听。献上供品，换取庇佑与预言。" },
+};
+/* 交易/祝福清单: cost 为 [{b:blockId,n}|{r:relicN}], run() 执行并返回提示 */
+function npcOffers(role){
+  if(role==="trader") return [
+    {t:"沙石换灯笼", d:"沙子 x12 → 灯笼 x4", cost:[{b:SAND,n:12}], run(){ giveBlock(LANTERN,4); return "换得 灯笼 x4"; }},
+    {t:"金换火药", d:"金矿 x2 → TNT x4", cost:[{b:GOLD_ORE,n:2}], run(){ giveBlock(TNT,4); return "换得 TNT x4"; }},
+    {t:"砂岩换弹跳板", d:"砂岩 x8 → 弹跳板 x3", cost:[{b:SANDSTONE,n:8}], run(){ giveBlock(JUMPPAD,3); return "换得 弹跳板 x3"; }},
+    {t:"收购文物", d:"文物碎片 x1 → 20 金币经验", cost:[{r:1}], run(){ addXP(20); return "商人收下文物，+20 经验"; }},
+    {t:"文物换钻石", d:"文物碎片 x3 → 钻石 x2", cost:[{r:3}], run(){ giveBlock(GEM_ORE,2); return "换得 钻石 x2"; }},
+    {t:"古卷图纸", d:"文物碎片 x5 → 商队秘技(+60经验+钻石x1)", cost:[{r:5}], run(){ addXP(60); giveBlock(GEM_ORE,1); return "习得商队秘技！+60 经验 + 钻石 x1"; }},
+  ];
+  return [
+    {t:"丰饶祝福", d:"金矿 x1 → 60s 生命快速回复", cost:[{b:GOLD_ORE,n:1}], run(){ applyBless("regen",60); return "𓂀 丰饶祝福降临（60s）"; }},
+    {t:"庇护祝福", d:"文物碎片 x1 → 60s 减伤一半", cost:[{r:1}], run(){ applyBless("ward",60); return "𓂀 庇护祝福降临（60s）"; }},
+    {t:"战意祝福", d:"钻石 x1 → 60s 近战 +35%", cost:[{b:GEM_ORE,n:1}], run(){ applyBless("might",60); return "𓂀 战意祝福降临（60s）"; }},
+    {t:"神谕预言", d:"金矿 x1 → 指引最近的地标", cost:[{b:GOLD_ORE,n:1}], run(){ return oracleProphecy(); }},
+  ];
+}
+function offerHave(o){ return o.cost.every(c=> c.r!=null ? npcState.relics>=c.r : bagCount(c.b)>=c.n ); }
+function offerPay(o){ for(const c of o.cost){ if(c.r!=null) npcState.relics-=c.r; else bagTake(c.b,c.n); } }
+function offerCostText(o){ return o.cost.map(c=> c.r!=null ? ("文物 "+npcState.relics+"/"+c.r) : (BLOCKS[c.b].name+" "+bagCount(c.b)+"/"+c.n)).join("　"); }
+function oracleProphecy(){
+  const land=nearestLandmark(player.x,player.z);
+  if(!land) return "神谕沉默……四下皆是黄沙，未见地标。";
+  const dx=land.x-player.x, dz=land.z-player.z;
+  const brg=Math.atan2(dx,-dz), rel=((brg-player.yaw)*180/Math.PI+360)%360;
+  const dir=["正前方","右前","右侧","右后","身后","左后","左侧","左前"][Math.round(rel/45)%8];
+  addXP(8);
+  return "神谕："+(LANDMARKS[land.type]||"地标")+" 在"+dir+" 约 "+Math.round(land.dist)+"m";
+}
+/* ---- NPC 生成与维护: 保证玩家附近始终能遇到商人与祭司 ---- */
+function spawnNPC(role,minD,maxD){
+  const def=MOB_DEFS.villager;
+  for(let tr=0;tr<8;tr++){
+    const a=Math.random()*6.283, d=minD+Math.random()*(maxD-minD);
+    const x=Math.floor(player.x+Math.sin(a)*d), z=Math.floor(player.z+Math.cos(a)*d);
+    if(!world.has(key(x>>4,z>>4))) continue;
+    const gy=groundY(x,z);
+    if(gy<0 || gy<=WATER_Y+1) continue;
+    mobs.push({type:"villager", def, x:x+0.5, y:gy, z:z+0.5, vx:0,vy:0,vz:0, kbx:0,kbz:0,
+               yaw:Math.random()*6.283, tgtYaw:0, hp:def.hp, hurtT:0, animT:0, t:0,
+               atkCd:0, burnT:0, swingT:0, groanT:0, fleeT:0,
+               onGround:false, pause:true, burning:false, held:null,
+               npcRole:role, npcName:NPC_ROLES[role].name});
+    return true;
+  }
+  return false;
+}
+function countNPC(role){ let n=0; for(const m of mobs) if(m.npcRole===role) n++; return n; }
+function maintainNPCs(dt){
+  if(!worldGenReady) return;
+  npcSpawnT-=dt; if(npcSpawnT>0) return;
+  npcSpawnT=4;
+  // 商人: 世界任意地点最多 1 个, 靠近集市/商队残骸更近
+  if(countNPC("trader")===0){
+    const near=nearStructure(["bazaar","caravan","oasis"],40);
+    spawnNPC("trader", near?10:18, near?18:30);
+  }
+  // 祭司: 靠近金字塔/神庙/宫殿/斗兽场时出现
+  if(countNPC("oracle")===0 && nearStructure(["pyramid","palace","forum","colosseum"],46)){
+    spawnNPC("oracle", 12, 24);
+  }
+}
+function findTalkTarget(){
+  let best=null, bd=3.6;
+  for(const m of mobs){
+    if(!m.npcRole) continue;
+    const d=Math.hypot(m.x-player.x, m.z-player.z);
+    if(d<bd){ bd=d; best=m; }
+  }
+  return best;
+}
+function updateNPC(dt){
+  maintainNPCs(dt);
+  if(blessT>0){ blessT=Math.max(0,blessT-dt); if(blessT===0){ blessKind=""; } updateBuffHUD(); }
+  talkNpc=npcPanelOpen ? talkNpc : findTalkTarget();
+  if(talkNpc){ if(talkNpc.npcRole==="trader") npcState.traderMet=true; else npcState.oracleMet=true; }
+  const pr=document.getElementById("npcPrompt");
+  if(pr){
+    if(talkNpc && !npcPanelOpen && !craftOpen){
+      const R=NPC_ROLES[talkNpc.npcRole];
+      pr.style.display="block";
+      pr.innerHTML="<b>"+R.tag+" "+R.name+"</b> &nbsp;按 <b>F</b> 交谈";
+    } else pr.style.display="none";
+  }
+}
+function renderNPC(){
+  const npc=talkNpc; if(!npc) return;
+  const R=NPC_ROLES[npc.npcRole];
+  document.getElementById("npcTitle").textContent=R.tag+" "+R.name;
+  document.getElementById("npcGreet").textContent=R.greet+"   （文物碎片：x"+npcState.relics+"）";
+  const list=npcOffers(npc.npcRole);
+  document.getElementById("npcList").innerHTML=list.map((o,i)=>{
+    const okc=offerHave(o);
+    return '<div class="recipe'+(okc?"":" locked")+'" data-i="'+i+'">'+
+             '<div><div class="rn">'+o.t+'</div><div class="rd">'+o.d+'</div></div>'+
+             '<div class="rc">'+offerCostText(o)+'</div></div>';
+  }).join("");
+  for(const el of document.querySelectorAll("#npcList .recipe"))
+    el.onclick=()=>npcBuy(+el.dataset.i);
+}
+function npcBuy(i){
+  const npc=talkNpc; if(!npc) return;
+  const o=npcOffers(npc.npcRole)[i]; if(!o) return;
+  if(!offerHave(o)){ showName("⚠ 供品不足：需要 "+offerCostText(o)); return; }
+  offerPay(o);
+  const msg=o.run();
+  if(npc.npcRole==="trader") npcState.trades++;
+  showName("✦ "+msg);
+  sfxLevel && sfxLevel();
+  renderNPC();
+}
+function openNPCPanel(){
+  if(!talkNpc) return;
+  npcPanelOpen=true;
+  document.getElementById("npcPanel").style.display="flex";
+  renderNPC();
+  if(document.pointerLockElement) document.exitPointerLock();
+}
+function closeNPCPanel(){
+  npcPanelOpen=false;
+  document.getElementById("npcPanel").style.display="none";
+  if(!softLock && playing()) enterPointerLock();
+}
+
 /* ---------- 指南针: 指向最近的显眼地标, 给探索一个方向 ---------- */
 const LANDMARKS={ pyramid:"🔺金字塔", colosseum:"🏛斗兽场", palace:"🏰宫殿", city:"🌆城市",
   oasis:"🌴绿洲", rainbow:"🌈彩虹桥", airport:"✈机场", racetrack:"🏁赛车场", crater:"☄陨石坑",
@@ -2662,6 +2833,7 @@ function updateStatsHUD(){
 let hurtTintTimer=null;
 function damagePlayer(d,kx,kz){
   if(dead||d<=0) return;
+  if(blessKind==="ward"&&blessT>0) d=d*0.5;        // 庇护祝福: 受伤减半
   d=Math.max(1, Math.round(d*(1-armor*0.06)));   // 护甲减伤(每层 6%, 最多 5 层=30%)
   hp=Math.max(0,hp-d); lastDmg=performance.now(); regenAcc=0;
   updateHearts(); sfxHurt();
@@ -2902,6 +3074,7 @@ document.addEventListener("keydown",e=>{
   if(e.code==="F3"){ e.preventDefault(); const d=document.getElementById("debug"); d.style.display=d.style.display==="block"?"none":"block"; return; }
   if(e.code==="F5"){ e.preventDefault(); camMode=(camMode+1)%3; showName(["第一人称","第三人称(背后)","第三人称(正面)"][camMode]); return; }
   if(e.code==="KeyH" && !e.repeat){ e.preventDefault(); toggleFullHelp(); return; }
+  if(e.code==="Escape" && npcPanelOpen){ closeNPCPanel(); return; }
   if(e.code==="Escape" && craftOpen){ toggleCraft(); return; }
   if(e.code==="Escape" && softLock){ pauseGame(); return; }
   if(!playing()) return;
@@ -2916,6 +3089,7 @@ document.addEventListener("keydown",e=>{
     if(e.code==="KeyW"){ if(now-lastW<260) player.sprint=true; lastW=now; }
     if(e.code>="Digit1"&&e.code<="Digit9") selectSlot(+e.code.slice(5)-1);
     if(e.code==="KeyE") toggleRide();
+    if(e.code==="KeyF"){ e.preventDefault(); if(npcPanelOpen) closeNPCPanel(); else if(talkNpc) openNPCPanel(); }
     if(e.code==="KeyB"){ e.preventDefault(); toggleCraft(); }
   }
   keys[e.code]=true;
@@ -3072,8 +3246,9 @@ function doBreak(){
   // 优先攻击瞄准方向的生物(步进射线已含遮挡判定)
   const rm=raycastMob(isSword?4.5:3.8, dir);
   if(rm){
+    const mightMul=(blessKind==="might"&&blessT>0)?1.35:1;   // 战意祝福: 近战增伤
     const d=Math.hypot(rm.m.x-player.x, rm.m.z-player.z)||1e-6;
-    hurtMob(rm.m, Math.round((isSword?12:5)*dmgMul), (rm.m.x-player.x)/d*(isSword?10:8), (rm.m.z-player.z)/d*(isSword?10:8));
+    hurtMob(rm.m, Math.round((isSword?12:5)*dmgMul*mightMul), (rm.m.x-player.x)/d*(isSword?10:8), (rm.m.z-player.z)/d*(isSword?10:8));
     return;
   }
   const hit=raycast(5.5, dir);
@@ -3087,6 +3262,17 @@ function doBreak(){
   const bonus=applyBiomeYield(brokeId);
   if(bonus) showName("⛏ "+(BLOCKS[brokeId]?BLOCKS[brokeId].name:"方块")+" + 群系产材 "+bonus.join("、"));
   questAdd("mine",1);
+  // 沙漠考古: 在干旱群系挖开沙/砂岩有几率出土文物碎片(呼应考古主题)
+  if((brokeId===SAND||brokeId===SANDSTONE)){
+    const bio=biomeAt(hit.x,hit.z);
+    if((bio===BIO_DESERT||bio===BIO_MESA) && Math.random()<0.06){
+      npcState.relics++; addXP(6);
+      for(let i=0;i<14;i++) particles.push({x:hit.x+0.5+(Math.random()-.5)*0.8,y:hit.y+0.3+Math.random()*0.6,z:hit.z+0.5+(Math.random()-.5)*0.8,
+        vx:(Math.random()-.5)*2.4,vy:1+Math.random()*2,vz:(Math.random()-.5)*2.4,life:.5+Math.random()*.4,size:.09,u:15*TS,v:0,l:1.4});
+      showName("🏺 出土文物碎片！(文物 x"+npcState.relics+"，+6 经验) — 交给商队商人或神谕祭司");
+      sfxLevel && sfxLevel();
+    }
+  }
   if(brokeId===SARCO){ awakenPharaoh(hit.x,hit.y,hit.z); questSet("sarco"); }   // 挖开石棺 → 法老王苏醒
 }
 /* 挖开法老石棺: 唤醒法老王 Boss, 并召唤一圈木乃伊陪葬卫队 */
@@ -4189,6 +4375,17 @@ function updateMobs(dt){
     if(D.mount && D.mountFly){ updateBike(m,dt); continue; } // 悬浮摩托: 待命悬停(马匹会往下走到普通四足 AI)
     if(D.fly){ updateFlyer(m,dt,dx,dz,dist); continue; }   // 飞龙/凤凰/鸟: 空中 AI
     if(D.swim){ updateSwimmer(m,dt,dx,dz,dist); continue; }// 鱼: 水中 AI
+    if(m.npcRole){                                         // NPC: 原地站定、面向玩家、不参与战斗AI
+      m.burning=false;
+      if(dist<10){ m.tgtYaw=Math.atan2(dx,-dz); }
+      let dy=m.tgtYaw-m.yaw; while(dy>Math.PI)dy-=6.283; while(dy<-Math.PI)dy+=6.283;
+      m.yaw+=clamp(dy,-2.5*dt,2.5*dt);
+      const kd0=Math.pow(0.01,dt); m.kbx*=kd0; m.kbz*=kd0;
+      m.vx=m.kbx; m.vz=m.kbz; m.vy-=28*dt; if(m.vy<-50)m.vy=-50;
+      entMove(m,dt,D.w,D.h);
+      m.animT+=dt*0.25;
+      continue;
+    }
     let speed=0;
     if(D.hostile){
       const chasing = !dead && dist<(D.aggroRange||28);      // 鳄鱼等伏击型生物用短探测距离(装作潜伏)
@@ -5952,9 +6149,10 @@ function frame(now){
     // 生物 & 生存
     updateMobs(dt);
     trySpawns(dt);
-    if(!dead && hp<maxHp && performance.now()-lastDmg>7000){
+    const regenBless=(blessKind==="regen"&&blessT>0);
+    if(!dead && hp<maxHp && (regenBless || performance.now()-lastDmg>7000)){
       regenAcc+=dt;
-      if(regenAcc>1.5){ regenAcc=0; hp=Math.min(maxHp,hp+1); updateHearts(); }
+      if(regenAcc>(regenBless?0.4:1.5)){ regenAcc=0; hp=Math.min(maxHp,hp+1); updateHearts(); }
     }
     updateArrows(dt);
     updateFuses(dt);
@@ -6016,6 +6214,7 @@ function frame(now){
     fwCd=Math.max(0,fwCd-dt);
     musicTick(dt);
     questTick(dt);
+    updateNPC(dt);
     updateStatsHUD();
     playerEnt.animT += dt*Math.hypot(player.vx,player.vz);
     playerEnt.hurtT = Math.max(0,playerEnt.hurtT-dt);
@@ -6050,6 +6249,7 @@ function collectSave(){
     px:+player.x.toFixed(2), py:+player.y.toFixed(2), pz:+player.z.toFixed(2),
     yaw:+player.yaw.toFixed(3), pitch:+player.pitch.toFixed(3),
     hp, maxHp, lvl, xp, armor, kills, dayCount, bioSeen:[...bioSeen], landSeen:[...landSeen], weather,
+    npc:{ relics:npcState.relics, traderMet:npcState.traderMet, oracleMet:npcState.oracleMet, trades:npcState.trades, blessings:npcState.blessings },
     // 同时写 id 与下标: 以后往 QUESTS 中间插关卡时, 老存档靠 id 仍能落回正确的关
     bag:(function(){ const o={}; for(const [k,v] of bag) o[k]=v; return o; })(),
     dmgMul:+dmgMul.toFixed(3),
@@ -6099,6 +6299,11 @@ function loadGame(){
   armor=s.armor??0; kills=s.kills??0; dayCount=s.dayCount??1;
   bioSeen.clear(); if(Array.isArray(s.bioSeen)) for(const b of s.bioSeen) bioSeen.add(b|0);   // 恢复图鉴(老存档缺字段→空,自然兼容)
   landSeen.clear(); if(Array.isArray(s.landSeen)) for(const k of s.landSeen) landSeen.add(String(k));
+  // NPC 系统: 恢复文物与来往记录(老存档无 npc 字段 → 全部归零, 自然向后兼容)
+  const N=s.npc||{};
+  npcState.relics=N.relics|0; npcState.trades=N.trades|0; npcState.blessings=N.blessings|0;
+  npcState.traderMet=!!N.traderMet; npcState.oracleMet=!!N.oracleMet;
+  blessT=0; blessKind=""; updateBuffHUD();
   if(s.weather==="sand"||s.weather==="storm"||s.weather==="rain"||s.weather==="clear") weather=s.weather;
   if(s.dmgMul) dmgMul=s.dmgMul;
   bag.clear(); if(s.bag) for(const k in s.bag) bag.set(+k, s.bag[k]);
@@ -6276,6 +6481,14 @@ window.__game = {
   get biomeName(){ return BIOME_NAME[biomeAt(Math.floor(player.x), Math.floor(player.z))]; },
   get codex(){ return { seen:[...bioSeen], total:CODEX_TOTAL, names:[...bioSeen].map(b=>BIOME_NAME[b]) }; },
   get payoff(){ return { landmarks:[...landSeen], types:[...landTypesSeen()], total:PAYOFF_N, weather, underCover:underCover(), yield:BIOME_YIELD }; },
+  get npc(){ return { relics:npcState.relics, traderMet:npcState.traderMet, oracleMet:npcState.oracleMet, trades:npcState.trades, blessings:npcState.blessings,
+                      bless:{kind:blessKind, t:+blessT.toFixed(1)}, talk:talkNpc?talkNpc.npcRole:null, panelOpen:npcPanelOpen,
+                      count:{trader:countNPC("trader"), oracle:countNPC("oracle")} }; },
+  spawnNPC:(role)=>spawnNPC(role, 4, 6),
+  addRelics:(n)=>{ npcState.relics+=(n|0); return npcState.relics; },
+  buyFromNPC:(i)=>npcBuy(i),
+  bless:(k,s)=>applyBless(k, s||60),
+  offers:(role)=>npcOffers(role).map(o=>({t:o.t, have:offerHave(o)})),
   setWeather(w){ if(["clear","rain","storm","sand"].includes(w)){ weather=w; weatherT=40; return weather; } return false; },
   claimLandmark(type,sx,sz){ const key=type+":"+(sx|0)+":"+(sz|0); landSeen.add(key); return [...landSeen]; },
   getBlock, setBlock, groundY, heightAt, biomeAt,
@@ -6514,6 +6727,47 @@ function selftest(){
     ok("能切入沙暴天气", weather==="sand" && wset==="sand", "weather="+weather);
     weather=w0; landSeen.clear(); for(const k of landSnap) landSeen.add(k);
     bag.clear(); for(const [k,v] of bagSnap) bag.set(k,v);
+
+    // 8f. NPC 系统: 生成 / 交易扣料产出 / 供品不足拒绝 / 祝福 / 存档往返 + 老存档兼容
+    const npcSnap=Object.assign({},npcState), bagSnap3=new Map(bag);
+    const talkPrev=talkNpc, blessPrev={t:blessT,k:blessKind};
+    npcState.relics=0; npcState.trades=0; npcState.blessings=0;
+    let made=false; for(let tr=0;tr<4 && !made;tr++) made=spawnNPC("trader",4,7);
+    if(!made){ // 世界边界情况: 直接放一个, 保证后续断言可跑
+      mobs.push({type:"villager", def:MOB_DEFS.villager, x:player.x+2,y:player.y,z:player.z, vx:0,vy:0,vz:0,kbx:0,kbz:0,
+                 yaw:0,tgtYaw:0,hp:16,hurtT:0,animT:0,t:0,atkCd:0,burnT:0,swingT:0,groanT:0,fleeT:0,
+                 onGround:false,pause:true,burning:false,held:null,npcRole:"trader",npcName:"商队商人"});
+    }
+    ok("能生成可交谈的商队商人NPC", countNPC("trader")>=1, "trader="+countNPC("trader"));
+    talkNpc=mobs.find(m=>m.npcRole==="trader")||null;
+    ok("可识别当前可交谈NPC", !!talkNpc && talkNpc.npcRole==="trader", "talk="+(talkNpc&&talkNpc.npcRole));
+    bag.clear(); bagAdd(SAND,12);
+    const lantB=bagCount(LANTERN);
+    npcBuy(0);                                        // 沙石换灯笼: 沙 x12 → 灯笼 x4
+    ok("商人交易扣料并产出货物", bagCount(SAND)===0 && bagCount(LANTERN)===lantB+4, "沙="+bagCount(SAND)+" 灯="+bagCount(LANTERN));
+    ok("交易次数累加", npcState.trades===1, "trades="+npcState.trades);
+    npcState.relics=0;
+    npcBuy(3);                                        // 收购文物: 需文物 x1, 现无
+    ok("供品不足时交易被拒", npcState.relics===0 && npcState.trades===1, "relics="+npcState.relics+" trades="+npcState.trades);
+    applyBless("ward",60);
+    const dmgSnapHp=hp, dead0=dead; hp=maxHp; dead=false;
+    const before=hp; damagePlayer(10,0,0);            // 庇护祝福: 10 伤应被减半后再算护甲
+    ok("庇护祝福使受伤减半", (before-hp)<=Math.ceil(10*0.5*(1-armor*0.06))+0, "扣血="+(before-hp));
+    hp=dmgSnapHp; dead=dead0;
+    ok("神谕祝福已生效", blessKind==="ward" && blessT>0, "kind="+blessKind+" t="+blessT.toFixed(0));
+    npcState.relics=4; npcState.trades=2;
+    const wroteNpc=collectSave();
+    ok("NPC状态写入存档", wroteNpc.npc && wroteNpc.npc.relics===4 && wroteNpc.npc.trades===2, "存档npc="+JSON.stringify(wroteNpc.npc));
+    { const legacy=Object.assign({},wroteNpc); delete legacy.npc;   // 模拟老存档缺字段
+      const NN=legacy.npc||{}; npcState.relics=NN.relics|0; npcState.trades=NN.trades|0; }
+    ok("老存档(无npc字段)兼容归零", npcState.relics===0 && npcState.trades===0, "relics="+npcState.relics);
+    { const NN=wroteNpc.npc; npcState.relics=NN.relics|0; npcState.trades=NN.trades|0; }
+    ok("NPC状态能从存档还原", npcState.relics===4 && npcState.trades===2, "relics="+npcState.relics);
+    ok("神谕预言不报错且返回文本", typeof oracleProphecy()==="string", "");
+    for(let i=mobs.length-1;i>=0;i--) if(mobs[i].npcRole) mobs.splice(i,1);
+    talkNpc=talkPrev; blessT=blessPrev.t; blessKind=blessPrev.k; updateBuffHUD();
+    bag.clear(); for(const [k,v] of bagSnap3) bag.set(k,v);
+    Object.assign(npcState,npcSnap);
 
     // 9. 渲染管线仍然可用
     let renderErr=null;
