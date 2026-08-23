@@ -334,7 +334,7 @@
   <div class="box" id="menuBox">
     <h1>群雄逐鹿</h1>
     <p>南北双线来敌，中路汇合直扑江东。建塔点将，二选一专精分支，凑齐武将羁绊，波次结算抽取遗物强化全局。<br>
-    <b style="color:#ffd54a">25 波</b>血战，吕布曹操压境。<br>
+    <b style="color:#ffd54a">30 波</b>血战，吕布曹操压境。<br>
     1-6 建造 · 点草地部署 · F升级/专精 · Q技能 · T切目标 · P暂停 · D出售 · 空格催波</p>
     <div id="bestRecord"></div>
     <div class="pickLabel">战 场</div>
@@ -358,6 +358,7 @@
     </div>
     <button id=startBtn>开 始 征 战</button>
     <div class="btnRow"><button id="techBtn" class="ghost">军 府</button><button id="achBtn" class="ghost">功 勋 录</button><button id="contBtn" class="ghost" style="display:none">继续上局</button></div>
+    <p style="margin-top:14px"><a href="../../index.html" style="color:#ffd54a;text-decoration:none;font-size:13px">← 返回游戏厅</a></p>
   </div>
   <div class=box id=resultBox style=display:none></div>
   <div class=box id=techBox style=display:none></div>
@@ -2379,7 +2380,7 @@ function endGame(win){
     +(achGot.length?'<div class="secTitle">本局新增功勋</div><div class="relicLine">'+achGot.map(a=>a.name+'（+'+a.r+'）').join(' · ')+'</div>':'')
     +'<div class="renownGain">声望 +'+gainR+' <span>（军府库存 '+meta.renown+'）</span></div>'
     +'<div id="bestRecord">历史最佳：第 '+best.wave+' 波 · 击杀 '+best.kills+'</div>'
-    +'<div class="btnRow"><button id="restartBtn">再 战</button><button id="menuBtn" class="ghost">返回主菜单</button></div>';
+    +'<div class="btnRow"><button id="restartBtn">再 战</button><button id="menuBtn" class="ghost">返回主菜单</button><a href="../../index.html" class="ghost" style="display:inline-flex;align-items:center;justify-content:center;padding:8px 14px;color:#ffd54a;text-decoration:none;border:1px solid #6b5426;border-radius:6px">返回游戏厅</a></div>';
   document.getElementById('menuBox').style.display='none';
   box.style.display='block';
   document.getElementById('overlay').style.display='flex';
@@ -2388,6 +2389,7 @@ function endGame(win){
 }
 function backToMenu(){
   state='menu'; stopMusic();
+  kickLoop();
   document.getElementById('resultBox').style.display='none';
   document.getElementById('menuBox').style.display='block';
   document.getElementById('overlay').style.display='flex';
@@ -2416,6 +2418,7 @@ function resetGame(){
   buildKey=null; selectedTower=null; specPickTower=null; hoverCell=null;
   stats=newStats(); bossBar=null;
   state='playing';
+  kickLoop();
   document.getElementById('overlay').style.display='none';
   document.getElementById('resultBox').style.display='none';
   document.getElementById('menuBox').style.display='block';
@@ -4869,6 +4872,12 @@ function stepGame(total){
     left-=dt;
   }
 }
+let rafOn=false;
+function kickLoop(){
+  if(rafOn) return;
+  rafOn=true; last=performance.now();
+  requestAnimationFrame(loop);
+}
 function loop(now){
   // 布局可能因侧栏折叠/旋屏改变，逐帧比对一次尺寸（只在真变了时重建 backing store）
   const box=canvas.parentElement;
@@ -4879,6 +4888,8 @@ function loop(now){
   if(state==='playing'&&!paused&&!relicOpen) stepGame(raw*speedMul);
   renderCmdBar();
   draw();
+  if(state==='victory' || state==='gameover'){ rafOn=false; return; }
+  rafOn=true;
   requestAnimationFrame(loop);
 }
 function markMobile(){
@@ -4887,7 +4898,7 @@ function markMobile(){
   document.body.classList.toggle('mobile', coarse || w<=900);
 }
 markMobile(); window.addEventListener('resize', markMobile);
-resizeCanvas(); renderMobileBar(); renderShop(); buildCmdBar(); renderCmdBar(); updateHud(); requestAnimationFrame(loop);
+resizeCanvas(); renderMobileBar(); renderShop(); buildCmdBar(); renderCmdBar(); updateHud(); kickLoop();
 
 /* ================= M7 产品化：音频 · 首因 · 引导 · 设置 · 稳定性 =================
    本段整体覆写音频系统、接管画质档位、注入主菜单演出/新手引导/设置面板/暂停菜单，
