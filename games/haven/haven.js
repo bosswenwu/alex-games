@@ -1851,6 +1851,7 @@
       $("death-reason").textContent = reason || "You died.";
       $("death-stats").textContent = formatStats();
       releasePointer();
+      sfx("lose");
     }
   }
 
@@ -2479,45 +2480,146 @@
   }
 
   // =====================================================================
-  // Audio
+  // Audio — persist + music/sfx buses + pitch variants + adaptive BGM
   // =====================================================================
-  let AC = null;
+  const AUD_KEY = "haven.audio.v1";
+  const AUD = (function () {
+    try {
+      const o = Object.assign({ music: 0.4, sfx: 0.75, mute: false }, JSON.parse(localStorage.getItem(AUD_KEY) || "{}"));
+      o.music = clamp(+o.music || 0, 0, 1);
+      o.sfx = clamp(+o.sfx || 0, 0, 1);
+      o.mute = !!o.mute;
+      return o;
+    } catch (e) { return { music: 0.4, sfx: 0.75, mute: false }; }
+  })();
+  function saveAUD() { try { localStorage.setItem(AUD_KEY, JSON.stringify(AUD)); } catch (e) {} }
+
+  let AC = null, masterBus = null, musicBus = null, sfxBus = null, musicTick = 0, musicStep = 0;
+  const _sfxLast = {};
+  function applyAUD() {
+    const m = AUD.mute ? 0 : 1;
+    if (musicBus) musicBus.gain.value = AUD.music * m;
+    if (sfxBus) sfxBus.gain.value = AUD.sfx * m;
+  }
   function audio() {
-    if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)();
+    if (!AC) {
+      AC = new (window.AudioContext || window.webkitAudioContext)();
+      masterBus = AC.createGain(); masterBus.gain.value = 0.28; masterBus.connect(AC.destination);
+      musicBus = AC.createGain(); sfxBus = AC.createGain();
+      musicBus.connect(masterBus); sfxBus.connect(masterBus);
+      applyAUD();
+      startHavenBGM();
+    }
     if (AC.state === "suspended") AC.resume();
     return AC;
   }
+  function pickVar(k, n) {
+    let i = Math.floor(Math.random() * n);
+    if (n > 1 && i === _sfxLast[k]) i = (i + 1) % n;
+    _sfxLast[k] = i;
+    return i;
+  }
+  function tone(freq, dur, type, vol, slide, bus) {
+    if (!AC || AUD.mute) return;
+    const o = AC.createOscillator(), g = AC.createGain();
+    const j = 0.94 + Math.random() * 0.12;
+    o.type = type;
+    o.frequency.setValueAtTime(Math.max(20, freq * j), AC.currentTime);
+    o.frequency.exponentialRampToValueAtTime(Math.max(20, (freq + (slide || 0)) * j), AC.currentTime + dur);
+    g.gain.setValueAtTime(Math.max(0.0001, vol), AC.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime + dur);
+    o.connect(g); g.connect(bus || sfxBus || masterBus);
+    o.start(); o.stop(AC.currentTime + dur + 0.02);
+  }
+  const SFX_VAR = {
+    break: [[180, 0.08, "square", 0.05, -40], [155, 0.09, "square", 0.045, -30], [210, 0.07, "sawtooth", 0.04, -50]],
+    place: [[240, 0.06, "triangle", 0.05, 20], [220, 0.07, "triangle", 0.045, 10], [270, 0.05, "sine", 0.04, 30]],
+    step: [[90, 0.04, "triangle", 0.025, 0], [105, 0.035, "triangle", 0.022, 8], [80, 0.045, "sine", 0.02, -6]],
+    jump: [[320, 0.07, "sine", 0.04, 40], [300, 0.08, "triangle", 0.035, 30]],
+    hurt: [[120, 0.16, "sawtooth", 0.06, -30], [100, 0.18, "sawtooth", 0.055, -20]],
+    hit: [[200, 0.08, "square", 0.05, -50], [180, 0.09, "square", 0.045, -40], [230, 0.07, "sawtooth", 0.04, -60]],
+    pop: [[520, 0.07, "sine", 0.05, 80], [480, 0.08, "triangle", 0.045, 60]],
+    click: [[400, 0.04, "square", 0.025, 0], [360, 0.035, "sine", 0.022, 20]],
+    craft: [[360, 0.1, "triangle", 0.05, 80], [340, 0.11, "sine", 0.045, 60]],
+    crit: [[520, 0.14, "square", 0.07, 120], [560, 0.12, "sawtooth", 0.06, 80]],
+    kill: [[150, 0.24, "sawtooth", 0.07, -40], [130, 0.26, "square", 0.06, -30]],
+    levelup: [[660, 0.28, "triangle", 0.06, 80]],
+    throw: [[300, 0.12, "triangle", 0.05, -40], [280, 0.11, "sine", 0.045, -30]],
+    arrow: [[420, 0.09, "sawtooth", 0.04, -80], [390, 0.1, "square", 0.035, -60]],
+    thud: [[140, 0.1, "square", 0.05, -20], [120, 0.11, "sawtooth", 0.045, -15]],
+    slam: [[80, 0.34, "sawtooth", 0.08, -10]],
+    roar: [[95, 0.5, "sawtooth", 0.08, 20]],
+    boom: [[60, 0.4, "sawtooth", 0.09, -8]]
+  };
   function sfx(name) {
     try {
-      const a = audio();
-      const o = a.createOscillator(), g = a.createGain();
-      const tab = {
-        break: [180, 0.08, "square", 0.04],
-        place: [240, 0.06, "triangle", 0.04],
-        step: [90 + Math.random() * 30, 0.04, "triangle", 0.02],
-        jump: [320, 0.07, "sine", 0.03],
-        hurt: [120, 0.16, "sawtooth", 0.05],
-        hit: [200, 0.08, "square", 0.04],
-        pop: [520, 0.07, "sine", 0.04],
-        click: [400, 0.04, "square", 0.02],
-        craft: [360, 0.1, "triangle", 0.04],
-        crit: [520, 0.14, "square", 0.055],
-        kill: [150, 0.24, "sawtooth", 0.06],
-        levelup: [660, 0.28, "triangle", 0.05],
-        throw: [300, 0.12, "triangle", 0.045],
-        arrow: [420, 0.09, "sawtooth", 0.035],
-        thud: [140, 0.1, "square", 0.045],
-        slam: [80, 0.34, "sawtooth", 0.075],
-        roar: [95, 0.5, "sawtooth", 0.07],
-        boom: [60, 0.4, "sawtooth", 0.08]
-      }[name] || [200, 0.06, "square", 0.03];
-      o.type = tab[2]; o.frequency.value = tab[0];
-      g.gain.value = tab[3];
-      o.connect(g); g.connect(a.destination);
-      o.start();
-      g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + tab[1]);
-      o.stop(a.currentTime + tab[1] + 0.02);
+      if (AUD.mute || AUD.sfx <= 0.001) return;
+      audio();
+      if (name === "win") {
+        [523, 659, 784].forEach((f, i) => setTimeout(() => tone(f, 0.28, "triangle", 0.07, 40), i * 170));
+        return;
+      }
+      if (name === "lose") {
+        tone(160, 0.45, "sawtooth", 0.07, -70);
+        tone(90, 0.55, "square", 0.05, -20);
+        return;
+      }
+      if (name === "crit") {
+        const v = SFX_VAR.crit[pickVar("crit", SFX_VAR.crit.length)];
+        tone(v[0], v[1], v[2], v[3], v[4]);
+        tone(780, 0.1, "sine", 0.04, 100);
+        return;
+      }
+      if (name === "roar") {
+        tone(95, 0.5, "sawtooth", 0.08, 20);
+        tone(55, 0.55, "square", 0.05, 10);
+        return;
+      }
+      const list = SFX_VAR[name];
+      if (list) {
+        const v = list[pickVar(name, list.length)];
+        tone(v[0], v[1], v[2], v[3], v[4]);
+        return;
+      }
+      tone(200, 0.06, "square", 0.03, 0);
     } catch (e) { /* ignore */ }
+  }
+  function startHavenBGM() {
+    if (musicTick) return;
+    const pulse = () => {
+      if (AC && !AUD.mute && AUD.music > 0.001) {
+        const boss = mobs.some((m) => m.boss);
+        const tense = boss || threatTier() >= 3;
+        const root = boss ? 70 : tense ? 88 : 116;
+        tone(root, tense ? 0.7 : 1.0, "sine", 0.055, 0, musicBus);
+        if (musicStep % 2 === 0) tone(root * 1.5, tense ? 0.4 : 0.6, "triangle", 0.03, 0, musicBus);
+        if (boss && musicStep % 3 === 0) tone(48, 0.5, "sawtooth", 0.04, 8, musicBus);
+        musicStep++;
+      }
+      musicTick = setTimeout(pulse, mobs.some((m) => m.boss) ? 300 : 480);
+    };
+    pulse();
+  }
+  function syncAUDUI() {
+    const a = $("volMusic"), b = $("volSfx"), c = $("muteBtn");
+    if (a) { a.value = Math.round(AUD.music * 100); const av = $("volMusicV"); if (av) av.textContent = a.value + "%"; }
+    if (b) { b.value = Math.round(AUD.sfx * 100); const bv = $("volSfxV"); if (bv) bv.textContent = b.value + "%"; }
+    if (c) { c.textContent = AUD.mute ? "已静音" : "声音开"; c.classList.toggle("on", !AUD.mute); }
+  }
+  function injectAudioMixer() {
+    const panel = document.querySelector("#pause .pause-panel");
+    if (!panel || panel.querySelector(".mixer")) return;
+    const box = document.createElement("div");
+    box.className = "mixer";
+    box.innerHTML = '<label>音乐 <input id="volMusic" type="range" min="0" max="100" value="40"><b id="volMusicV">40%</b></label>'
+      + '<label>音效 <input id="volSfx" type="range" min="0" max="100" value="75"><b id="volSfxV">75%</b></label>'
+      + '<label>静音 <button type="button" class="btn sub" id="muteBtn">声音开</button></label>';
+    const firstBtn = panel.querySelector("button");
+    panel.insertBefore(box, firstBtn);
+    $("volMusic").oninput = () => { AUD.music = clamp(+$("volMusic").value / 100, 0, 1); applyAUD(); saveAUD(); syncAUDUI(); };
+    $("volSfx").oninput = () => { AUD.sfx = clamp(+$("volSfx").value / 100, 0, 1); applyAUD(); saveAUD(); syncAUDUI(); try { audio(); sfx("click"); } catch (e) {} };
+    $("muteBtn").onclick = () => { AUD.mute = !AUD.mute; applyAUD(); saveAUD(); syncAUDUI(); if (!AUD.mute) try { audio(); } catch (e) {} };
+    syncAUDUI();
   }
 
   // =====================================================================
@@ -3673,7 +3775,7 @@
     $("victory").hidden = false;
     paused = true;
     releasePointer();
-    sfx("levelup");
+    sfx("win");
   }
   let victoryShown = false;
   function beginNextChapter() {
@@ -4847,6 +4949,7 @@
       if ($("btn-fly")) $("btn-fly").style.display = creative ? "flex" : "none";
       spawnRomanCast();
       lockPointer();
+      try { audio(); } catch (e) { /* ignore */ }
       toast(P.view ? "第三人称  ·  F5 / V 切换视角" : (creative ? "Creative — fly with double-space." : "Survival — punch a tree."));
     }
 
@@ -4910,6 +5013,7 @@
   $("btn-new").onclick = () => startWorld({ seed: $("seed-in").value.trim(), creative: wantCreative, third: wantThird });
   $("btn-continue").onclick = () => startWorld({ load: true });
   $("btn-resume").onclick = () => togglePause();
+  injectAudioMixer();
   $("btn-save").onclick = () => saveGame();
   $("btn-menu").onclick = () => {
     saveGame(); running = false; paused = false;
@@ -6000,6 +6104,22 @@
     player: P,
     getBlock, setBlock, give,
     save: saveGame, selftest,
+    get audio() {
+      return {
+        ready: !!AC, mute: AUD.mute, music: AUD.music, sfx: AUD.sfx,
+        musicBus: musicBus ? +musicBus.gain.value.toFixed(3) : null,
+        sfxBus: sfxBus ? +sfxBus.gain.value.toFixed(3) : null,
+        variants: Object.keys(SFX_VAR)
+      };
+    },
+    setAudio(p) {
+      if (!p) return this.audio;
+      if (p.music != null) AUD.music = clamp(+p.music, 0, 1);
+      if (p.sfx != null) AUD.sfx = clamp(+p.sfx, 0, 1);
+      if (p.mute != null) AUD.mute = !!p.mute;
+      applyAUD(); saveAUD(); syncAUDUI();
+      return this.audio;
+    },
     teleport(x, y, z) { P.x = x; P.y = y; P.z = z; },
     time: () => G.time,
     seed: () => G.seed,

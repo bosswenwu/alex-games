@@ -2296,6 +2296,58 @@ function eyeInLava(){ return getBlock(Math.floor(player.x), Math.floor(player.y+
 let burnT=0, lavaDmgT=0;                 // 玩家着火/岩浆灼烧计时
 let heatDmgT=0, _lastBiome=-1;           // 火山高温灼烤计时 / 上一帧所在群系(用于进入提示)
 const bioSeen=new Set(); const CODEX_TOTAL=BIOME_NAME.length;   // 群系探索图鉴: 已发现群系集合 / 总数
+const landSeen=new Set();                // 已兑现的地标 key = type:cellX:cellZ
+const PAYOFF_TYPES=["wreck","caravan","grotto","ruin"];
+const PAYOFF_N=PAYOFF_TYPES.length;
+let sandDmgT=0;
+function landTypesSeen(){ const t=new Set(); for(const k of landSeen) t.add(k.split(":")[0]); return t; }
+function underCover(){
+  const x=Math.floor(player.x), z=Math.floor(player.z), y0=Math.floor(player.y+PH);
+  for(let y=y0;y<=y0+4;y++){
+    const id=getBlock(x,y,z);
+    if(id && id!==AIR && id!==WATER && id!==LAVA && !PLANT(id)) return true;
+  }
+  return false;
+}
+const LAND_LOOT={
+  wreck:{xp:25, items:[[GOLD_ORE,4],[WRECKWOOD,6],[LANTERN,1]], name:"舱内金币与航海图纸"},
+  caravan:{xp:20, items:[[HAY,3],[GOLD_ORE,2],[SANDSTONE,6]], name:"商队货箱与盐路残页"},
+  grotto:{xp:25, items:[[AMETHYST,3],[CRYSTAL,1],[CAVECALC,4]], name:"晶洞原矿与矿脉图"},
+  ruin:{xp:20, items:[[MOSSY,6],[IRON_ORE,2],[COBBLE,4]], name:"遗迹石材与铭文拓片"}
+};
+const BIOME_YIELD={
+  [BIO_DESERT]:[[SAND,0.32],[SANDSTONE,0.16]],
+  [BIO_MESA]:[[CLAY,0.22],[SANDSTONE,0.12],[GOLD_ORE,0.03]],
+  [BIO_CANYON]:[[SANDSTONE,0.24],[WINDROCK,0.14],[IRON_ORE,0.04]],
+  [BIO_VOLCANO]:[[BASALT,0.20],[BLACKSAND,0.16],[GLOWVEIN,0.06],[COAL_ORE,0.05]],
+  [BIO_SALTLAKE]:[[SALTCRUST,0.24],[SALTCRYSTAL,0.12]],
+  [BIO_FOREST]:[[CAVECALC,0.18],[AMETHYST,0.08],[CRYSTAL,0.03]],
+  [BIO_TAIGA]:[[WRECKWOOD,0.12],[MOSSY,0.16],[IRON_ORE,0.05]]
+};
+function tickLandmarkPayoff(){
+  const land=nearestLandmark(player.x,player.z);
+  if(!land || land.dist>9) return;
+  const loot=LAND_LOOT[land.type]; if(!loot) return;
+  const key=land.type+":"+Math.floor(land.x/CELL)+":"+Math.floor(land.z/CELL);
+  if(landSeen.has(key)) return;
+  landSeen.add(key);
+  for(const [id,n] of loot.items) giveBlock(id,n);
+  addXP(loot.xp);
+  const types=landTypesSeen();
+  showName("📦 "+LANDMARKS[land.type]+" · "+loot.name+"  (+"+loot.xp+" XP)  地标 "+types.size+"/"+PAYOFF_N);
+  if(types.size===PAYOFF_N) setTimeout(()=>{ addXP(60); showName("📜 四址探齐 · 沙海图纸齐了  (+60 XP)"); },1400);
+  saveGame(true);
+}
+function applyBiomeYield(brokeId){
+  const bio=biomeAt(Math.floor(player.x),Math.floor(player.z));
+  const row=BIOME_YIELD[bio]; if(!row) return null;
+  const got=[];
+  for(const [id,p] of row){
+    if(id===brokeId) continue;
+    if(Math.random()<p){ bagAdd(id,1); got.push(BLOCKS[id]?BLOCKS[id].name:(""+id)); }
+  }
+  return got.length?got:null;
+}
 let jumpPadGrace=false;                  // 被弹跳板弹起后, 直到落地都不计摔落伤害
 
 /* ---------- 生命值 / 死亡 ---------- */
@@ -2487,6 +2539,12 @@ const RECIPES=[
    run(){ maxHp=Math.min(40,maxHp+4); hp=maxHp; updateHearts(); return "❤ 最大生命 +4（"+maxHp+"）"; }},
   {name:"庆典烟花", desc:"金 + 煤，做一批烟花", cost:[[GOLD_ORE,2],[COAL_ORE,2]],
    run(){ addXP(20); return "🎆 烟花已补充（+20 经验）"; }},
+  {name:"沉船灯塔", desc:"航海图纸点亮远航：朽木 + 金 + 煤 → 灯笼", cost:[[WRECKWOOD,8],[GOLD_ORE,2],[COAL_ORE,2]],
+   needLand:"wreck", lockMsg:"先登上沉船、取得航海图纸",
+   run(){ giveBlock(LANTERN,8); addXP(15); return "灯塔芯已制成（灯笼 x8）"; }},
+  {name:"晶脉提纯", desc:"矿脉图指引：紫晶 + 方解石 → 水晶", cost:[[AMETHYST,4],[CAVECALC,6]],
+   needLand:"grotto", lockMsg:"先探入晶洞、取得矿脉图",
+   run(){ giveBlock(CRYSTAL,3); addXP(15); return "提纯完成（水晶 x3）"; }},
 ];
 /* 把方块塞进物品栏: 优先合并同类, 否则占用一个方块格 */
 function giveBlock(id,n){
@@ -2498,12 +2556,19 @@ function giveBlock(id,n){
     if(i>=0){ HOTBAR_ITEMS[i]=id; rebuildHotbar(); }
   }
 }
+function landUnlocked(type){
+  if(!type) return true;
+  for(const k of landSeen) if(k.split(":")[0]===type) return true;
+  return false;
+}
 function canCraft(r){
+  if(r.needLand && !landUnlocked(r.needLand)) return false;
   if(r.ok && !r.ok()) return false;
   return r.cost.every(([id,n])=>bagCount(id)>=n);
 }
 function doCraft(i){
   const r=RECIPES[i]; if(!r) return;
+  if(r.needLand && !landUnlocked(r.needLand)){ showName("⚠ "+(r.lockMsg||"尚未取得对应图纸")); return; }
   if(r.ok && !r.ok()){ showName("⚠ "+(r.lockMsg||"暂时无法合成")); return; }
   if(!canCraft(r)){ showName("⚠ 材料不足：需要 "+r.cost.map(([id,n])=>BLOCKS[id].name+" x"+n).join("、")); return; }
   for(const [id,n] of r.cost) bagTake(id,n);
@@ -2521,12 +2586,13 @@ function renderCraft(){
     : '<div class="bagCell bagEmpty">空空如也——去挖点方块吧</div>';
   document.getElementById("recipeList").innerHTML = RECIPES.map((r,i)=>{
     const okc=canCraft(r);
+    const lockedLand=r.needLand && !landUnlocked(r.needLand);
     const cost=r.cost.map(([id,n])=>{
       const have=bagCount(id);
       return (have>=n?"":"⚠ ")+BLOCKS[id].name+" "+have+"/"+n;
     }).join("　");
     return '<div class="recipe'+(okc?"":" locked")+'" data-i="'+i+'">'+
-             '<div><div class="rn">'+r.name+'</div><div class="rd">'+r.desc+'</div></div>'+
+             '<div><div class="rn">'+r.name+'</div><div class="rd">'+(lockedLand?(r.lockMsg||"需要先探索对应地标"):r.desc)+'</div></div>'+
              '<div class="rc">'+cost+'</div></div>';
   }).join("");
   for(const el of document.querySelectorAll("#recipeList .recipe"))
@@ -2581,8 +2647,10 @@ function updateStatsHUD(){
   const st=document.getElementById("stats");
   const tod = sunH<0.02 ? "🌙夜" : "☀昼";
   const bio=BIOME_NAME[biomeAt(Math.floor(player.x),Math.floor(player.z))];
+  const marks=landTypesSeen().size;
   st.innerHTML = `第 <b>${dayCount}</b> 天 ${tod} ${weatherName()}<br><span style="color:#a8e6a0">🌍 ${bio}</span>`
                + `<br><span class="kills">☠ 击杀 ${kills}</span>`
+               + `<br><span style="color:#ffe0a0">📍 地标 ${marks}/${PAYOFF_N}</span>`
                + (armor>0 ? `<br><span style="color:#9fd8ff">🛡 护甲 ${armor}/5</span>` : ``);
   const bb=document.getElementById("bossbar");
   if(boss){
@@ -3016,6 +3084,8 @@ function doBreak(){
   setBlock(hit.x,hit.y,hit.z,AIR);
   sfxBreak();
   bagAdd(brokeId,1);                                   // 挖到的方块进背包, 供合成消耗
+  const bonus=applyBiomeYield(brokeId);
+  if(bonus) showName("⛏ "+(BLOCKS[brokeId]?BLOCKS[brokeId].name:"方块")+" + 群系产材 "+bonus.join("、"));
   questAdd("mine",1);
   if(brokeId===SARCO){ awakenPharaoh(hit.x,hit.y,hit.z); questSet("sarco"); }   // 挖开石棺 → 法老王苏醒
 }
@@ -5394,9 +5464,14 @@ function render(now){
   sky=mix3(sky,[0.98,0.52,0.28],glow*0.55);
   // 天气: 阴云压暗天空; 闪电瞬间照亮全场
   if(weather!=="clear"){
-    const murk = weather==="storm" ? 0.88 : 0.95;   // 阴天只是稍暗, 不再灰蒙蒙
-    daylight*=murk;
-    sky=mix3(sky,[0.52,0.56,0.62], weather==="storm"?0.34:0.18);
+    if(weather==="sand"){
+      daylight*=0.72;
+      sky=mix3(sky,[0.76,0.56,0.32],0.58);
+    } else {
+      const murk = weather==="storm" ? 0.88 : 0.95;   // 阴天只是稍暗, 不再灰蒙蒙
+      daylight*=murk;
+      sky=mix3(sky,[0.52,0.56,0.62], weather==="storm"?0.34:0.18);
+    }
   }
   if(lightT>0){
     const f=Math.min(1,lightT/0.35);
@@ -5422,9 +5497,10 @@ function render(now){
     if(_atmoAmt>0.004){ sky=mix3(sky,_atmoCol,_atmoAmt); daylight*=_atmoDay; }
   }
   const uw=eyeInWater();
-  const fogCol = uw ? [0.08,0.22,0.55] : sky;
-  const fogFar = uw ? 22 : RENDER*CS*1.05;
-  const fogNear= uw ? 2  : fogFar*0.68;
+  const fogCol = uw ? [0.08,0.22,0.55] : (weather==="sand" ? mix3(sky,[0.78,0.58,0.34],0.35) : sky);
+  let fogFar = uw ? 22 : RENDER*CS*1.05;
+  let fogNear= uw ? 2  : fogFar*0.68;
+  if(weather==="sand" && !uw){ fogFar=16; fogNear=1.2; }
   document.getElementById("watertint").style.display=uw?"block":"none";
   document.getElementById("lavatint").style.display=eyeInLava()?"block":"none";
   document.getElementById("firetint").style.display=(burnT>0&&!eyeInLava())?"block":"none";
@@ -5646,20 +5722,42 @@ function weatherName(){
   if(weather==="clear") return "☀ 晴";
   const snowy = biomeAt(Math.floor(player.x),Math.floor(player.z));
   const isSnow = snowy===BIO_SNOW;
+  if(weather==="sand") return "🌪 沙暴";
   if(weather==="storm") return "⛈ 雷暴";
   return isSnow ? "🌨 降雪" : "🌧 下雨";
+}
+function aridBiome(bio){
+  return bio===BIO_DESERT||bio===BIO_SALTLAKE||bio===BIO_CANYON||bio===BIO_VOLCANO||bio===BIO_MESA;
 }
 function updateWeather(dt){
   weatherT-=dt;
   if(weatherT<=0){
     const r=Math.random();
-    if(weather==="clear"){ weather = r<0.25?"storm":"rain"; weatherT=25+Math.random()*35; showName(weather==="storm"?"⛈ 雷暴来袭！":"🌧 下雨了"); }
+    const bio=biomeAt(Math.floor(player.x),Math.floor(player.z));
+    if(weather==="clear"){
+      if(aridBiome(bio) && r<0.48){ weather="sand"; weatherT=28+Math.random()*22; showName("🌪 沙暴来袭！能见度骤降 — 躲进掩体或建筑"); }
+      else { weather = r<0.25?"storm":"rain"; weatherT=25+Math.random()*35; showName(weather==="storm"?"⛈ 雷暴来袭！":"🌧 下雨了"); }
+    }
     else { weather="clear"; weatherT=240+Math.random()*260; showName("☀ 天放晴了"); }
   }
   if(weather==="clear") return;
   if(RENDER<=6) return; // 低配砍天气粒子，只留色调/雷闪
   const bio=biomeAt(Math.floor(player.x),Math.floor(player.z));
   const snowing = bio===BIO_SNOW;
+  if(weather==="sand"){
+    const n=RENDER<=6?0:14;
+    for(let i=0;i<n;i++){
+      const a=Math.random()*6.283, d=Math.random()*12;
+      const px=player.x+Math.sin(a)*d, pz=player.z+Math.cos(a)*d;
+      particles.push({
+        x:px, y:player.y+0.4+Math.random()*3.2, z:pz,
+        vx:6+Math.random()*5, vy:(Math.random()-.5)*1.2, vz:(Math.random()-.5)*2.2,
+        life:0.7+Math.random()*0.4, size:0.08+Math.random()*0.06,
+        u:4*TS, v:0, l:1.15
+      });
+    }
+    return;
+  }
   // 在玩家四周撒降水粒子(只在露天处)
   const n = weather==="storm"? 12 : 6;
   for(let i=0;i<n;i++){
@@ -5898,6 +5996,14 @@ function frame(now){
           showName(tips[curBio] || ("🧭 进入"+BIOME_NAME[curBio]));
         }
       }
+      tickLandmarkPayoff();
+      if(weather==="sand"){
+        if(underCover() || water) sandDmgT=0;
+        else {
+          sandDmgT-=dt;
+          if(sandDmgT<=0){ sandDmgT=2.8; damagePlayer(1,0,0); showName("🌪 沙暴刮伤 — 找掩体或建筑躲进去"); }
+        }
+      } else sandDmgT=0;
     }
     eatCd=Math.max(0,eatCd-dt);
     arrowCd=Math.max(0,arrowCd-dt);
@@ -5943,7 +6049,7 @@ function collectSave(){
     v:1, seed:SEED, ts:Date.now(),
     px:+player.x.toFixed(2), py:+player.y.toFixed(2), pz:+player.z.toFixed(2),
     yaw:+player.yaw.toFixed(3), pitch:+player.pitch.toFixed(3),
-    hp, maxHp, lvl, xp, armor, kills, dayCount, bioSeen:[...bioSeen],
+    hp, maxHp, lvl, xp, armor, kills, dayCount, bioSeen:[...bioSeen], landSeen:[...landSeen], weather,
     // 同时写 id 与下标: 以后往 QUESTS 中间插关卡时, 老存档靠 id 仍能落回正确的关
     bag:(function(){ const o={}; for(const [k,v] of bag) o[k]=v; return o; })(),
     dmgMul:+dmgMul.toFixed(3),
@@ -5992,6 +6098,8 @@ function loadGame(){
   hp=s.hp??20; maxHp=s.maxHp??20; lvl=s.lvl??1; xp=s.xp??0;
   armor=s.armor??0; kills=s.kills??0; dayCount=s.dayCount??1;
   bioSeen.clear(); if(Array.isArray(s.bioSeen)) for(const b of s.bioSeen) bioSeen.add(b|0);   // 恢复图鉴(老存档缺字段→空,自然兼容)
+  landSeen.clear(); if(Array.isArray(s.landSeen)) for(const k of s.landSeen) landSeen.add(String(k));
+  if(s.weather==="sand"||s.weather==="storm"||s.weather==="rain"||s.weather==="clear") weather=s.weather;
   if(s.dmgMul) dmgMul=s.dmgMul;
   bag.clear(); if(s.bag) for(const k in s.bag) bag.set(+k, s.bag[k]);
   // 优先用 id 定位关卡(抗关卡表变动), 没有 id 的老存档才退回下标
@@ -6167,6 +6275,9 @@ window.__game = {
   get biome(){ return biomeAt(Math.floor(player.x), Math.floor(player.z)); },        // 当前所在群系 id
   get biomeName(){ return BIOME_NAME[biomeAt(Math.floor(player.x), Math.floor(player.z))]; },
   get codex(){ return { seen:[...bioSeen], total:CODEX_TOTAL, names:[...bioSeen].map(b=>BIOME_NAME[b]) }; },
+  get payoff(){ return { landmarks:[...landSeen], types:[...landTypesSeen()], total:PAYOFF_N, weather, underCover:underCover(), yield:BIOME_YIELD }; },
+  setWeather(w){ if(["clear","rain","storm","sand"].includes(w)){ weather=w; weatherT=40; return weather; } return false; },
+  claimLandmark(type,sx,sz){ const key=type+":"+(sx|0)+":"+(sz|0); landSeen.add(key); return [...landSeen]; },
   getBlock, setBlock, groundY, heightAt, biomeAt,
   save:()=>saveGame(true), load:()=>loadGame(), hasSave, deleteSave,
   teleport(x,y,z){ player.x=x; player.y=y; player.z=z; player.vx=player.vy=player.vz=0; pcx=1e9; refreshChunks(); },
@@ -6379,6 +6490,29 @@ function selftest(){
     if(wrote.bag) for(const k in wrote.bag) bag.set(+k, wrote.bag[k]);
     ok("背包能从存档还原", bagCount(GEM_ORE)===7 && bagCount(SAND)===11,
        "还原钻石="+bagCount(GEM_ORE)+" 沙="+bagCount(SAND));
+    bag.clear(); for(const [k,v] of bagSnap) bag.set(k,v);
+
+    // 8e. 探索兑现: 图纸锁配方 / 地标存档 / 沙暴 / 群系产材表
+    const landSnap=[...landSeen], w0=weather;
+    landSeen.clear();
+    const wreckR=RECIPES.findIndex(r=>r.needLand==="wreck");
+    ok("沉船灯塔配方存在", wreckR>=0, "idx="+wreckR);
+    bagAdd(WRECKWOOD,8); bagAdd(GOLD_ORE,2); bagAdd(COAL_ORE,2);
+    const lant1=bagCount(LANTERN);
+    doCraft(wreckR);
+    ok("未探沉船时图纸配方锁定", bagCount(LANTERN)===lant1 && bagCount(WRECKWOOD)===8, "灯笼="+bagCount(LANTERN));
+    landSeen.add("wreck:0:0");
+    doCraft(wreckR);
+    ok("探过沉船后可合成灯塔", bagCount(WRECKWOOD)===0 && bagCount(LANTERN)===lant1+8, "灯笼="+bagCount(LANTERN));
+    const wrotePay=collectSave();
+    ok("地标写入存档", Array.isArray(wrotePay.landSeen) && wrotePay.landSeen.indexOf("wreck:0:0")>=0, "landSeen="+JSON.stringify(wrotePay.landSeen));
+    landSeen.clear();
+    if(wrotePay.landSeen) for(const k of wrotePay.landSeen) landSeen.add(k);
+    ok("地标能从存档还原", landSeen.has("wreck:0:0"), "size="+landSeen.size);
+    ok("群系产材覆盖干旱/火山/晶洞/遗迹", !!(BIOME_YIELD[BIO_DESERT]&&BIOME_YIELD[BIO_VOLCANO]&&BIOME_YIELD[BIO_FOREST]&&BIOME_YIELD[BIO_TAIGA]), "keys="+Object.keys(BIOME_YIELD).length);
+    const wset=window.__game.setWeather("sand");
+    ok("能切入沙暴天气", weather==="sand" && wset==="sand", "weather="+weather);
+    weather=w0; landSeen.clear(); for(const k of landSnap) landSeen.add(k);
     bag.clear(); for(const [k,v] of bagSnap) bag.set(k,v);
 
     // 9. 渲染管线仍然可用
