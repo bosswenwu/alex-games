@@ -1239,6 +1239,10 @@ let towers=[], enemies=[], allies=[], projectiles=[], rings=[], numbers=[], swin
 let grounds=[], bolts=[], beams=[], heals=[];   // 火海区域 / 连锁闪电 / 贯穿光矢 / 治疗光束
 let buildKey=null, selectedTower=null, specPickTower=null, speedMul=1, hoverCell=null, hoverPix=null, shopTab='build';
 let shake=0, bannerT=0, bannerTxt='';
+// ---- 顿帧（hitstop）：命中定格，打击感核心 ----
+let hitstop=0;                       // 剩余定格时长（真实秒）
+const HITSTOP_SCALE=0.06;            // 定格期间模拟推进比例（不完全冻结，避免卡死感）
+function addHitstop(sec){ if(typeof SETTINGS!=='undefined' && SETTINGS && SETTINGS.hitstop===false) return; hitstop=Math.min(0.18, Math.max(hitstop, sec)); }
 let summaryT=0, bossBar=null, waveTotal=0, waveSpawned=0;
 let waveStartKills=0, waveStartGold=0, waveStartLives=0;
 let actx=null, musicOn=true, musicNodes=null;
@@ -1498,7 +1502,7 @@ function spawnEnemy(type,lane,affix,atDist){
   }
   enemies.push(e);
   if(e.boss){
-    showBanner('⚔ ' + t.name + ' 登场 ⚔'); shake=Math.max(shake,12); sfx('skill');
+    showBanner('⚔ ' + t.name + ' 登场 ⚔'); shake=Math.max(shake,12); addHitstop(0.12); sfx('skill');
     addRing(e.pos,'#ff2d55',180); burst(e.pos.x,e.pos.y,30,'#ff2d55',180,0.8);
     bossBar=e;
     if(t.phases) showBanner('⚔ ' + t.name + ' · 第一阶段 ⚔');
@@ -1563,6 +1567,7 @@ function applyDmg(e, dmg, key, crit, ignoreShield, src, knock){
   if(shown>=1){
     e.flash=Math.max(e.flash||0, crit?0.22:0.13);
     if(knock){ e.dist=Math.max(0, e.dist-knock); e.kb=Math.max(e.kb||0, knock); }
+    if(crit) addHitstop(e.boss?0.07:0.045);
     addNum(e.pos, crit?('暴击 '+shown):shown, crit?'#ff5252':'#ffe082', crit);
   }
   else if(e.shield>0) addNum(e.pos, '护', '#7ecbff');
@@ -1577,6 +1582,7 @@ function applyDmg(e, dmg, key, crit, ignoreShield, src, knock){
     if(streak>stats.bestStreak) stats.bestStreak=streak;
     if(streak>=10 && streak%5===0){ const bonus=Math.floor(streak/5); earn(bonus); addNum(e.pos,'连斩 +'+bonus,'#ffd700'); }
     sfx('die'); shake=Math.min(shake+(e.boss?10:4), 16);
+    if(e.boss) addHitstop(0.15); else if((ENEMY[e.type].hp||0)>=400) addHitstop(0.07);
     burst(e.pos.x,e.pos.y, e.boss?34:12, e.boss?'#d4af37':'#8a2020', e.boss?150:90, 0.55);
     burst(e.pos.x,e.pos.y, e.boss?18:6, '#ffd54a', e.boss?190:110, 0.4);
     if(e.boss){ addRing(e.pos,'#ffd54a',200); showBanner(ENEMY[e.type].name+' 授首'); }
@@ -1607,6 +1613,14 @@ function burst(x,y,n,col,spd,life){
   for(let i=0;i<n;i++){
     const a=Math.random()*Math.PI*2, s=(spd||80)*(0.4+Math.random());
     parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-30,life:life||0.45,max:life||0.45,col,sz:2+Math.random()*3});
+  }
+}
+// 方向性命中火花：沿冲击方向 ang 喷一束锥形火星，命中读作"迸溅"而非一团雾
+function sparks(x,y,ang,n,col,spd,spread){
+  const sp=spread==null?0.6:spread;
+  for(let i=0;i<n;i++){
+    const a=ang+(Math.random()*2-1)*sp, s=(spd||220)*(0.45+Math.random()*0.9);
+    parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-20,life:0.20+Math.random()*0.18,max:0.4,col,sz:1+Math.random()*2});
   }
 }
 
@@ -1712,7 +1726,9 @@ function attack(t, target){
     applyDmg(target,dmg,t.key,crit,ignoreShield,t,kb);
     swings.push({x:t.x,y:t.y,a:t.aim,kind:h.shot,life:0.28,color:h.color});
     burst(target.pos.x,target.pos.y,crit?11:5,h.color,crit?120:70,0.28);
-    if(crit){ addRing(target.pos,'#ff5252',44); shake=Math.min(shake+2.5,14); }
+    sparks(target.pos.x,target.pos.y-8, t.aim, crit?13:6, crit?'#fff0c0':'#ffe6a8', crit?320:220, crit?0.8:0.55);
+    if(crit){ addRing(target.pos,'#ff5252',44); addRing(target.pos,'#fff2c0',24); shake=Math.min(shake+2.5,14);
+      parts.push({x:target.pos.x,y:target.pos.y-8,vx:0,vy:0,life:0.11,max:0.11,col:'#ffffff',sz:7}); }
     const splashR=(sp&&sp.splash)||h.splash, splashMul=(sp&&sp.splashMul)||1;
     if(splashR) splash(target.pos, dmg*h.splashPct*splashMul, splashR*splashMul, t.key, ignoreShield, t);
     if(h.shot==='roar') addRing(t,h.color,90);
@@ -1728,7 +1744,7 @@ function attack(t, target){
 function castSkill(t){
   const h=DEFS[t.key];
   if(!h.skill || t.cdLeft>0) return;
-  t.cdLeft=skillCdOf(t); t.anim=1; sfx('skill'); shake=8; stats.skillsCast++;
+  t.cdLeft=skillCdOf(t); t.anim=1; sfx('skill'); shake=8; addHitstop(0.08); stats.skillsCast++;
   showBanner(h.name+' · '+h.skill);
   const sd=skillDmg(t);
   if(t.key==='guanyu'){
@@ -1798,7 +1814,7 @@ function castSkill(t){
           dmg:Math.round(sd*0.09*dMul),key:t.key,src:t,col:'#ff6a00'});
       }
     }
-    addRing(t,'#ff6a00',240); burst(t.x,t.y,36,'#ff8a00',200,0.9); shake=Math.max(shake,11);
+    addRing(t,'#ff6a00',240); burst(t.x,t.y,36,'#ff8a00',200,0.9); shake=Math.max(shake,11); addHitstop(0.10);
   }
   else if(t.key==='sunshangxiang'){
     // 弓腰姬：向敌军最密集方向连射 3 道贯穿光矢
@@ -1874,7 +1890,7 @@ function updateBossPhases(e, dt){
     e.speed*=1.22;
     stats.bossPhases=Math.max(stats.bossPhases||0, want);
     showBanner('⚔ 司马懿 · 第'+['一','二','三'][want-1]+'阶段 · '+ph.name+' ⚔');
-    shake=16; sfx('skill'); sfx('relic');
+    shake=16; addHitstop(0.13); sfx('skill'); sfx('relic');
     for(let i=0;i<4;i++) setTimeout(()=>{ if(!e.dead){ addRing(e.pos, ph.color, 120+i*70); } }, i*110);
     burst(e.pos.x,e.pos.y,56,ph.color,240,1.0);
     burst(e.pos.x,e.pos.y,28,'#ffffff',300,0.7);
@@ -2251,7 +2267,10 @@ function update(dt){
       if(p.ground) dropGround(p.src, p.target.pos);
       addRing(p.target.pos, p.kind==='fire'?'#ff6a00':p.kind==='ice'?'#7ecbff':'#ffd54a', p.kind==='cannon'?70:28);
       burst(p.target.pos.x,p.target.pos.y, p.kind==='cannon'?18:p.kind==='fire'?12:7, p.kind==='ice'?'#a8e0ff':p.kind==='fire'?'#ff6a00':'#ffe082', 90, 0.32);
-      if(p.crit){ addRing(p.target.pos,'#ff5252',48); shake=Math.min(shake+2.5,14); }
+      // 方向性迸溅：弹道命中沿飞行方向甩出火星，暴击更炽更多
+      sparks(p.target.pos.x,p.target.pos.y-8, p.rot||0, p.crit?12:6, p.kind==='ice'?'#dff2ff':p.kind==='fire'?'#ffb060':'#fff0c0', p.crit?300:210, p.crit?0.75:0.5);
+      if(p.crit){ addRing(p.target.pos,'#ff5252',48); addRing(p.target.pos,'#fff2c0',26); shake=Math.min(shake+2.5,14);
+        parts.push({x:p.target.pos.x,y:p.target.pos.y-8,vx:0,vy:0,life:0.11,max:0.11,col:'#ffffff',sz:7}); }
       if(p.kind==='cannon') shake=Math.min(shake+3,14);
       if(p.splash) splash(p.target.pos, p.dmg*p.splashPct*(p.splashMul||1), p.splash*(p.splashMul||1), p.key, p.ignoreShield, p.src);
       if(p.pierce>0){
@@ -2397,7 +2416,7 @@ function resetGame(){
   const d=DIFFICULTY[difficulty];
   loadMap(mapId);
   gold=d.gold+META.gold; lives=d.lives+META.lives; wave=1; kills=0; streak=0; streakT=0;
-  gameTime=0; waveActive=false; waveDelay=2; paused=false; relicOpen=false;
+  gameTime=0; waveActive=false; waveDelay=2; paused=false; relicOpen=false; hitstop=0; shake=0;
   spawnQueue=[]; spawnTimer=0; relicsPicked=[]; RELIC=relicMul();
   // ---- 军府·天命阁：开局白得随机遗物（不重复） ----
   if(META.relic>0){
@@ -4876,7 +4895,9 @@ function loop(now){
     lastBoxW=box.clientWidth; lastBoxH=box.clientHeight; resizeCanvas();
   }
   const raw=Math.min((now-last)/1000,0.05); last=now;
-  if(state==='playing'&&!paused&&!relicOpen) stepGame(raw*speedMul);
+  let scl=1;
+  if(hitstop>0){ if(state==='playing'&&!paused&&!relicOpen){ hitstop=Math.max(0,hitstop-raw); scl=HITSTOP_SCALE; } else hitstop=0; }
+  if(state==='playing'&&!paused&&!relicOpen) stepGame(raw*speedMul*scl);
   renderCmdBar();
   draw();
   requestAnimationFrame(loop);
@@ -4895,7 +4916,7 @@ resizeCanvas(); renderMobileBar(); renderShop(); buildCmdBar(); renderCmdBar(); 
 
 // ---------- 设置持久化 ----------
 const SET_KEY='sgtd_settings_v1';
-const DEF_SET={music:0.55, sfx:0.75, mute:false, quality:'high', speed:1, tutorialDone:false, shake:true};
+const DEF_SET={music:0.55, sfx:0.75, mute:false, quality:'high', speed:1, tutorialDone:false, shake:true, hitstop:true};
 let SETTINGS=(function(){ try{ return Object.assign({},DEF_SET,JSON.parse(localStorage.getItem(SET_KEY))||{}); }catch(e){ return Object.assign({},DEF_SET); } })();
 function saveSettings(){ try{ localStorage.setItem(SET_KEY, JSON.stringify(SETTINGS)); }catch(e){} }
 
@@ -4916,6 +4937,15 @@ burst=function(x,y,n,col,spd,life){
   if(room<=0) return;
   if(n>room) n=room;
   return _burst(x,y,n,col,spd,life);
+};
+// 方向性火花同样按档位削减 + 尊重上限
+const _sparks=sparks;
+sparks=function(x,y,ang,n,col,spd,spread){
+  n=Math.max(1, Math.round(n*QUAL.part));
+  const room=QUAL.cap-parts.length;
+  if(room<=0) return;
+  if(n>room) n=room;
+  return _sparks(x,y,ang,n,col,spd,spread);
 };
 // 兜底：任何路径塞进来的粒子都不许越过上限（丢最老的）
 const _stepGame=stepGame;
@@ -5233,6 +5263,8 @@ setBox.innerHTML=`<h1 style="font-size:26px">设 置</h1>
     <button data-s="1">1x</button><button data-s="2">2x</button><button data-s="3">3x</button></div></div>
   <div class="setRow"><span>镜头震动</span><div class="segRow" id="setShake">
     <button data-sh="1">开</button><button data-sh="0">关</button></div></div>
+  <div class="setRow"><span>命中顿帧</span><div class="segRow" id="setHitstop">
+    <button data-hs="1">开</button><button data-hs="0">关</button></div></div>
   <div style="border-top:1px solid #4a3a1c;margin:14px 0 10px"></div>
   <div style="color:#c9b98f;font-size:12px;line-height:2">
     <b style="color:#ffd54a">键位</b><br>
@@ -5258,6 +5290,7 @@ function syncSettingsUI(){
   setBox.querySelectorAll('[data-q]').forEach(b=>b.classList.toggle('sel', b.dataset.q===SETTINGS.quality));
   setBox.querySelectorAll('[data-s]').forEach(b=>b.classList.toggle('sel', +b.dataset.s===SETTINGS.speed));
   setBox.querySelectorAll('[data-sh]').forEach(b=>b.classList.toggle('sel', (b.dataset.sh==='1')===!!SETTINGS.shake));
+  setBox.querySelectorAll('[data-hs]').forEach(b=>b.classList.toggle('sel', (b.dataset.hs==='1')===(SETTINGS.hitstop!==false)));
   const mb=document.getElementById('musicBtn');
   if(mb){ mb.textContent='音乐 '+(SETTINGS.mute?'关':'开'); mb.classList.toggle('on', !SETTINGS.mute); }
   const sp=document.getElementById('speed'); if(sp) sp.textContent='速度 '+SETTINGS.speed+'x';
@@ -5268,6 +5301,7 @@ setBox.querySelectorAll('[data-mute]').forEach(b=>b.onclick=()=>{ SETTINGS.mute=
 setBox.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>{ setQuality(b.dataset.q); sfx('ui'); });
 setBox.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{ SETTINGS.speed=+b.dataset.s; speedMul=SETTINGS.speed; saveSettings(); syncSettingsUI(); sfx('ui'); });
 setBox.querySelectorAll('[data-sh]').forEach(b=>b.onclick=()=>{ SETTINGS.shake=b.dataset.sh==='1'; saveSettings(); syncSettingsUI(); sfx('ui'); });
+setBox.querySelectorAll('[data-hs]').forEach(b=>b.onclick=()=>{ SETTINGS.hitstop=b.dataset.hs==='1'; if(!SETTINGS.hitstop) hitstop=0; saveSettings(); syncSettingsUI(); sfx('ui'); });
 setBox.querySelector('#setBack').onclick=()=>{ closeSettings(); };
 setBox.querySelector('#setTutorBtn').onclick=()=>{ closeSettings(); startTutorial(true); };
 
@@ -5471,6 +5505,7 @@ window.__game={
   get levels(){return towers.map(t=>t.level);},
   get skillCd(){return selectedTower?selectedTower.cdLeft:null;},
   get paused(){return paused;}, get difficulty(){return difficulty;},
+  get hitstop(){return +hitstop.toFixed(3);}, addHitstop(s){ addHitstop(s||0.1); return +hitstop.toFixed(3); },
   get targetMode(){return selectedTower?selectedTower.targetMode:null;},
   get best(){return loadBest();},
   get relics(){return relicsPicked.slice();}, get relicOpen(){return relicOpen;},
