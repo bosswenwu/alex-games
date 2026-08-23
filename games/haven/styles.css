@@ -414,4 +414,15 @@ html, body {
   #toast { top: 34%; max-width: 52%; padding: 7px 12px; font-size: 12px; }
 }
 
+a.back-arcade {
+  display: inline-block;
+  margin-top: 14px;
+  color: #e8c56a;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 700;
+  pointer-events: auto;
+}
+a.back-arcade:hover { text-decoration: underline; }
+
 [hidden] { display: none !important; }

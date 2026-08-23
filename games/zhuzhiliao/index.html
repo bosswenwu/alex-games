@@ -96,6 +96,17 @@
     background:rgba(255,255,255,.05);opacity:.82}
   #boot button{width:auto;padding:11px 34px;font-size:14px;font-weight:700;
     background:linear-gradient(135deg,#b8892c,#e9bb56);color:#241a06;border:none;border-radius:26px}
+  #bootMp{font-size:12px;opacity:.78;max-width:320px;text-align:center;line-height:1.6;min-height:18px}
+  #bootMp.ok{color:var(--green)} #bootMp.bad{color:#f0a090}
+  #bootRetry{display:none;width:auto;padding:8px 18px;font-size:12px;border-radius:16px;
+    background:rgba(255,255,255,.08);color:var(--text);border:1px solid var(--line)}
+  #bootRetry.show{display:inline-block}
+  a.back-arcade{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;
+    color:var(--text);border:1px solid var(--line);border-radius:11px;padding:7px 11px;font-size:12px;
+    background:var(--panel);backdrop-filter:blur(10px)}
+  a.back-arcade:hover{border-color:var(--gold);color:var(--gold)}
+  #boot a.back-arcade{background:transparent;opacity:.85}
+  #ctl a.back-arcade{width:auto}
 
   @media(max-width:560px){
     #topL,#topR{width:calc(50vw - 15px)}
@@ -147,6 +158,7 @@
   <div class="tg" id="tgShake">📳 摇一摇</div>
   <div class="tg on" id="tgSound">🔊 声音</div>
   <div class="tg" id="tgView">🔄 复位视角</div>
+  <a class="back-arcade" href="../../index.html">← 返回游戏厅</a>
 </div>
 
 <div id="hint">按住左右<b>来回搓动</b>（往哪边搓都是加速，越连贯倍率越高）· 右键拖动转视角 · 滚轮缩放 · 方向键也能搓</div>
@@ -161,30 +173,68 @@
   <div id="bootTips">
     <span>🖐 摄像头手势</span><span>✊ 握拳蓄力</span><span>🔥 连搓加成</span><span>👑 转速称号</span>
   </div>
+  <div id="bootMp">正在加载手势库…手指搓动随时能玩</div>
+  <button id="bootRetry" type="button">重试加载手势库</button>
   <button id="bootBtn">开始把玩</button>
+  <a class="back-arcade" href="../../index.html">← 返回游戏厅</a>
 </div>
 
-<!-- three.js：优先本地（可离线），importmap 指向随附的 three.module.js（r160，与线上同版） -->
+<!-- three.js：本地 1.3MB（方案B）。MediaPipe 走 CDN：jsdelivr 主 + unpkg 备 + 8s 超时 -->
 <script type="importmap">
 {"imports":{"three":"./three.module.js"}}
 </script>
-<!-- MediaPipe Hands：优先本地 vendor（可离线），本地缺失/损坏再回退 jsdelivr CDN -->
 <script>
-// 精简本地化：只随仓库附带 SIMD 版 wasm + lite 模型（覆盖 Chrome/Edge）。
-// 极老的无 SIMD 浏览器本地没有对应 wasm，改从 CDN 取运行时资源，避免 404。
-(function(){
-  var SIMD = false;
-  try{ SIMD = WebAssembly.validate(new Uint8Array([0,97,115,109,1,0,0,0,1,5,1,96,0,1,123,3,2,1,0,10,10,1,8,0,65,0,253,15,253,98,11])); }catch(e){}
-  window.MP_HANDS_BASE = SIMD ? 'vendor/mediapipe/' : 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/';
+window.MP_HANDS_BASE = '';
+window.MP_OK = false;
+window.MP_LOAD = (function () {
+  var VER = '0.4.1675469240';
+  var CDNS = [
+    'https://cdn.jsdelivr.net/npm/@mediapipe/hands@' + VER + '/',
+    'https://unpkg.com/@mediapipe/hands@' + VER + '/'
+  ];
+  var inflight = null;
+  function loadScript(src, ms) {
+    return new Promise(function (resolve, reject) {
+      var s = document.createElement('script');
+      s.src = src;
+      s.crossOrigin = 'anonymous';
+      var t = setTimeout(function () {
+        s.onload = s.onerror = null;
+        if (s.parentNode) s.parentNode.removeChild(s);
+        reject(new Error('timeout'));
+      }, ms);
+      s.onload = function () { clearTimeout(t); resolve(); };
+      s.onerror = function () {
+        clearTimeout(t);
+        if (s.parentNode) s.parentNode.removeChild(s);
+        reject(new Error('error'));
+      };
+      document.head.appendChild(s);
+    });
+  }
+  function run() {
+    if (typeof window.Hands === 'function') { window.MP_OK = true; return Promise.resolve(true); }
+    if (inflight) return inflight;
+    inflight = (async function () {
+      for (var i = 0; i < CDNS.length; i++) {
+        try {
+          await loadScript(CDNS[i] + 'hands.js', 8000);
+          if (typeof window.Hands === 'function') {
+            window.MP_HANDS_BASE = CDNS[i];
+            window.MP_OK = true;
+            return true;
+          }
+        } catch (e) {}
+      }
+      window.MP_OK = false;
+      inflight = null;
+      return false;
+    })();
+    return inflight;
+  }
+  return run;
 })();
-</script>
-<script src="vendor/mediapipe/hands.js" crossorigin="anonymous"></script>
-<script>
-if(typeof window.Hands === 'undefined'){
-  // 本地 hands.js 未加载成功 → 库和运行时资源一起回退 CDN，保持同源一致
-  window.MP_HANDS_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/';
-  document.write('<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"><\/script>');
-}
+window.MP_READY = window.MP_LOAD();
 </script>
 
 <script type="module">
@@ -974,21 +1024,67 @@ function handsWatchdog(now){
 }
 function flashBurst(){ burstT = 1; burstScale = 0.55; }
 
-async function startHands(){
-  if(handsFailed){ toast('MediaPipe Hands 未能加载\n本地 vendor 缺失且 CDN 也不可达，刷新页面可重试'); return; }
-  if(typeof window.Hands !== 'function'){
-    handsFailed = true;
-    toast('MediaPipe Hands 库未加载成功\n本地 vendor/mediapipe/hands.js 缺失，且回退的 jsdelivr CDN 也无法访问');
-    return;
+function camErrMsg(err){
+  const https = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  const name = err && err.name;
+  if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+    return https ? '当前浏览器不支持摄像头。仍可用手指搓动。' : '摄像头需要 HTTPS 或本地 HTTP，请不要用 file:// 直接打开。仍可用手指搓动。';
   }
+  if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+    return '摄像头权限被拒绝。请在地址栏允许摄像头后重试。仍可用手指搓动。';
+  }
+  if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+    return '没有检测到摄像头。仍可用手指搓动。';
+  }
+  if (name === 'NotReadableError' || name === 'TrackStartError') {
+    return '摄像头被其它程序占用，请关闭后重试。仍可用手指搓动。';
+  }
+  if (location.protocol === 'file:' || !https) {
+    return '非安全上下文无法打开摄像头，请用线上地址或本地 HTTP。仍可用手指搓动。';
+  }
+  return '无法访问摄像头：' + (name || (err && err.message) || '未知错误') + '。仍可用手指搓动。';
+}
+
+function setMpUi(ok, loading){
+  const el = $('bootMp'), retry = $('bootRetry');
+  if (!el) return;
+  el.classList.remove('ok','bad');
+  if (loading) { el.textContent = '正在加载手势库…手指搓动随时能玩'; retry && retry.classList.remove('show'); return; }
+  if (ok) {
+    el.textContent = '手势库已就绪，可点「摄像头手势」。不打开也能搓。';
+    el.classList.add('ok');
+    retry && retry.classList.remove('show');
+  } else {
+    el.textContent = '手势库加载失败，可继续用手指搓动';
+    el.classList.add('bad');
+    retry && retry.classList.add('show');
+  }
+}
+
+async function ensureMediaPipe(){
+  if (typeof window.Hands === 'function') { handsFailed = false; setMpUi(true); return true; }
+  setMpUi(false, true);
+  const ok = window.MP_LOAD ? await window.MP_LOAD() : false;
+  handsFailed = !ok;
+  setMpUi(ok);
+  return ok;
+}
+
+async function startHands(){
+  const ok = await ensureMediaPipe();
+  if(!ok){ toast('手势库加载失败，可继续用手指搓动\n点「重试加载手势库」或检查网络后重试'); return; }
   $('tgHand').classList.add('busy'); $('tgHand').textContent='🖐 启动中…';
   resumeAudio();
+  if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+    $('tgHand').classList.remove('busy'); $('tgHand').textContent='🖐 摄像头手势';
+    toast(camErrMsg({name:'NotSupported'})); return;
+  }
   try{
     stream = await navigator.mediaDevices.getUserMedia({
       video:{width:{ideal:320}, height:{ideal:240}, facingMode:'user'}, audio:false});
   }catch(err){
     $('tgHand').classList.remove('busy'); $('tgHand').textContent='🖐 摄像头手势';
-    toast('无法访问摄像头：'+(err.name||err.message)); return;
+    toast(camErrMsg(err)); return;
   }
   vid.srcObject = stream;
   await vid.play().catch(()=>{});
@@ -1058,7 +1154,7 @@ async function pumpHands(gen){
 }
 
 function makeHands(){
-  const H = new window.Hands({locateFile:f=>`${window.MP_HANDS_BASE||'vendor/mediapipe/'}${f}`});
+  const H = new window.Hands({locateFile:f=>`${window.MP_HANDS_BASE||'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/'}${f}`});
   H.setOptions({maxNumHands:2, modelComplexity:0, minDetectionConfidence:.6, minTrackingConfidence:.5});
   H.onResults(onHands);
   return H;
@@ -1122,6 +1218,8 @@ function dismissBoot(){
   if(!b.classList.contains('gone')){ b.classList.add('gone'); setTimeout(()=>b.style.display='none', 500); }
 }
 $('bootBtn').onclick = ()=>{ resumeAudio(); dismissBoot(); };
+if ($('bootRetry')) $('bootRetry').onclick = ()=> ensureMediaPipe();
+ensureMediaPipe();
 
 /* ══════════════════ 挑战玩法 + 计分 ══════════════════ */
 const LS_DUR='zzl.best.dur', LS_RPM='zzl.best.rpm';
@@ -1292,6 +1390,14 @@ requestAnimationFrame(frame);
 /* WebGL 上下文丢失兜底 */
 canvas.addEventListener('webglcontextlost', e=>{ e.preventDefault(); toast('图形上下文丢失，正在恢复…'); });
 canvas.addEventListener('webglcontextrestored', ()=> location.reload());
+
+window.__game = {
+  get omega(){ return omega; },
+  get rpm(){ return rpm(); },
+  get handsOn(){ return handsOn; },
+  get handsReady(){ return typeof window.Hands === 'function'; },
+  startHands, stopHands, ensureMediaPipe
+};
 
 /* 页面隐藏时静音，避免后台还在响 */
 document.addEventListener('visibilitychange', ()=>{

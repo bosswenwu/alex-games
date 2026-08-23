@@ -42,3 +42,14 @@
 - 部署：GitHub Pages（主 `bosswenwu.github.io/alex-games/`）+ Vercel 镜像（`alex-games-wheat.vercel.app`），推 `main` 两处都更新。
 - 曾有并发 agent 带 git 权限直接提交推送——多方协作时注意先 `git pull`/核对 origin 再推，避免互相覆盖。
 - 反复撞「每周额度」硬顶。续接靠各目录 `PROGRESS.md` 断点。
+
+---
+
+## Cursor 队列进度（2026-08-23，追加）
+
+- **竹知了方案 B 已落地**（用户拍板）：`git rm` 掉 `vendor/`，保留本地 `three.module.js`。Hands = jsdelivr 主 + unpkg 备 + 8s 超时；启动层中文失败提示 + 重试；摄像头按拒绝/无设备/非 HTTPS 分流。手势可选。`.git` 历史里的 14MB blob 需日后 `git filter-repo` 才真正清除。
+- **Haven 已拆包**：`haven.html` 外链 `haven.js` + `styles.css` + `assets/`，去掉 4 处 base64，不再双维护。待真机点测：旧存档 `haven.world.v1`、建造/世界/UI、console。
+- **一致性**：三国菜单「25 波」→「30 波」（第 25 波曹操亲征文案保留，那是真实波次）；坦克「矢量履带」现在会缩短 `dashMax`。
+- **性能**：三国 `victory`/`gameover` 后停 rAF，开新局/回菜单再 `kickLoop`；沙海粒子按 `RENDER` 封顶，低配跳过天气粒子。
+- **沙海深化**：复用死分支 `BIO_FOREST`=晶洞高地、`BIO_TAIGA`=古代遗迹带（未新开枚举）。地标：晶洞入口 / 沉船 / 商队残骸。新方块走图集 **235–237**（209–234 仍是罗马敌人）。剩余空闲格：**238–249**。
+- 负责的五款游戏均已加「返回游戏厅」。坦克步骤 5（平衡点测）留给线上。
