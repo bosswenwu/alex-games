@@ -12,7 +12,7 @@
 
 - [x] ~~**竹知了 CDN 决策落地**~~ — 已选方案A并完成：importmap 指本地 `./three.module.js`、MediaPipe SIMD 路径 + 模型全入库（vendor 14M），离线可用。**待补**：断网时的中文失败提示 / 摄像头被拒的友好提示是否已加，需线上确认。
 
-- [ ] **Haven 首屏拆包** — `games/haven/`  ← P0 唯一未动项
+- [x] ~~**Haven 首屏拆包**~~ — `games/haven/`：index.html 从 1.65MB 跳转页 → 6.8KB 外链壳（引用 styles.css + haven.js + assets/），3 份重复 base64 图标合并为单个可缓存 assets/icon.jpg。haven.html 保留为离线单文件包。已核验：全资源 200、零报错、canvas+`__game` 正常初始化。
   断点：agent 仅分析了 base64（favicon/brand=icon.jpg、title-bg=keyart.jpg，3 份重复 icon 约 912KB），无改动。
   做：`index.html` 入口改外链 `haven.js`+`styles.css`+`assets/`，别再内联 1.6MB 单文件；若有 sync 脚本要理解其意图别搞坏。
   验收：首屏更快出画面、存档兼容、世界生成/建造/UI 逐项正常、console 零报错。**若判断拆包收益低/风险高，如实写"不建议拆"并说明。**

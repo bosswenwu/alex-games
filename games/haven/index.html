@@ -2,44 +2,118 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="X-UA-Compatible" content="IE=edge">
-<title>HAVEN</title>
-<style>
-  html,body{height:100%;margin:0;background:#0b100c;color:#fff6dc;font:20px/1.6 "Microsoft YaHei",sans-serif}
-  .box{max-width:560px;margin:12vh auto;padding:28px;text-align:center}
-  a{color:#e8c56a}
-  .btn{display:inline-block;margin-top:18px;padding:12px 28px;background:#e8c56a;color:#2a1c0c;text-decoration:none;font-weight:700;border-radius:8px}
-</style>
-<script type="text/javascript">
-(function () {
-  var ua = navigator.userAgent || "";
-  var here = String(location.href || "");
-  var game = here.replace(/index\.html(\?.*)?$/i, "haven.html");
-  if (game === here) {
-    if (here.charAt(here.length - 1) === "/") game = here + "haven.html";
-    else game = here + "/haven.html";
-  }
-  var modern = /Edg\/|Chrome\/|Firefox\/|Safari\//.test(ua) && !/Trident|MSIE/.test(ua);
-  if (modern) { location.replace(game); return; }
-  var jumped = false;
-  try { location.href = "microsoft-edge:" + game; jumped = true; } catch (e) {}
-  window.onload = function () {
-    var tip = document.getElementById("tip");
-    if (tip) tip.innerHTML = jumped
-      ? "已请求用 Edge 打开。若没有跳转，请右键 <b>haven.html</b> → 打开方式 → Microsoft Edge。"
-      : "请右键 <b>haven.html</b> → 打开方式 → Microsoft Edge 或 Chrome。<br>不要用 Internet Explorer。";
-    var a = document.getElementById("go");
-    if (a) a.href = game;
-  };
-})();
-</script>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>HAVEN — A Voxel World</title>
+<link rel="icon" href="assets/icon.jpg">
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="box">
-    <h1>HAVEN</h1>
-    <p id="tip">正在打开游戏…</p>
-    <a class="btn" id="go" href="haven.html">进入游戏</a>
-    <p style="margin-top:22px;font-size:14px;opacity:.75">这台电脑双击 html 会调用 IE，IE 跑不了这个游戏。<br>请用 Edge / Chrome 打开 haven.html</p>
+<script type="text/javascript">(function(){if(/MSIE|Trident/.test(navigator.userAgent||""))document.write('<div style="padding:48px;font:20px Microsoft YaHei,sans-serif;background:#0b100c;color:#fff6dc">请用 Edge / Chrome 打开。</div>');})();</script>
+<canvas id="gl"></canvas>
+<div id="hud" hidden>
+  <div id="hurt"></div><div id="water-tint"></div><div id="cross"></div>
+  <div id="break-bar"><i id="break-fill"></i></div>
+  <div id="item-name"></div><div id="toast"></div>
+<div id="quest"><div class="qh">IMPERIUM · 帝国余晖</div><div class="qt" id="quest-title">第一章：帝国余火</div>
+  <div class="qd" id="quest-desc">Hold left click on oak wood.</div>
+  <div class="qb"><i id="quest-fill"></i></div><div class="qn" id="quest-num">1 / 10</div>
+  <div id="quest-nav"><span id="quest-arrow">↑</span><span id="quest-nav-text">正在定位任务目标…</span></div></div>
+  <div id="vitals"><div id="hearts"></div><div id="hunger"></div></div>
+  <div id="world-info" aria-live="polite"><b id="world-day">第 1 天</b><span id="world-clock">清晨 05:00</span><span id="world-biome">金色平原</span><span id="world-discovery">探索 1 / 5</span><span id="world-relic">第纳里乌斯 0</span><span id="world-season" data-season="ver">春 · Ver · 余 6 天</span></div>
+  <div id="buffs" hidden></div>
+  <div id="floaters"></div>
+  <div id="boss-bar" hidden><div id="boss-name"></div><div class="bbar"><i id="boss-fill"></i></div><div id="boss-phase"></div></div>
+  <div id="target-plate" hidden><div id="target-name"></div><div class="tbar"><i id="target-fill"></i></div><div id="target-hp"></div></div>
+  <div id="run-stats"><span id="stat-threat">威胁 1</span><span id="stat-kills">击杀 0</span><span id="stat-mined">挖掘 0</span><span id="stat-placed">放置 0</span><span id="stat-time">00:00</span></div>
+  <div id="hotbar"></div>
+  <div id="hand"><canvas id="hand-c" width="160" height="160"></canvas></div>
+  <div id="debug" hidden></div>
+  <button type="button" id="btn-view" class="view-btn">第三人称</button>
+  <div id="hint"><b>WASD</b> 移动 · <b>空格</b> 跳 · <b>F5 / V</b> 视角 · <b>左键</b> 挖 · <b>右键</b> 放 · <b>E</b> 背包</div>
+</div>
+<div id="touchui">
+  <div id="stick"><div id="stick-nub"></div></div><div id="lookpad"></div>
+  <div id="btn-jump" class="tbtn">跳</div><div id="btn-break" class="tbtn">挖</div>
+  <div id="btn-place" class="tbtn">放</div><div id="btn-fly" class="tbtn">飞</div>
+  <div id="btn-slot-l" class="tbtn">‹</div><div id="btn-slot-r" class="tbtn">›</div>
+</div>
+<div id="rotate-hint">请把手机横过来玩<br><span>横屏第三人称更清楚</span></div>
+<div id="inv-wrap" hidden>
+  <div class="panel inv-panel">
+    <div class="panel-title" id="inv-title">BACKPACK</div>
+    <div class="craft-row" id="craft-row">
+      <div><div class="tiny">CRAFTING</div><div class="grid" id="craft-grid"></div></div>
+      <div class="arrow">➜</div>
+      <div><div class="tiny">RESULT</div><div class="grid one" id="craft-out"></div></div>
+    </div>
+    <div class="furnace-row" id="furnace-row" hidden>
+      <div><div class="tiny">SMELT</div><div class="grid one" id="furnace-in"></div>
+      <div class="tiny fuel-lab">FUEL</div><div class="grid one" id="furnace-fuel"></div></div>
+      <div class="smelt-meter"><i id="smelt-fill"></i></div>
+      <div><div class="tiny">OUTPUT</div><div class="grid one" id="furnace-out"></div></div>
+    </div>
+    <div class="forge-row" id="forge-row" hidden>
+      <div class="tiny">LEGION ANVIL · 词条锻造</div>
+      <div class="forge-item" id="forge-item">空手</div>
+      <div class="forge-affix" id="forge-affix">尚无词条</div>
+      <div class="forge-pool" id="forge-pool"></div>
+      <div class="forge-cost" id="forge-cost"></div>
+      <button type="button" class="btn" id="btn-forge">锻造词条</button>
+      <div class="forge-why" id="forge-why"></div>
+    </div>
+    <div class="chest-row" id="chest-row" hidden><div class="tiny">CHEST STORAGE</div><div class="grid" id="chest-grid"></div></div>
+    <details class="recipe-guide" id="recipe-guide"><summary>配方指南</summary><p>原木→木板 · 木板×4→工作台 · 木板竖放×2→木棍 · 圆石围一圈→熔炉 · 木板围一圈→箱子 · 煤在木棍上方→火把</p></details>
+    <div class="tiny">INVENTORY</div><div class="grid" id="inv-grid"></div>
+    <div class="tiny">HOTBAR</div><div class="grid" id="inv-hotbar"></div>
   </div>
+</div>
+<div id="pause" hidden><div class="panel pause-panel"><h2>PAUSED</h2>
+  <button class="btn" id="btn-resume">Back to world</button>
+  <button class="btn sub" id="btn-save">Save world</button>
+  <button class="btn sub" id="btn-menu">Title screen</button></div></div>
+<div id="death" hidden><div class="panel death-panel"><h2>YOU DIED</h2>
+  <p id="death-reason">The world keeps turning.</p><p id="death-stats"></p>
+  <button class="btn" id="btn-respawn">Respawn</button>
+  <button class="btn sub" id="btn-die-menu">回到标题</button></div></div>
+<div id="victory" hidden><div class="panel victory-panel"><div class="laurel">✦</div><h2 id="victory-title">ROMA RESURGENS</h2>
+  <p class="vsub" id="victory-sub">第一章「帝国余火」完成。</p>
+  <p id="victory-stats"></p>
+  <button class="btn" id="btn-next-chapter" hidden>进入第二章</button>
+  <button class="btn sub" id="btn-keep-playing">继续自由建设</button>
+  <button class="btn sub" id="btn-victory-menu">回到标题</button></div></div>
+<div id="title">
+  <div class="title-bg" style="background-image:url('assets/keyart.jpg')"></div>
+  <div class="title-shade"></div>
+  <div class="title-inner">
+    <img class="brand" src="assets/icon.jpg" alt="">
+    <h1>HAVEN</h1>
+    <p class="tag">HAVEN: TWILIGHT OF THE EMPIRE</p>
+    <p class="tag-cn">道路已断，军团分裂——重建罗马，或终结帝国</p>
+    <div class="menu">
+      <button class="btn" id="btn-new">New World</button>
+      <button class="btn" id="btn-continue" disabled>Continue</button>
+      <div class="row">
+        <button class="btn sub" id="btn-survival">Survival</button>
+       <button class="btn sub on" id="btn-creative">Creative</button>
+      </div>
+      <p class="mode-note" id="mode-note">创造：可飞行、无限方块、不会受伤，适合自由建造。</p>
+      <div class="row">
+        <button class="btn sub on" id="btn-third">第三人称</button>
+        <button class="btn sub" id="btn-first">第一人称</button>
+      </div>
+      <label class="seed-lab">World seed<input id="seed-in" type="text" maxlength="16" placeholder="leave blank for random"></label>
+    </div>
+  </div>
+</div>
+<div id="load" hidden>
+  <div class="load-card"><img src="assets/icon.jpg" alt="">
+    <div class="load-name">Growing the world…</div>
+    <div class="load-bar"><i id="load-fill"></i></div>
+    <div class="load-sub" id="load-sub">Carving hills</div>
+  </div>
+</div>
+<div id="cursor-item" hidden></div>
+<div id="tooltip" hidden></div>
+<script src="haven.js"></script>
 </body>
 </html>
