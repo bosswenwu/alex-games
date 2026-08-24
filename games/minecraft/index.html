@@ -6380,6 +6380,7 @@ function collectSave(){
     curse:{ pharaohSlain:curseState.pharaohSlain },
     // 尾巴系统累计战绩(机关触发/踩塌/砸中 + 战车碾压); 老存档无 feats → 全归零
     feats:{ trapsTriggered:trapState.triggered, trapsSprung:trapState.sprung, trapHits:trapState.hits, chariotRams:chariotState.rams },
+    faction:{ rome:faction.rome, egypt:faction.egypt },
     // 同时写 id 与下标: 以后往 QUESTS 中间插关卡时, 老存档靠 id 仍能落回正确的关
     bag:(function(){ const o={}; for(const [k,v] of bag) o[k]=v; return o; })(),
     dmgMul:+dmgMul.toFixed(3),
@@ -6445,6 +6446,7 @@ function loadGame(){
   const FT=s.feats||{};
   trapState.triggered=FT.trapsTriggered|0; trapState.sprung=FT.trapsSprung|0; trapState.hits=FT.trapHits|0;
   chariotState.rams=FT.chariotRams|0;
+  const FC=s.faction||{}; faction.rome=Math.max(0,Math.min(FAC_MAX,FC.rome|0)); faction.egypt=Math.max(0,Math.min(FAC_MAX,FC.egypt|0));   // 阵营声望(老存档无→归零)
   trapFired.clear(); trapEnts.length=0; mirages.length=0; mirageSpawnT=2;
   blessT=0; blessKind=""; updateBuffHUD();
   if(s.weather==="sand"||s.weather==="storm"||s.weather==="rain"||s.weather==="clear") weather=s.weather;
@@ -6655,7 +6657,7 @@ function tickDigSparkle(dt){
 }
 /* 挖开可疑沙砾: 加权出土, 陶片/文物/图纸残页 + 发掘特效 */
 function archaeologyDig(x,y,z){
-  archState.digs++;
+  archState.digs++; addFaction('egypt',2);
   for(let i=0;i<20;i++) particles.push({x:x+0.5+(Math.random()-.5)*0.9, y:y+0.3+Math.random()*0.7, z:z+0.5+(Math.random()-.5)*0.9,
     vx:(Math.random()-.5)*2.6, vy:1+Math.random()*2.4, vz:(Math.random()-.5)*2.6, life:.5+Math.random()*.4, size:.09, u:15*TS, v:0, l:1.8});
   const r=Math.random();
@@ -6724,6 +6726,8 @@ function endArena(win){
     giveBlock(GOLD_ORE,10); giveBlock(GEM_ORE,4); giveBlock(MARBLE,16); addXP(150);
     if(armor<5){ armor++; updateHearts(); showName("🏆 角斗通关！开启宝库 → 宝库钥匙 x1 + 罗马板甲(护甲 "+armor+"/5) + 金x10 钻x4 大理石x16 + 150经验"); }
     else showName("🏆 角斗通关！开启宝库 → 宝库钥匙 x1 + 罗马赏赐(金x10 钻x4 大理石x16) + 150经验");
+    addFaction('rome',12);
+    { const rt=facTier(faction.rome).idx; if(rt>=2){ giveBlock(GOLD_ORE,rt*4); showName("🦅 罗马"+facTier(faction.rome).name+"额外赏赐 金x"+(rt*4)); } }
   }
 }
 function updateArena(dt){
@@ -6757,12 +6761,12 @@ function updateArena(dt){
 /* ---- C. 法老诅咒: 挖开石棺唤醒法老 → 缠身诅咒(周期掉血+红雾), 斩杀法老解咒并开法老宝库 ---- */
 const curseState={ active:false, t:0, dmgT:0, pharaohSlain:0 };
 const CURSE_MAX=120;                       // 安全上限: 法老若走失/被清除, 诅咒最多缠身 120s
-function applyCurse(){ curseState.active=true; curseState.t=CURSE_MAX; curseState.dmgT=5;
+function applyCurse(){ curseState.active=true; curseState.t=CURSE_MAX; curseState.dmgT=5; addFaction('egypt',-8);
   showName("☠ 法老诅咒缠身！周期灼蚀生命 — 斩杀法老方可解除 ☠"); }
 function liftCurse(){ curseState.active=false; curseState.t=0; }
 function onPharaohSlain(){
   curseState.pharaohSlain++; liftCurse(); arenaState.keys++;
-  giveBlock(GOLD_ORE,12); giveBlock(GEM_ORE,5); addXP(120);
+  giveBlock(GOLD_ORE,12); giveBlock(GEM_ORE,5); addXP(120); addFaction('rome',10);
   showName("☥ 法老伏诛 · 诅咒解除！开启法老宝库 → 宝库钥匙 x1 + 法老宝藏(金x12 钻x5) + 120经验");
 }
 function updateCurse(dt){
@@ -6772,10 +6776,24 @@ function updateCurse(dt){
   if(!alive || curseState.t<=0){ liftCurse(); if(!alive) showName("法老之力消散，诅咒随之解除…"); return; }
   curseState.dmgT-=dt;
   if(curseState.dmgT<=0){ curseState.dmgT=5;
-    if(!dead) damagePlayer(1,0,0);
+    if(!dead && Math.random()>=facTier(faction.egypt).idx*0.2) damagePlayer(1,0,0);   // 埃及声望越高越能抵御诅咒灼蚀
     for(let i=0;i<8;i++) particles.push({x:player.x+(Math.random()-.5)*1.2, y:player.y+0.5+Math.random()*1.4, z:player.z+(Math.random()-.5)*1.2,
       vx:0, vy:0.6+Math.random(), vz:0, life:.6, size:.09, u:15*TS, v:0, l:1.5});
   }
+}
+
+/* ---- 阵营声望: 罗马军团 🦅 vs 埃及祭司 ☥ — 战斗亲罗马 / 敬重古物亲埃及, 盗墓触怒祭司 ---- */
+const FAC_MAX=100;
+const faction={ rome:0, egypt:0 };
+const FAC_TIERS=[[0,'相识'],[25,'友善'],[50,'盟友'],[75,'尊崇']];
+function facTier(v){ let idx=0; for(let i=0;i<FAC_TIERS.length;i++) if(v>=FAC_TIERS[i][0]) idx=i; return {name:FAC_TIERS[idx][1], idx}; }
+function addFaction(side,n){
+  const before=facTier(faction[side]).idx;
+  faction[side]=Math.max(0, Math.min(FAC_MAX, faction[side]+n));
+  const after=facTier(faction[side]);
+  const label=(side==='rome'?'🦅 罗马军团':'☥ 埃及祭司');
+  if(after.idx>before) showName(label+" 声望提升 → "+after.name+" ("+faction[side]+"/100)");
+  else if(after.idx<before) showName(label+" 触怒！声望降为 "+after.name);
 }
 
 /* ---- D. 金字塔实体机关陷阱: 压力板触发落石/暗箭/滚石, 松沙隐藏陷坑 ----
@@ -6993,6 +7011,8 @@ window.__game = {
   get biome(){ return biomeAt(Math.floor(player.x), Math.floor(player.z)); },        // 当前所在群系 id
   get biomeName(){ return BIOME_NAME[biomeAt(Math.floor(player.x), Math.floor(player.z))]; },
   get codex(){ return { seen:[...bioSeen], total:CODEX_TOTAL, names:[...bioSeen].map(b=>BIOME_NAME[b]) }; },
+  get faction(){ return { rome:faction.rome, egypt:faction.egypt, romeTier:facTier(faction.rome).name, egyptTier:facTier(faction.egypt).name }; },
+  addFaction:(side,n)=>addFaction(side,n),
   get payoff(){ return { landmarks:[...landSeen], types:[...landTypesSeen()], total:PAYOFF_N, weather, underCover:underCover(), yield:BIOME_YIELD }; },
   get npc(){ return { relics:npcState.relics, traderMet:npcState.traderMet, oracleMet:npcState.oracleMet, trades:npcState.trades, blessings:npcState.blessings,
                       bless:{kind:blessKind, t:+blessT.toFixed(1)}, talk:talkNpc?talkNpc.npcRole:null, panelOpen:npcPanelOpen,
