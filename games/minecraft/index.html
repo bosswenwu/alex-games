@@ -297,6 +297,7 @@ const MARBLE=49, ROOFTILE=50;
 // 新群系建材: 盐壳/盐晶(枯骨盐湖) · 玄武岩/黑沙(黑沙火山) · 风蚀岩(峡谷) · 发光矿脉
 const SALTCRUST=51, SALTCRYSTAL=52, BLACKSAND=53, BASALT=54, WINDROCK=55, GLOWVEIN=56;
 const CAVECALC=57, AMETHYST=58, WRECKWOOD=59; // 晶洞方解石/紫晶 · 沉船朽木（图集 235-237）
+const SUSGRAVEL=60;                           // 可疑沙砾: 考古刷点(挖开出土陶片/文物/图纸残页, 复用砂砾贴图 83)
 // t=顶面贴图 b=底面 s=侧面 (图集编号)
 const BLOCKS = {
   [GRASS]:  {name:"草方块",   t:0,  b:2,  s:1},
@@ -358,6 +359,7 @@ const BLOCKS = {
   [CAVECALC]:{name:"方解石",    t:235,b:235,s:235},
   [AMETHYST]:{name:"紫晶簇",    t:236,b:236,s:236},
   [WRECKWOOD]:{name:"沉船朽木", t:237,b:237,s:237},
+  [SUSGRAVEL]:{name:"可疑沙砾", t:83, b:83, s:83},   // 考古刷点(视觉同砂砾, 上方有金色微光提示)
 };
 // 植物可以直接走过去; 冰/玻璃/树叶不完全遮挡; 岩浆会陷进去
 const SOLID   = id => id!==AIR && id!==WATER && id!==LAVA && !PLANT(id);   // 碰撞
@@ -3091,6 +3093,7 @@ document.addEventListener("keydown",e=>{
     if(e.code==="KeyE") toggleRide();
     if(e.code==="KeyF"){ e.preventDefault(); if(npcPanelOpen) closeNPCPanel(); else if(talkNpc) openNPCPanel(); }
     if(e.code==="KeyB"){ e.preventDefault(); toggleCraft(); }
+    if(e.code==="KeyG" && !e.repeat){ e.preventDefault(); startArena(); }   // 斗兽场开战
   }
   keys[e.code]=true;
 });
@@ -3258,6 +3261,7 @@ function doBreak(){
   spawnParticles(hit.x,hit.y,hit.z,hit.id);
   setBlock(hit.x,hit.y,hit.z,AIR);
   sfxBreak();
+  if(brokeId===SUSGRAVEL){ archaeologyDig(hit.x,hit.y,hit.z); questAdd("mine",1); return; }  // 考古刷点: 出土文物, 不进背包
   bagAdd(brokeId,1);                                   // 挖到的方块进背包, 供合成消耗
   const bonus=applyBiomeYield(brokeId);
   if(bonus) showName("⛏ "+(BLOCKS[brokeId]?BLOCKS[brokeId].name:"方块")+" + 群系产材 "+bonus.join("、"));
@@ -3300,6 +3304,7 @@ function awakenPharaoh(bx,by,bz){
     life:.8+Math.random()*.6, size:.12, u:15*TS, v:0, l:2.0});
   showName("☠ 法老王苏醒了！陪葬卫队随之而来！☠");
   sfxLevel && sfxLevel();
+  applyCurse();                                          // 唤醒即缠上法老诅咒
 }
 function doPlace(){
   swingT=0.3; triggerViewSwing();
@@ -4127,6 +4132,7 @@ function hurtMob(m,dmg,kx,kz,silent){
       if(m.type==="legionary") questAdd("legion",1);
       if(m.type==="centurion") questSet("centurion");
       if(m.type==="caesar")    questSet("caesar");
+      if(m.type==="pharaoh")   onPharaohSlain();     // 斩杀法老: 解咒 + 开法老宝库
     }
     addXP(MOB_XP[m.type]||3);
     if(m.def.boss){ boss=null; showName("★ 你击败了"+m.def.name+"！★"); sfxLevel(); }
@@ -6215,6 +6221,9 @@ function frame(now){
     musicTick(dt);
     questTick(dt);
     updateNPC(dt);
+    updateArch(dt);
+    updateArena(dt);
+    updateCurse(dt);
     updateStatsHUD();
     playerEnt.animT += dt*Math.hypot(player.vx,player.vz);
     playerEnt.hurtT = Math.max(0,playerEnt.hurtT-dt);
@@ -6250,6 +6259,9 @@ function collectSave(){
     yaw:+player.yaw.toFixed(3), pitch:+player.pitch.toFixed(3),
     hp, maxHp, lvl, xp, armor, kills, dayCount, bioSeen:[...bioSeen], landSeen:[...landSeen], weather,
     npc:{ relics:npcState.relics, traderMet:npcState.traderMet, oracleMet:npcState.oracleMet, trades:npcState.trades, blessings:npcState.blessings },
+    arch:{ pottery:archState.pottery, pages:archState.pages, digs:archState.digs },
+    arena:{ bestWave:arenaState.bestWave, cleared:arenaState.cleared, keys:arenaState.keys },
+    curse:{ pharaohSlain:curseState.pharaohSlain },
     // 同时写 id 与下标: 以后往 QUESTS 中间插关卡时, 老存档靠 id 仍能落回正确的关
     bag:(function(){ const o={}; for(const [k,v] of bag) o[k]=v; return o; })(),
     dmgMul:+dmgMul.toFixed(3),
@@ -6303,6 +6315,14 @@ function loadGame(){
   const N=s.npc||{};
   npcState.relics=N.relics|0; npcState.trades=N.trades|0; npcState.blessings=N.blessings|0;
   npcState.traderMet=!!N.traderMet; npcState.oracleMet=!!N.oracleMet;
+  // 考古进度: 老存档无 arch 字段 → 全部归零, 自然向后兼容
+  const A=s.arch||{}; archState.pottery=A.pottery|0; archState.pages=A.pages|0; archState.digs=A.digs|0;
+  digSites.length=0; digSpawnT=3;
+  // 斗兽场进度: 老存档无 arena 字段 → 归零, 自然兼容; 进行中的挑战不跨存档保留
+  const AR=s.arena||{}; arenaState.bestWave=AR.bestWave|0; arenaState.cleared=!!AR.cleared; arenaState.keys=AR.keys|0;
+  arenaState.active=false; arenaState.wave=0; arenaState.delay=0;
+  // 法老诅咒: 只保留击杀战绩; 进行中的诅咒不跨存档(老存档无 curse → 归零)
+  const CU=s.curse||{}; curseState.pharaohSlain=CU.pharaohSlain|0; curseState.active=false; curseState.t=0;
   blessT=0; blessKind=""; updateBuffHUD();
   if(s.weather==="sand"||s.weather==="storm"||s.weather==="rain"||s.weather==="clear") weather=s.weather;
   if(s.dmgMul) dmgMul=s.dmgMul;
@@ -6467,6 +6487,174 @@ drawViewmodel();
 /* =========================================================
    调试与自测接口  window.__game
    ========================================================= */
+/* =========================================================
+   沙海玩法 · 遗迹探险 (全部增量, 复用背包/经验/地标/生物/存档)
+   A. 沙漠考古刷点: 地表刷"可疑沙砾", 挖开出土 陶片/文物碎片/图纸残页
+   B. 罗马斗兽场波次: 站上竞技场沙地开战, 五波角斗 → 通关掉宝库钥匙+主题装备
+   C. 法老诅咒 + 宝库钥匙: 挖开石棺唤醒法老 → 诅咒 debuff, 斩杀法老解咒并落钥匙
+   ========================================================= */
+const archState={ pottery:0, pages:0, digs:0 };       // 陶片(图鉴) / 图纸残页(集5复原) / 已发掘刷点数
+const digSites=[]; let digSpawnT=3, digSparkT=0;
+const DIG_CAP=6;                                       // 同时存在的可疑沙砾上限(防刷屏)
+/* 在沙漠/台地地表撒下"可疑沙砾"刷点 */
+function maintainDigSites(dt){
+  if(!worldGenReady) return;
+  // 清理已被挖掉/被覆盖的刷点
+  for(let i=digSites.length-1;i>=0;i--){
+    const s=digSites[i];
+    if(getBlock(s.x,s.y,s.z)!==SUSGRAVEL || Math.hypot(s.x-player.x,s.z-player.z)>64) digSites.splice(i,1);
+  }
+  digSpawnT-=dt; if(digSpawnT>0) return; digSpawnT=2.5;
+  if(digSites.length>=DIG_CAP) return;
+  const bio=biomeAt(Math.floor(player.x),Math.floor(player.z));
+  if(bio!==BIO_DESERT && bio!==BIO_MESA) return;
+  for(let tr=0;tr<10;tr++){
+    const a=Math.random()*6.283, d=8+Math.random()*16;
+    const x=Math.floor(player.x+Math.sin(a)*d), z=Math.floor(player.z+Math.cos(a)*d);
+    if(!world.has(key(x>>4,z>>4))) continue;
+    const gy=groundY(x,z); if(gy<0 || gy<=WATER_Y+1) continue;
+    const sy=gy-1, top=getBlock(x,sy,z);              // groundY 返回地表上方第一格空气, 地表实体块在 gy-1
+    if((top===SAND||top===SANDSTONE||top===GRAVEL||top===CLAY) && getBlock(x,gy,z)===AIR){
+      setBlock(x,sy,z,SUSGRAVEL);                     // 就地替换地表沙块, 与地面齐平
+      digSites.push({x,y:sy,z});
+      return;
+    }
+  }
+}
+/* 每帧给附近刷点冒一缕金色微光, 方便玩家一眼认出 */
+function tickDigSparkle(dt){
+  digSparkT-=dt; if(digSparkT>0) return; digSparkT=0.12;
+  for(const s of digSites){
+    if(Math.hypot(s.x-player.x,s.z-player.z)>30) continue;
+    particles.push({x:s.x+0.5+(Math.random()-.5)*0.5, y:s.y+1.0+Math.random()*0.3, z:s.z+0.5+(Math.random()-.5)*0.5,
+      vx:(Math.random()-.5)*0.3, vy:0.5+Math.random()*0.4, vz:(Math.random()-.5)*0.3, life:.5, size:.06, u:15*TS, v:0, l:2.2});
+  }
+}
+/* 挖开可疑沙砾: 加权出土, 陶片/文物/图纸残页 + 发掘特效 */
+function archaeologyDig(x,y,z){
+  archState.digs++;
+  for(let i=0;i<20;i++) particles.push({x:x+0.5+(Math.random()-.5)*0.9, y:y+0.3+Math.random()*0.7, z:z+0.5+(Math.random()-.5)*0.9,
+    vx:(Math.random()-.5)*2.6, vy:1+Math.random()*2.4, vz:(Math.random()-.5)*2.6, life:.5+Math.random()*.4, size:.09, u:15*TS, v:0, l:1.8});
+  const r=Math.random();
+  if(r<0.15){                                          // 图纸残页
+    archState.pages++; addXP(10);
+    if(archState.pages>0 && archState.pages%5===0){    // 集齐 5 页 → 复原一张完整图纸
+      giveBlock(GEM_ORE,1); addXP(45);
+      showName("📜 图纸残页集齐 5 张 · 复原一张沙海图纸！(钻石 x1，+45 经验)");
+    } else {
+      showName("📜 出土 图纸残页（"+archState.pages%5+"/5，+10 经验）— 集满 5 张可复原");
+    }
+  } else if(r<0.45){                                    // 文物碎片(供 NPC 交易)
+    npcState.relics++; addXP(8);
+    showName("🏺 出土 文物碎片！(文物 x"+npcState.relics+"，+8 经验) — 交给商队商人或神谕祭司");
+  } else {                                              // 陶片(收藏图鉴)
+    archState.pottery++; addXP(5);
+    const milestone=[10,25,50,100].includes(archState.pottery);
+    if(milestone){ addXP(30); showName("🏺 陶片图鉴 "+archState.pottery+" 片 · 考古学有所成！(+30 经验)"); }
+    else showName("🏺 出土 陶片（图鉴 "+archState.pottery+" 片，+5 经验）");
+  }
+  sfxLevel && sfxLevel();
+}
+function updateArch(dt){ maintainDigSites(dt); tickDigSparkle(dt); }
+
+/* ---- B. 罗马斗兽场波次挑战: 站上竞技场沙地按 G 开战, 五波角斗 → 通关落宝库钥匙+罗马主题赏赐 ---- */
+const ARENA_WAVES=[
+  [["gladiator",3]],
+  [["gladiator",3],["legionary",1]],
+  [["legionary",4]],
+  [["gladiator",3],["legionary",2],["centurion",1]],
+  [["champion",1],["legionary",2]],     // 终波: 角斗士冠军 Boss
+];
+const arenaState={ active:false, wave:0, cleared:false, bestWave:0, keys:0, cx:0, cz:0, delay:0, promptT:0 };
+function arenaZone(){ const s=nearStructure(["colosseum"],40); if(!s) return null;
+  return Math.hypot(s.x-player.x, s.z-player.z)<=10 ? s : null; }   // 站在竞技场沙地(半径~9)内
+function spawnArenaMob(type,cx,cz){
+  const def=MOB_DEFS[type]; if(!def) return false;
+  for(let tr=0;tr<8;tr++){
+    const a=Math.random()*6.283, r=6+Math.random()*3;
+    const x=Math.floor(cx+Math.cos(a)*r), z=Math.floor(cz+Math.sin(a)*r);
+    if(!world.has(key(x>>4,z>>4))) continue;
+    const gy=groundY(x,z); if(gy<0) continue;
+    mobs.push({type, def, x:x+0.5, y:gy, z:z+0.5, vx:0,vy:0,vz:0, kbx:0,kbz:0,
+      yaw:Math.random()*6.283, tgtYaw:0, hp:def.hp, hurtT:0, animT:0, t:0, atkCd:0, burnT:0, swingT:0, groanT:0, fleeT:0,
+      onGround:false, pause:false, burning:false, arena:true, held: def.weapon? heldFor(def.weapon, def.handP): null});
+    return true;
+  }
+  return false;
+}
+function aliveArenaMobs(){ let n=0; for(const m of mobs) if(m.arena) n++; return n; }
+function spawnArenaWave(i){ let sp=0; for(const [t,n] of ARENA_WAVES[i]) for(let k=0;k<n;k++) if(spawnArenaMob(t,arenaState.cx,arenaState.cz)) sp++; return sp; }
+function startArena(){
+  if(arenaState.active) return false;
+  const s=arenaZone(); if(!s){ showName("⚔ 需站在斗兽场沙地中央才能开战"); return false; }
+  arenaState.active=true; arenaState.wave=0; arenaState.cx=s.x; arenaState.cz=s.z; arenaState.delay=0; arenaState.promptT=0;
+  spawnArenaWave(0);
+  showName("⚔ 角斗挑战开始！第 1/5 波 · 角斗士来袭！");
+  sfxLevel && sfxLevel();
+  return true;
+}
+function endArena(win){
+  arenaState.active=false;
+  for(let i=mobs.length-1;i>=0;i--) if(mobs[i].arena) mobs.splice(i,1);
+  if(win){
+    arenaState.cleared=true; arenaState.bestWave=ARENA_WAVES.length; arenaState.keys++;
+    giveBlock(GOLD_ORE,10); giveBlock(GEM_ORE,4); giveBlock(MARBLE,16); addXP(150);
+    if(armor<5){ armor++; updateHearts(); showName("🏆 角斗通关！开启宝库 → 宝库钥匙 x1 + 罗马板甲(护甲 "+armor+"/5) + 金x10 钻x4 大理石x16 + 150经验"); }
+    else showName("🏆 角斗通关！开启宝库 → 宝库钥匙 x1 + 罗马赏赐(金x10 钻x4 大理石x16) + 150经验");
+  }
+}
+function updateArena(dt){
+  if(!worldGenReady) return;
+  if(!arenaState.active){
+    const s=arenaZone();
+    if(s){ arenaState.promptT-=dt; if(arenaState.promptT<=0){ arenaState.promptT= arenaState.cleared?12:8;
+      showName(arenaState.cleared?"🏟 斗兽场已通关 · 按 G 可再战一场":"🏟 斗兽场 · 按 G 开始角斗挑战(五波)"); } }
+    return;
+  }
+  if(Math.hypot(arenaState.cx-player.x, arenaState.cz-player.z)>24){ endArena(false); showName("你逃离了竞技场，挑战中止"); return; }
+  if(arenaState.delay>0){
+    arenaState.delay-=dt;
+    if(arenaState.delay<=0){
+      arenaState.wave++;
+      const isBoss=(arenaState.wave===ARENA_WAVES.length-1);
+      spawnArenaWave(arenaState.wave);
+      showName("⚔ 第 "+(arenaState.wave+1)+"/5 波"+(isBoss?" · 角斗士冠军登场！":" 来袭！"));
+      sfxLevel && sfxLevel();
+    }
+    return;
+  }
+  if(aliveArenaMobs()===0){
+    arenaState.bestWave=Math.max(arenaState.bestWave, arenaState.wave+1);
+    if(arenaState.wave>=ARENA_WAVES.length-1){ endArena(true); return; }
+    arenaState.delay=2.5;
+    showName("✓ 第 "+(arenaState.wave+1)+" 波清空！下一波准备…");
+  }
+}
+
+/* ---- C. 法老诅咒: 挖开石棺唤醒法老 → 缠身诅咒(周期掉血+红雾), 斩杀法老解咒并开法老宝库 ---- */
+const curseState={ active:false, t:0, dmgT:0, pharaohSlain:0 };
+const CURSE_MAX=120;                       // 安全上限: 法老若走失/被清除, 诅咒最多缠身 120s
+function applyCurse(){ curseState.active=true; curseState.t=CURSE_MAX; curseState.dmgT=5;
+  showName("☠ 法老诅咒缠身！周期灼蚀生命 — 斩杀法老方可解除 ☠"); }
+function liftCurse(){ curseState.active=false; curseState.t=0; }
+function onPharaohSlain(){
+  curseState.pharaohSlain++; liftCurse(); arenaState.keys++;
+  giveBlock(GOLD_ORE,12); giveBlock(GEM_ORE,5); addXP(120);
+  showName("☥ 法老伏诛 · 诅咒解除！开启法老宝库 → 宝库钥匙 x1 + 法老宝藏(金x12 钻x5) + 120经验");
+}
+function updateCurse(dt){
+  if(!curseState.active) return;
+  curseState.t-=dt;
+  const alive=mobs.some(m=>m.type==="pharaoh");
+  if(!alive || curseState.t<=0){ liftCurse(); if(!alive) showName("法老之力消散，诅咒随之解除…"); return; }
+  curseState.dmgT-=dt;
+  if(curseState.dmgT<=0){ curseState.dmgT=5;
+    if(!dead) damagePlayer(1,0,0);
+    for(let i=0;i<8;i++) particles.push({x:player.x+(Math.random()-.5)*1.2, y:player.y+0.5+Math.random()*1.4, z:player.z+(Math.random()-.5)*1.2,
+      vx:0, vy:0.6+Math.random(), vz:0, life:.6, size:.09, u:15*TS, v:0, l:1.5});
+  }
+}
+
 window.__game = {
   get player(){ return player; },
   get mobs(){ return mobs; },
@@ -6484,7 +6672,15 @@ window.__game = {
   get npc(){ return { relics:npcState.relics, traderMet:npcState.traderMet, oracleMet:npcState.oracleMet, trades:npcState.trades, blessings:npcState.blessings,
                       bless:{kind:blessKind, t:+blessT.toFixed(1)}, talk:talkNpc?talkNpc.npcRole:null, panelOpen:npcPanelOpen,
                       count:{trader:countNPC("trader"), oracle:countNPC("oracle")} }; },
+  get arch(){ return { pottery:archState.pottery, pages:archState.pages, digs:archState.digs, sites:digSites.length, cap:DIG_CAP }; },
+  get arena(){ return { active:arenaState.active, wave:arenaState.wave, cleared:arenaState.cleared, bestWave:arenaState.bestWave, keys:arenaState.keys, alive:aliveArenaMobs(), inZone:!!arenaZone() }; },
+  startArena, endArena:(w)=>endArena(!!w), spawnArenaWave:(i)=>{ arenaState.cx=player.x; arenaState.cz=player.z; return spawnArenaWave(i|0); },
+  get curse(){ return { active:curseState.active, t:+curseState.t.toFixed(1), pharaohSlain:curseState.pharaohSlain }; },
+  applyCurse, slayPharaoh:()=>onPharaohSlain(), awakenPharaoh:()=>{ const p=player; awakenPharaoh(Math.floor(p.x)+2, Math.floor(p.y), Math.floor(p.z)); return curseState.active; },
   spawnNPC:(role)=>spawnNPC(role, 4, 6),
+  spawnDigSite(){ const bx=Math.floor(player.x)+2, bz=Math.floor(player.z), gy=groundY(bx,bz); if(gy<0) return false;
+    setBlock(bx,gy-1,bz,SUSGRAVEL); digSites.push({x:bx,y:gy-1,z:bz}); return true; },
+  digAt(x,y,z){ archaeologyDig(x,y,z); return {pottery:archState.pottery,pages:archState.pages,relics:npcState.relics}; },
   addRelics:(n)=>{ npcState.relics+=(n|0); return npcState.relics; },
   buyFromNPC:(i)=>npcBuy(i),
   bless:(k,s)=>applyBless(k, s||60),
@@ -6768,6 +6964,72 @@ function selftest(){
     talkNpc=talkPrev; blessT=blessPrev.t; blessKind=blessPrev.k; updateBuffHUD();
     bag.clear(); for(const [k,v] of bagSnap3) bag.set(k,v);
     Object.assign(npcState,npcSnap);
+
+    // 8g. 沙漠考古: 可疑沙砾方块存在 / 挖开产出三类文物 / 存档往返 + 老存档兼容
+    ok("可疑沙砾方块已定义", !!BLOCKS[SUSGRAVEL] && BLOCKS[SUSGRAVEL].t===83, "SUSGRAVEL="+SUSGRAVEL);
+    const archSnap=Object.assign({},archState), relicSnap2=npcState.relics;
+    archState.pottery=0; archState.pages=0; archState.digs=0; npcState.relics=0;
+    let gotPottery=0, gotPages=0, gotRelic=0;
+    for(let i=0;i<400;i++){ const b={pottery:archState.pottery,pages:archState.pages,relics:npcState.relics};
+      archaeologyDig(0,80,0);
+      if(archState.pottery>b.pottery) gotPottery++; else if(archState.pages>b.pages) gotPages++; else if(npcState.relics>b.relics) gotRelic++; }
+    ok("考古能出土陶片", gotPottery>0, "陶片次数="+gotPottery);
+    ok("考古能出土图纸残页", gotPages>0, "图纸次数="+gotPages);
+    ok("考古能出土文物碎片", gotRelic>0, "文物次数="+gotRelic);
+    ok("发掘计数累加", archState.digs===400, "digs="+archState.digs);
+    archState.pottery=7; archState.pages=3; archState.digs=9;
+    const wroteArch=collectSave();
+    ok("考古进度写入存档", wroteArch.arch && wroteArch.arch.pottery===7 && wroteArch.arch.pages===3, "arch="+JSON.stringify(wroteArch.arch));
+    { const legacy=Object.assign({},wroteArch); delete legacy.arch;   // 模拟老存档缺字段
+      const A=legacy.arch||{}; archState.pottery=A.pottery|0; archState.pages=A.pages|0; }
+    ok("老存档(无arch字段)兼容归零", archState.pottery===0 && archState.pages===0, "pottery="+archState.pottery);
+    { const A=wroteArch.arch; archState.pottery=A.pottery|0; archState.pages=A.pages|0; archState.digs=A.digs|0; }
+    ok("考古进度能从存档还原", archState.pottery===7 && archState.pages===3, "pottery="+archState.pottery);
+    Object.assign(archState,archSnap); npcState.relics=relicSnap2;
+
+    // 8h. 罗马斗兽场波次: 能刷波 / 清场无残留 / 通关落钥匙 / 存档往返 + 老存档兼容
+    const arenaSnap=Object.assign({},arenaState);
+    const bagSnapA=new Map(bag), armorA=armor, xpA=xp, lvlA=lvl, dmgA=dmgMul, maxA=maxHp, hpA=hp;
+    arenaState.cx=player.x; arenaState.cz=player.z;
+    let asp=0; for(let k=0;k<3;k++) if(spawnArenaMob("gladiator",player.x,player.z)) asp++;
+    ok("斗兽场能刷出角斗波次", aliveArenaMobs()>=1 && asp>=1, "spawned="+asp+" alive="+aliveArenaMobs());
+    for(let i=mobs.length-1;i>=0;i--) if(mobs[i].arena) mobs.splice(i,1);
+    ok("清场后竞技场无残留", aliveArenaMobs()===0, "alive="+aliveArenaMobs());
+    const keys0=arenaState.keys; arenaState.active=true; endArena(true);
+    ok("通关落宝库钥匙并标记完成", arenaState.keys===keys0+1 && arenaState.cleared===true && !arenaState.active, "keys="+arenaState.keys+" cleared="+arenaState.cleared);
+    arenaState.bestWave=4; arenaState.cleared=true; arenaState.keys=2;
+    const wroteAr=collectSave();
+    ok("斗兽场进度写入存档", wroteAr.arena && wroteAr.arena.bestWave===4 && wroteAr.arena.keys===2, "arena="+JSON.stringify(wroteAr.arena));
+    { const legacy=Object.assign({},wroteAr); delete legacy.arena;   // 模拟老存档缺字段
+      const AR=legacy.arena||{}; arenaState.keys=AR.keys|0; arenaState.cleared=!!AR.cleared; }
+    ok("老存档(无arena字段)兼容归零", arenaState.keys===0 && arenaState.cleared===false, "keys="+arenaState.keys);
+    { const AR=wroteAr.arena; arenaState.keys=AR.keys|0; arenaState.cleared=!!AR.cleared; arenaState.bestWave=AR.bestWave|0; }
+    ok("斗兽场进度能从存档还原", arenaState.keys===2 && arenaState.bestWave===4, "keys="+arenaState.keys);
+    for(let i=mobs.length-1;i>=0;i--) if(mobs[i].arena) mobs.splice(i,1);
+    Object.assign(arenaState,arenaSnap);
+    bag.clear(); for(const [k,v] of bagSnapA) bag.set(k,v); armor=armorA; xp=xpA; lvl=lvlA; dmgMul=dmgA; maxHp=maxA; hp=hpA; updateHearts(); updateXPHUD();
+
+    // 8i. 法老诅咒: 唤醒即缠身 / 无法老时自解 / 斩杀落钥匙+宝藏 / 存档往返 + 老存档兼容
+    const curseSnap=Object.assign({},curseState), akeys0=arenaState.keys;
+    const bagSnapC=new Map(bag), xpC=xp, lvlC=lvl, maxC=maxHp, dmgC=dmgMul, hpC=hp;
+    applyCurse();
+    ok("诅咒可被施加(缠身)", curseState.active===true && curseState.t>0, "active="+curseState.active+" t="+curseState.t.toFixed(0));
+    for(let i=mobs.length-1;i>=0;i--) if(mobs[i].type==="pharaoh") mobs.splice(i,1);   // 确保场上无法老
+    updateCurse(0.1);
+    ok("无法老在场时诅咒自解", curseState.active===false, "active="+curseState.active);
+    curseState.pharaohSlain=0;
+    onPharaohSlain();
+    ok("斩杀法老解咒并落宝库钥匙", curseState.pharaohSlain===1 && arenaState.keys===akeys0+1 && !curseState.active, "slain="+curseState.pharaohSlain+" keys="+arenaState.keys);
+    curseState.pharaohSlain=3;
+    const wroteCu=collectSave();
+    ok("诅咒战绩写入存档", wroteCu.curse && wroteCu.curse.pharaohSlain===3, "curse="+JSON.stringify(wroteCu.curse));
+    { const legacy=Object.assign({},wroteCu); delete legacy.curse;   // 模拟老存档缺字段
+      const CU=legacy.curse||{}; curseState.pharaohSlain=CU.pharaohSlain|0; }
+    ok("老存档(无curse字段)兼容归零", curseState.pharaohSlain===0, "slain="+curseState.pharaohSlain);
+    { const CU=wroteCu.curse; curseState.pharaohSlain=CU.pharaohSlain|0; }
+    ok("诅咒战绩能从存档还原", curseState.pharaohSlain===3, "slain="+curseState.pharaohSlain);
+    Object.assign(curseState,curseSnap); arenaState.keys=akeys0;
+    bag.clear(); for(const [k,v] of bagSnapC) bag.set(k,v); xp=xpC; lvl=lvlC; maxHp=maxC; dmgMul=dmgC; hp=hpC; updateHearts(); updateXPHUD();
 
     // 9. 渲染管线仍然可用
     let renderErr=null;
