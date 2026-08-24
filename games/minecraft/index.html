@@ -6325,6 +6325,7 @@ function frame(now){
     eatCd=Math.max(0,eatCd-dt);
     djinnState.cd=Math.max(0,djinnState.cd-dt);
     tickOmen(dt);
+    tickBazaar(dt);
     arrowCd=Math.max(0,arrowCd-dt);
     gunCd=Math.max(0,gunCd-dt);
     rocketCd=Math.max(0,rocketCd-dt);
@@ -6841,6 +6842,29 @@ function tickOmen(dt){
   else { omenTimer-=dt; if(omenTimer<=0){ omenTimer=180; proclaimOmen(); } }
 }
 
+/* ---- 🐫 波斯行商 · 珍宝集市: 定期现身有限时窗口, 用文物碎片换稀有货, 错过即散 ---- */
+const bazaarState={ active:false, t:0, cd:220, bought:0 };
+const BAZAAR_WARES=[
+  { n:"🧿 波斯护身符 · 护甲+1",   cost:6, f:()=>{ if(armor<5){ armor++; updateHearts(); } else giveBlock(GEM_ORE,3); } },
+  { n:"🌺 番红花药 · 治愈全部创伤", cost:3, f:()=>{ hp=maxHp; updateHearts(); } },
+  { n:"💎 天青琉璃 · 钻石x4",       cost:5, f:()=>{ giveBlock(GEM_ORE,4); } },
+  { n:"🏛 大理石料 · x24",         cost:4, f:()=>{ giveBlock(MARBLE,24); } },
+];
+function openBazaar(){ bazaarState.active=true; bazaarState.t=90;
+  showName("🐫 波斯行商的珍宝集市到来！(90秒) 文物碎片交易 · 现有文物 "+npcState.relics); return true; }
+function buyWare(i){
+  if(!bazaarState.active){ showName("集市已散去…"); return false; }
+  const w=BAZAAR_WARES[i]; if(!w) return false;
+  if(npcState.relics<w.cost){ showName("🚫 文物碎片不足（需 "+w.cost+"，现有 "+npcState.relics+"）— 去考古或斩敌收集"); return false; }
+  npcState.relics-=w.cost; bazaarState.bought++;
+  showName("🤝 成交：「"+w.n+"」（-"+w.cost+" 文物）"); try{ w.f(); }catch(e){}
+  return true;
+}
+function tickBazaar(dt){
+  if(bazaarState.active){ bazaarState.t-=dt; if(bazaarState.t<=0){ bazaarState.active=false; showName("🐫 波斯行商收拾行囊，隐入沙海…"); } }
+  else { bazaarState.cd-=dt; if(bazaarState.cd<=0){ bazaarState.cd=220; openBazaar(); } }
+}
+
 /* ---- D. 金字塔实体机关陷阱: 压力板触发落石/暗箭/滚石, 松沙隐藏陷坑 ----
    全部是"真方块"机关: 玩家能看见刻纹压力板并绕开, 松沙陷坑外观同沙可跳过; 踩中即触发实体威胁。*/
 const trapState={ triggered:0, sprung:0, hits:0 };
@@ -7062,6 +7086,8 @@ window.__game = {
   summonDjinn:()=>summonDjinn(),
   get omen(){ return { kind:omenState.kind, t:+omenState.t.toFixed(1), xpMul:omenXpMul(), all:OMENS.map(o=>o.n) }; },
   proclaimOmen:(k)=>proclaimOmen(k),
+  get bazaar(){ return { active:bazaarState.active, t:+bazaarState.t.toFixed(1), bought:bazaarState.bought, wares:BAZAAR_WARES.map(w=>({n:w.n,cost:w.cost})), relics:npcState.relics }; },
+  openBazaar:()=>openBazaar(), buyWare:(i)=>buyWare(i),
   get payoff(){ return { landmarks:[...landSeen], types:[...landTypesSeen()], total:PAYOFF_N, weather, underCover:underCover(), yield:BIOME_YIELD }; },
   get npc(){ return { relics:npcState.relics, traderMet:npcState.traderMet, oracleMet:npcState.oracleMet, trades:npcState.trades, blessings:npcState.blessings,
                       bless:{kind:blessKind, t:+blessT.toFixed(1)}, talk:talkNpc?talkNpc.npcRole:null, panelOpen:npcPanelOpen,
