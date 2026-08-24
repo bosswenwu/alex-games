@@ -4688,7 +4688,7 @@ function trySpawns(dt){
   spawnTimer-=dt;
   if(spawnTimer>0) return;
   const diff=Math.min(dayCount,6);              // 难度等级(随天数,更平缓)
-  spawnTimer=Math.max(3.0, 5.0-diff*0.2);       // 刷怪节奏大幅放慢(不再是无尽僵尸潮)
+  spawnTimer=Math.max(3.0, 5.0-diff*0.2) * (omenActive('ares')?0.55:1);   // 连锁: 阿瑞斯躁动天象 → 刷怪更急
   const night=sunH<0.02;
   const hasBoss=mobs.some(m=>m.def.boss);
   let zc=0, pc=0;
@@ -6679,7 +6679,7 @@ function archaeologyDig(x,y,z){
       showName("📜 出土 图纸残页（"+archState.pages%5+"/5，+10 经验）— 集满 5 张可复原");
     }
   } else if(r<0.45){                                    // 文物碎片(供 NPC 交易)
-    npcState.relics++; addXP(8);
+    npcState.relics++; addXP(8); if(omenActive('hermes')){ npcState.relics++; }   // 连锁: 赫尔墨斯天象 → 考古掘宝翻倍
     showName("🏺 出土 文物碎片！(文物 x"+npcState.relics+"，+8 经验) — 交给商队商人或神谕祭司");
   } else {                                              // 陶片(收藏图鉴)
     archState.pottery++; addXP(5);
@@ -6858,9 +6858,10 @@ function openBazaar(){ bazaarState.active=true; bazaarState.t=90;
 function buyWare(i){
   if(!bazaarState.active){ showName("集市已散去…"); return false; }
   const w=BAZAAR_WARES[i]; if(!w) return false;
-  if(npcState.relics<w.cost){ showName("🚫 文物碎片不足（需 "+w.cost+"，现有 "+npcState.relics+"）— 去考古或斩敌收集"); return false; }
-  npcState.relics-=w.cost; bazaarState.bought++;
-  showName("🤝 成交：「"+w.n+"」（-"+w.cost+" 文物）"); try{ w.f(); }catch(e){}
+  const cost=Math.max(1, w.cost-(facTier(faction.rome).idx>=2?1:0));   // 连锁: 罗马声望≥盟友 → 集市打折 1 文物
+  if(npcState.relics<cost){ showName("🚫 文物碎片不足（需 "+cost+"，现有 "+npcState.relics+"）— 去考古或斩敌收集"); return false; }
+  npcState.relics-=cost; bazaarState.bought++;
+  showName("🤝 成交：「"+w.n+"」（-"+cost+" 文物"+(cost<w.cost?" · 罗马盟友折扣":"")+"）"); try{ w.f(); }catch(e){}
   return true;
 }
 function tickBazaar(dt){
@@ -7117,6 +7118,7 @@ window.__game = {
   openBazaar:()=>openBazaar(), buyWare:(i)=>buyWare(i),
   get expedition(){ return { active:expeditionState.active, dist:expeditionState.active?+expeditionDist().toFixed(0):-1, t:+expeditionState.t.toFixed(1), fleeces:expeditionState.fleeces }; },
   startExpedition:()=>startExpedition(), claimExpedition:(f)=>claimExpedition(f),
+  get chains(){ return { aresRaid:omenActive('ares'), aresSpawnMul:omenActive('ares')?0.55:1, hermesDig:omenActive('hermes'), romeBazaarDiscount:facTier(faction.rome).idx>=2?1:0 }; },
   get payoff(){ return { landmarks:[...landSeen], types:[...landTypesSeen()], total:PAYOFF_N, weather, underCover:underCover(), yield:BIOME_YIELD }; },
   get npc(){ return { relics:npcState.relics, traderMet:npcState.traderMet, oracleMet:npcState.oracleMet, trades:npcState.trades, blessings:npcState.blessings,
                       bless:{kind:blessKind, t:+blessT.toFixed(1)}, talk:talkNpc?talkNpc.npcRole:null, panelOpen:npcPanelOpen,
