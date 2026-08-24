@@ -3100,6 +3100,7 @@ function chronicleHTML(){
     + row('🔮 当前天象', om)
     + row('🐫 波斯集市', bz)
     + row('🌊 金羊毛远征', ex)
+    + row('🌑 亡者之夜', (undeadNight.active?('围城中 · 剩'+Math.ceil(undeadNight.t)+'s'):'平静')+' · 幸存 '+undeadNight.survived+' 夜')
     + '<div style="margin-top:12px;color:#c9b98a;font-size:12px">按 <b style="color:#ffd23f">T</b> 或点此关闭 · 声望随行为涨落，天象/集市/远征会自行降临</div>';
 }
 function toggleChronicle(){
@@ -4724,7 +4725,7 @@ function trySpawns(dt){
   spawnTimer-=dt;
   if(spawnTimer>0) return;
   const diff=Math.min(dayCount,6);              // 难度等级(随天数,更平缓)
-  spawnTimer=Math.max(3.0, 5.0-diff*0.2) * (omenActive('ares')?0.55:1);   // 连锁: 阿瑞斯躁动天象 → 刷怪更急
+  spawnTimer=Math.max(3.0, 5.0-diff*0.2) * (omenActive('ares')?0.55:1) * undeadSpawnMul();   // 连锁: 阿瑞斯躁动天象 / 亡者之夜 → 刷怪更急
   const night=sunH<0.02;
   const hasBoss=mobs.some(m=>m.def.boss);
   let zc=0, pc=0;
@@ -6363,6 +6364,7 @@ function frame(now){
     tickOmen(dt);
     tickBazaar(dt);
     tickExpedition(dt);
+    tickUndeadNight(dt);
     arrowCd=Math.max(0,arrowCd-dt);
     gunCd=Math.max(0,gunCd-dt);
     rocketCd=Math.max(0,rocketCd-dt);
@@ -6423,6 +6425,7 @@ function collectSave(){
     faction:{ rome:faction.rome, egypt:faction.egypt },
     djinn:{ rubs:djinnState.rubs },
     expedition:{ fleeces:expeditionState.fleeces },
+    undead:{ survived:undeadNight.survived },
     // 同时写 id 与下标: 以后往 QUESTS 中间插关卡时, 老存档靠 id 仍能落回正确的关
     bag:(function(){ const o={}; for(const [k,v] of bag) o[k]=v; return o; })(),
     dmgMul:+dmgMul.toFixed(3),
@@ -6491,6 +6494,7 @@ function loadGame(){
   const FC=s.faction||{}; faction.rome=Math.max(0,Math.min(FAC_MAX,FC.rome|0)); faction.egypt=Math.max(0,Math.min(FAC_MAX,FC.egypt|0));   // 阵营声望(老存档无→归零)
   djinnState.rubs=(s.djinn&&s.djinn.rubs)|0; djinnState.cd=0;   // 神灯许愿次数(老存档无→0)
   expeditionState.fleeces=(s.expedition&&s.expedition.fleeces)|0; expeditionState.active=false; expeditionState.cd=200;   // 金羊毛战利品(老存档无→0)
+  undeadNight.survived=(s.undead&&s.undead.survived)|0; undeadNight.active=false; undeadNight.cd=280;   // 亡者之夜幸存(老存档无→0)
   trapFired.clear(); trapEnts.length=0; mirages.length=0; mirageSpawnT=2;
   blessT=0; blessKind=""; updateBuffHUD();
   if(s.weather==="sand"||s.weather==="storm"||s.weather==="rain"||s.weather==="clear") weather=s.weather;
@@ -6929,6 +6933,20 @@ function tickExpedition(dt){
   } else { expeditionState.cd-=dt; if(expeditionState.cd<=0){ expeditionState.cd=200; startExpedition(); } }
 }
 
+/* ---- 🌑 亡者之夜围城: 定期降临的亡者之潮, 刷怪暴增, 撑到潮落得厚赏; 阿瑞斯天象使其更勤(连锁) ---- */
+const undeadNight={ active:false, t:0, cd:280, survived:0 };
+function startUndeadNight(){ undeadNight.active=true; undeadNight.t=100;
+  showName("🌑 亡者之夜降临！沙海亡魂倾巢而出 — 撑到潮落(约100秒)必有厚赏！"); return true; }
+function undeadSpawnMul(){ return undeadNight.active ? 0.45 : 1; }   // 亡者之夜 → 刷怪极急
+function tickUndeadNight(dt){
+  if(undeadNight.active){ undeadNight.t-=dt;
+    if(undeadNight.t<=0){ undeadNight.active=false; undeadNight.survived++;
+      giveBlock(GOLD_ORE,16); giveBlock(GEM_ORE,6); addXP(140); if(armor<5){ armor++; updateHearts(); }
+      showName("🌅 亡者之潮退去，你挺过了亡者之夜！(金x16 钻x6 +140经验 护甲+1) · 累计幸存 "+undeadNight.survived+" 夜"); }
+  } else { undeadNight.cd -= dt*(omenActive('ares')?2:1);   // 连锁: 阿瑞斯躁动 → 亡者之夜来得更勤
+    if(undeadNight.cd<=0){ undeadNight.cd=280; startUndeadNight(); } }
+}
+
 /* ---- D. 金字塔实体机关陷阱: 压力板触发落石/暗箭/滚石, 松沙隐藏陷坑 ----
    全部是"真方块"机关: 玩家能看见刻纹压力板并绕开, 松沙陷坑外观同沙可跳过; 踩中即触发实体威胁。*/
 const trapState={ triggered:0, sprung:0, hits:0 };
@@ -7155,6 +7173,8 @@ window.__game = {
   get expedition(){ return { active:expeditionState.active, dist:expeditionState.active?+expeditionDist().toFixed(0):-1, t:+expeditionState.t.toFixed(1), fleeces:expeditionState.fleeces }; },
   startExpedition:()=>startExpedition(), claimExpedition:(f)=>claimExpedition(f),
   get chains(){ return { aresRaid:omenActive('ares'), aresSpawnMul:omenActive('ares')?0.55:1, hermesDig:omenActive('hermes'), romeBazaarDiscount:facTier(faction.rome).idx>=2?1:0 }; },
+  get undeadNight(){ return { active:undeadNight.active, t:+undeadNight.t.toFixed(1), spawnMul:undeadSpawnMul(), survived:undeadNight.survived }; },
+  startUndeadNight:()=>startUndeadNight(),
   get payoff(){ return { landmarks:[...landSeen], types:[...landTypesSeen()], total:PAYOFF_N, weather, underCover:underCover(), yield:BIOME_YIELD }; },
   get npc(){ return { relics:npcState.relics, traderMet:npcState.traderMet, oracleMet:npcState.oracleMet, trades:npcState.trades, blessings:npcState.blessings,
                       bless:{kind:blessKind, t:+blessT.toFixed(1)}, talk:talkNpc?talkNpc.npcRole:null, panelOpen:npcPanelOpen,
