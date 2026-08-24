@@ -6326,6 +6326,7 @@ function frame(now){
     djinnState.cd=Math.max(0,djinnState.cd-dt);
     tickOmen(dt);
     tickBazaar(dt);
+    tickExpedition(dt);
     arrowCd=Math.max(0,arrowCd-dt);
     gunCd=Math.max(0,gunCd-dt);
     rocketCd=Math.max(0,rocketCd-dt);
@@ -6385,6 +6386,7 @@ function collectSave(){
     feats:{ trapsTriggered:trapState.triggered, trapsSprung:trapState.sprung, trapHits:trapState.hits, chariotRams:chariotState.rams },
     faction:{ rome:faction.rome, egypt:faction.egypt },
     djinn:{ rubs:djinnState.rubs },
+    expedition:{ fleeces:expeditionState.fleeces },
     // 同时写 id 与下标: 以后往 QUESTS 中间插关卡时, 老存档靠 id 仍能落回正确的关
     bag:(function(){ const o={}; for(const [k,v] of bag) o[k]=v; return o; })(),
     dmgMul:+dmgMul.toFixed(3),
@@ -6452,6 +6454,7 @@ function loadGame(){
   chariotState.rams=FT.chariotRams|0;
   const FC=s.faction||{}; faction.rome=Math.max(0,Math.min(FAC_MAX,FC.rome|0)); faction.egypt=Math.max(0,Math.min(FAC_MAX,FC.egypt|0));   // 阵营声望(老存档无→归零)
   djinnState.rubs=(s.djinn&&s.djinn.rubs)|0; djinnState.cd=0;   // 神灯许愿次数(老存档无→0)
+  expeditionState.fleeces=(s.expedition&&s.expedition.fleeces)|0; expeditionState.active=false; expeditionState.cd=200;   // 金羊毛战利品(老存档无→0)
   trapFired.clear(); trapEnts.length=0; mirages.length=0; mirageSpawnT=2;
   blessT=0; blessKind=""; updateBuffHUD();
   if(s.weather==="sand"||s.weather==="storm"||s.weather==="rain"||s.weather==="clear") weather=s.weather;
@@ -6865,6 +6868,30 @@ function tickBazaar(dt){
   else { bazaarState.cd-=dt; if(bazaarState.cd<=0){ bazaarState.cd=220; openBazaar(); } }
 }
 
+/* ---- 🌊 地中海 · 金羊毛远征: 定期在远方生成宝藏, 限时抵达即得大奖, 超时隐没 ---- */
+const expeditionState={ active:false, tx:0, tz:0, t:0, cd:200, fleeces:0 };
+function startExpedition(){
+  const ang=Math.random()*Math.PI*2, dist=120+Math.random()*160;
+  expeditionState.tx=Math.round(player.x+Math.cos(ang)*dist);
+  expeditionState.tz=Math.round(player.z+Math.sin(ang)*dist);
+  expeditionState.active=true; expeditionState.t=240;
+  showName("🌊 金羊毛远征启程！远方("+expeditionState.tx+","+expeditionState.tz+")有金羊毛宝藏 — 240 秒内寻得！"); return true;
+}
+function expeditionDist(){ return Math.hypot(player.x-expeditionState.tx, player.z-expeditionState.tz); }
+function claimExpedition(force){
+  if(!expeditionState.active) return false;
+  if(!force && expeditionDist()>6) return false;
+  expeditionState.active=false; expeditionState.fleeces++;
+  giveBlock(GOLD_ORE,20); giveBlock(GEM_ORE,8); addXP(160); if(armor<5){ armor++; updateHearts(); }
+  showName("🏆 寻得金羊毛！(金x20 钻x8 +160经验 护甲+1) · 累计金羊毛 "+expeditionState.fleeces); return true;
+}
+function tickExpedition(dt){
+  if(expeditionState.active){ expeditionState.t-=dt;
+    if(expeditionDist()<=6){ claimExpedition(true); return; }
+    if(expeditionState.t<=0){ expeditionState.active=false; showName("🌊 金羊毛远征时限已过，宝藏隐没沙海…"); }
+  } else { expeditionState.cd-=dt; if(expeditionState.cd<=0){ expeditionState.cd=200; startExpedition(); } }
+}
+
 /* ---- D. 金字塔实体机关陷阱: 压力板触发落石/暗箭/滚石, 松沙隐藏陷坑 ----
    全部是"真方块"机关: 玩家能看见刻纹压力板并绕开, 松沙陷坑外观同沙可跳过; 踩中即触发实体威胁。*/
 const trapState={ triggered:0, sprung:0, hits:0 };
@@ -7088,6 +7115,8 @@ window.__game = {
   proclaimOmen:(k)=>proclaimOmen(k),
   get bazaar(){ return { active:bazaarState.active, t:+bazaarState.t.toFixed(1), bought:bazaarState.bought, wares:BAZAAR_WARES.map(w=>({n:w.n,cost:w.cost})), relics:npcState.relics }; },
   openBazaar:()=>openBazaar(), buyWare:(i)=>buyWare(i),
+  get expedition(){ return { active:expeditionState.active, dist:expeditionState.active?+expeditionDist().toFixed(0):-1, t:+expeditionState.t.toFixed(1), fleeces:expeditionState.fleeces }; },
+  startExpedition:()=>startExpedition(), claimExpedition:(f)=>claimExpedition(f),
   get payoff(){ return { landmarks:[...landSeen], types:[...landTypesSeen()], total:PAYOFF_N, weather, underCover:underCover(), yield:BIOME_YIELD }; },
   get npc(){ return { relics:npcState.relics, traderMet:npcState.traderMet, oracleMet:npcState.oracleMet, trades:npcState.trades, blessings:npcState.blessings,
                       bless:{kind:blessKind, t:+blessT.toFixed(1)}, talk:talkNpc?talkNpc.npcRole:null, panelOpen:npcPanelOpen,
