@@ -150,6 +150,12 @@
   #rotateHint { position:fixed; inset:0; z-index:60; display:none; align-items:center; justify-content:center;
                 background:rgba(10,12,20,.94); color:#ffe9c4; font-size:17px; text-align:center; padding:30px; line-height:2; }
   #legal { margin-top:22px; color:rgba(255,235,205,.72); font-size:11px; line-height:1.7; text-align:center; max-width:620px; }
+  #chronicle { position:fixed; inset:0; z-index:61; display:none; align-items:center; justify-content:center; padding:20px; background:rgba(8,6,3,.82); cursor:pointer; }
+  #chronicle.on { display:flex; }
+  #chronicle .cr-card { max-width:560px; width:100%; max-height:86vh; overflow:auto; background:linear-gradient(#1a140c,#120d07); border:2px solid #c9a24b; border-radius:12px; padding:22px 26px; color:#f0e6d0; font-size:14px; line-height:1.6; box-shadow:0 10px 40px #000a; }
+  #chronicle h2 { color:#ffd23f; margin:0 0 12px; font-size:19px; }
+  #chronicle .cr-row { display:flex; justify-content:space-between; gap:14px; border-bottom:1px solid #ffffff14; padding:5px 0; }
+  #chronicle .cr-k { color:#c9b98a; } #chronicle .cr-v { color:#fff; font-weight:700; text-align:right; }
   #help { margin-top:30px; color:#d8d8d8; font-size:14px; line-height:1.9; text-shadow:1px 1px 0 #000; text-align:center; }
   #help b { color:#ffff88; }
   #toast { position:absolute; left:50%; top:44%; transform:translateX(-50%); display:none;
@@ -237,6 +243,8 @@
     <b>第3晚起 Boss 轮换</b>：僵尸王 / 飞龙 / 钢铁泰坦 / 烈焰凤凰　拖动模式下移动鼠标瞄准
   </div>
 </div>
+
+<div id="chronicle" onclick="toggleChronicle()"><div class="cr-card"></div></div>
 
 <div id="overlay">
   <canvas id="brandmark" width="120" height="120"></canvas>
@@ -3073,6 +3081,33 @@ function setTitleChrome(show){
 }
 function enterGame(){ overlay.style.display="none"; hud.style.display="block"; showIntro(); }
 /* 完整帮助浮层: H 键或点击标题切换; 打开时若在指针锁定中先释放, 方便阅读 */
+function chronicleHTML(){
+  const rt=facTier(faction.rome), et=facTier(faction.egypt);
+  const om = omenState.kind ? ((OMENS.find(o=>o.k===omenState.kind)||{n:omenState.kind}).n+" · 剩"+Math.ceil(omenState.t)+"s") : "风平浪静";
+  const bz = bazaarState.active ? ("营业中 · 剩"+Math.ceil(bazaarState.t)+"s") : "未开市";
+  const ex = expeditionState.active ? ("进行中 · 距"+Math.round(expeditionDist())+"m · 剩"+Math.ceil(expeditionState.t)+"s") : "无";
+  const row=(k,v)=>'<div class="cr-row"><span class="cr-k">'+k+'</span><span class="cr-v">'+v+'</span></div>';
+  return '<h2>📜 沙海编年史</h2>'
+    + row('🦅 罗马军团', rt.name+' ('+faction.rome+'/100)'+(faction.rome<12?' · ⚠敌对':''))
+    + row('☥ 埃及祭司', et.name+' ('+faction.egypt+'/100)')
+    + row('🗺 群系图鉴', bioSeen.size+' / '+CODEX_TOTAL)
+    + row('🏺 文物碎片', npcState.relics)
+    + row('🏛 斗兽场最高', '第 '+arenaState.bestWave+' 波 · 宝库钥匙 '+arenaState.keys)
+    + row('☠ 法老伏诛', curseState.pharaohSlain+' 尊')
+    + row('🪔 神灯许愿', djinnState.rubs+' 次')
+    + row('🌊 金羊毛', expeditionState.fleeces+' 束')
+    + row('⚙ 机关触发', trapState.triggered)
+    + row('🔮 当前天象', om)
+    + row('🐫 波斯集市', bz)
+    + row('🌊 金羊毛远征', ex)
+    + '<div style="margin-top:12px;color:#c9b98a;font-size:12px">按 <b style="color:#ffd23f">T</b> 或点此关闭 · 声望随行为涨落，天象/集市/远征会自行降临</div>';
+}
+function toggleChronicle(){
+  const el=document.getElementById("chronicle"); if(!el) return;
+  const show=!el.classList.contains("on");
+  if(show){ el.querySelector(".cr-card").innerHTML=chronicleHTML(); el.classList.add("on"); }
+  else el.classList.remove("on");
+}
 function toggleFullHelp(){
   const el=document.getElementById("fullhelp");
   const show = el.style.display!=="flex";
@@ -3115,6 +3150,7 @@ document.addEventListener("keydown",e=>{
   if(e.code==="F3"){ e.preventDefault(); const d=document.getElementById("debug"); d.style.display=d.style.display==="block"?"none":"block"; return; }
   if(e.code==="F5"){ e.preventDefault(); camMode=(camMode+1)%3; showName(["第一人称","第三人称(背后)","第三人称(正面)"][camMode]); return; }
   if(e.code==="KeyH" && !e.repeat){ e.preventDefault(); toggleFullHelp(); return; }
+  if(e.code==="KeyT" && !e.repeat){ e.preventDefault(); toggleChronicle(); return; }
   if(e.code==="Escape" && npcPanelOpen){ closeNPCPanel(); return; }
   if(e.code==="Escape" && craftOpen){ toggleCraft(); return; }
   if(e.code==="Escape" && softLock){ pauseGame(); return; }
