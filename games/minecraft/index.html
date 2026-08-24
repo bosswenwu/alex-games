@@ -298,6 +298,8 @@ const MARBLE=49, ROOFTILE=50;
 const SALTCRUST=51, SALTCRYSTAL=52, BLACKSAND=53, BASALT=54, WINDROCK=55, GLOWVEIN=56;
 const CAVECALC=57, AMETHYST=58, WRECKWOOD=59; // 晶洞方解石/紫晶 · 沉船朽木（图集 235-237）
 const SUSGRAVEL=60;                           // 可疑沙砾: 考古刷点(挖开出土陶片/文物/图纸残页, 复用砂砾贴图 83)
+const TRAPPLATE=61;                           // 机关压力板: 刻纹砂岩(复用石棺侧面 194), 踩上去触发落石/暗箭/滚石
+const LOOSESAND=62;                           // 松沙陷坑: 外观与沙子完全相同(复用贴图 4), 踩塌落坑
 // t=顶面贴图 b=底面 s=侧面 (图集编号)
 const BLOCKS = {
   [GRASS]:  {name:"草方块",   t:0,  b:2,  s:1},
@@ -360,6 +362,8 @@ const BLOCKS = {
   [AMETHYST]:{name:"紫晶簇",    t:236,b:236,s:236},
   [WRECKWOOD]:{name:"沉船朽木", t:237,b:237,s:237},
   [SUSGRAVEL]:{name:"可疑沙砾", t:83, b:83, s:83},   // 考古刷点(视觉同砂砾, 上方有金色微光提示)
+  [TRAPPLATE]:{name:"机关压力板", t:194,b:123,s:194}, // 刻纹压力板(观察得到, 可绕开, 踩上去触发机关)
+  [LOOSESAND]:{name:"松沙",     t:4,  b:4,  s:4},    // 陷坑伪装: 与沙子无异, 踩上去塌陷成坑
 };
 // 植物可以直接走过去; 冰/玻璃/树叶不完全遮挡; 岩浆会陷进去
 const SOLID   = id => id!==AIR && id!==WATER && id!==LAVA && !PLANT(id);   // 碰撞
@@ -833,6 +837,21 @@ function drawStructure(s,put){
     for(let dz=R; dz>=3; dz--){
       box(x-1,h+1,z-dz,x+1,h+3,z-dz,AIR,false);          // 走廊(宽3高3)
       if(dz%4===0){ put(x-1,h+3,z-dz,LANTERN,true); }     // 沿途壁灯
+    }
+    /* ===== 通往墓室的机关陷阱: 压力板(落石/暗箭/滚石) + 松沙隐藏陷坑 =====
+       刻纹压力板铺在走廊正中(可贴墙绕开); 松沙陷坑与沙地无异, 只能靠跳跃越过。 */
+    {
+      const plateZ=[R-2, R-6, R-10];                       // 三块压力板, 卡在通往墓室的必经段
+      for(const dz of plateZ){ if(dz>=3) put(x, h, z-dz, TRAPPLATE, true); }
+      const pitZ = R-4 + Math.floor(rnd(7,3)*2);           // 一处满宽松沙陷坑(位置略随机)
+      if(pitZ>=4 && pitZ<=R-1){
+        for(let ax=-1; ax<=1; ax++){
+          put(x+ax, h, z-pitZ, LOOSESAND, true);           // 伪装地面
+          put(x+ax, h-1, z-pitZ, AIR, true);               // 下方掏空成坑
+          put(x+ax, h-2, z-pitZ, AIR, true);
+          put(x+ax, h-3, z-pitZ, AIR, true);
+        }
+      }
     }
     // 入口门框
     box(x-2,h+1,z-R-1,x+2,h+4,z-R-1,SANDSTONE,false);
@@ -2918,6 +2937,26 @@ function updateRidden(dt){
   if(!isGround && Math.random()<dt*30) particles.push({          // 摩托/飞机推进器尾焰
     x:riding.x+(Math.random()-.5)*0.6, y:riding.y-0.2, z:riding.z+(Math.random()-.5)*0.6,
     vx:0, vy:-1.2, vz:0, life:.3, size:.09, u:15*TS, v:0, l:1.8});
+  // 战车冲撞: 高速行驶时碾压沿途的敌对生物(与普通马坐骑的区分度)
+  if(riding.def.chariot) chariotRam(dt);
+}
+/* 战车碾压: 玩家(驾车)高速经过时对身边敌对生物造成撞击伤害+击退, 撞死累计 chariotState.rams */
+function chariotRam(dt){
+  const spd=Math.hypot(player.vx,player.vz);
+  if(spd<=4) return;
+  for(let i=mobs.length-1;i>=0;i--){
+    const m=mobs[i];
+    if(m._ramCd>0) m._ramCd-=dt;
+    if(m===riding || !m.def.hostile || m.def.mount||m.def.ambient||m.npcRole) continue;
+    if(Math.abs(m.x-player.x)<1.5 && Math.abs(m.z-player.z)<1.5 && Math.abs(m.y-player.y)<2.2 && !(m._ramCd>0)){
+      const d=spd||1, alive0=mobs.indexOf(m);
+      hurtMob(m, 8, player.vx/d*11, player.vz/d*11);
+      m._ramCd=0.6;
+      if(alive0>=0 && mobs.indexOf(m)<0) chariotState.rams++;   // 这一撞把它撞没了
+      for(let k=0;k<7;k++) particles.push({x:m.x,y:m.y+0.8,z:m.z,
+        vx:(Math.random()-.5)*4,vy:Math.random()*3,vz:(Math.random()-.5)*4,life:.3,size:.09,u:15*TS,v:0,l:1.6});
+    }
+  }
 }
 /* =========================================================
    移动端触屏操作
@@ -3262,6 +3301,8 @@ function doBreak(){
   setBlock(hit.x,hit.y,hit.z,AIR);
   sfxBreak();
   if(brokeId===SUSGRAVEL){ archaeologyDig(hit.x,hit.y,hit.z); questAdd("mine",1); return; }  // 考古刷点: 出土文物, 不进背包
+  if(brokeId===TRAPPLATE){ trapFired.add(tkey(hit.x,hit.y,hit.z)); showName("🔧 拆除了机关压力板 — 机关已失效"); return; } // 谨慎的玩家可挖掉压力板来拆解机关
+  if(brokeId===LOOSESAND){ trapFired.add(tkey(hit.x,hit.y,hit.z)); bagAdd(SAND,1); return; }  // 松沙挖开只是普通沙子
   bagAdd(brokeId,1);                                   // 挖到的方块进背包, 供合成消耗
   const bonus=applyBiomeYield(brokeId);
   if(bonus) showName("⛏ "+(BLOCKS[brokeId]?BLOCKS[brokeId].name:"方块")+" + 群系产材 "+bonus.join("、"));
@@ -3695,6 +3736,16 @@ const deerParts  = quadruped(110,111,112,{bw:3.2,bh:4,bl:7,by:13,lh:9,lw:1.2,hs:
 /* ---- 沙漠/草原新动物 ---- */
 const camelParts = quadruped(160,161,162,{bw:3.2,bh:5,bl:9,by:19,lh:14,lw:1.5,hs:3.6,hy:3,tail:1,hump:1});
 const horseParts = quadruped(163,164,165,{bw:3.5,bh:5,bl:9,by:17,lh:12,lw:1.5,hs:3.5,tail:1});
+/* 罗马战车: 复用一匹马(在前拉车) + 车后接大理石车厢与两只车轮, 与普通马坐骑形成外观区分 */
+const chariotParts=(()=>{ const P=P16, CART=233/*大理石*/, WHEEL=123/*深色石轮*/;
+  const p=horseParts.map(o=>Object.assign({},o));   // 复制马身部件(带腿部摆动)
+  const zc=12;                                       // 车厢在马身后方(+z)
+  p.push({p:[0,7*P,zc*P],       o:[0,0,0], s:[3.2*P,1.4*P,3.4*P], tF:CART,tS:CART,tT:CART,tB:CART, sw:0,fix:0}); // 车厢底
+  p.push({p:[0,10*P,(zc+1.5)*P],o:[0,0,0], s:[3.2*P,2.4*P,0.5*P], tF:CART,tS:CART,tT:CART,tB:CART, sw:0,fix:0}); // 前挡板
+  p.push({p:[3.4*P,3.4*P,zc*P], o:[0,0,0], s:[0.4*P,3*P,3*P],     tF:WHEEL,tS:WHEEL,tT:WHEEL,tB:WHEEL, sw:0,fix:0}); // 右轮
+  p.push({p:[-3.4*P,3.4*P,zc*P],o:[0,0,0], s:[0.4*P,3*P,3*P],     tF:WHEEL,tS:WHEEL,tT:WHEEL,tB:WHEEL, sw:0,fix:0}); // 左轮
+  return p;
+})();
 const elephantParts=quadruped(169,170,171,{bw:7,bh:8,bl:13,by:19,lh:11,lw:3,hs:4.5,bigEars:1,tusks:1,trunk:1});
 const lionParts  = quadruped(172,173,174,{bw:3,bh:3.6,bl:6.5,by:8,lh:4.4,lw:1.3,hs:3.4,tail:1,mane:1});
 const tigerParts = quadruped(175,176,177,{bw:2.8,bh:3.3,bl:6.8,by:7.5,lh:4.2,lw:1.2,hs:3.2,tail:1});
@@ -3930,6 +3981,7 @@ const MOB_DEFS={
   // --- 沙漠/草原新动物 ---
   camel:   {name:"骆驼",   hp:18, speed:2.3, w:0.46, h:1.41, hostile:false, poof:160, drop:"meat", parts:camelParts},
   horse:   {name:"马(按E骑乘)",hp:20,speed:6.5,w:0.45, h:1.09, hostile:false, mount:true, groundMount:true, poof:163, drop:"meat", parts:horseParts},
+  chariot: {name:"罗马战车(按E驾驶)",hp:30,speed:10.5,w:0.6, h:1.1, hostile:false, mount:true, groundMount:true, chariot:true, poof:233, drop:"", parts:chariotParts},
   elephant:{name:"大象",   hp:70, speed:1.6, w:0.68, h:1.38, hostile:false, poof:169, drop:"meat", parts:elephantParts},
   lion:    {name:"非洲狮", hp:24, speed:3.5, w:0.30, h:0.54, hostile:true, bigCat:true, aggroRange:20, poof:172, drop:"meat", parts:lionParts},
   tiger:   {name:"老虎",   hp:22, speed:3.7, w:0.31, h:0.43, hostile:true, bigCat:true, aggroRange:20, poof:175, drop:"meat", parts:tigerParts},
@@ -4394,7 +4446,11 @@ function updateMobs(dt){
     }
     let speed=0;
     if(D.hostile){
-      const chasing = !dead && dist<(D.aggroRange||28);      // 鳄鱼等伏击型生物用短探测距离(装作潜伏)
+      if(m.alertT>0) m.alertT-=dt;
+      // 巡逻兵被警戒(自身发现或被同袍呼叫)后, 侦测范围临时扩大, 更难甩脱
+      const aggro=(D.aggroRange||28)+(m.patrol&&m.alertT>0?16:0);
+      const chasing = !dead && dist<aggro;                   // 鳄鱼等伏击型生物用短探测距离(装作潜伏)
+      if(m.patrol) patrolAlert(m, chasing, dist);            // 巡逻兵: 发现玩家→警戒并呼叫同袍
       if(chasing){
         m.tgtYaw=Math.atan2(dx,-dz);
         if(D.ranged){                              // 骷髅/机甲: 放风筝远程
@@ -4440,10 +4496,12 @@ function updateMobs(dt){
             damagePlayer(dmg, dx/dist*6, dz/dist*6);
           }
         }
+      } else if(m.patrol){
+        speed=patrolSteer(m,dt);                  // 巡逻兵: 绕据点巡逻/脱战返岗(覆盖普通游荡与速度)
       } else if(m.t<=0){
         m.t=2+Math.random()*3.5; m.pause=Math.random()<0.35; m.tgtYaw=Math.random()*6.283;
       }
-      if(!chasing && !m.pause) speed=D.speed*0.35;
+      if(!chasing && !m.patrol && !m.pause) speed=D.speed*0.35;
       // 白天阳光下燃烧(苦力怕/蜘蛛/Boss 不燃烧)
       m.burning=false;
       if(sunH>0.08 && !D.creeper && !D.spider && !D.boss){
@@ -4711,9 +4769,10 @@ function trySpawns(dt){
   if(cas){
     let leg=0, cent=0;
     for(const m of mobs){ if(m.type==="legionary") leg++; if(m.type==="centurion") cent++; }
-    if(leg<4 && Math.random()<0.38) spawnMob("legionary",10,30);
-    if(cent===0 && Math.random()<0.20){
-      if(spawnMob("centurion",12,28)) showName("⚔ 百夫长率队巡视要塞！⚔");
+    if(leg<4 && Math.random()<0.38 && spawnMob("legionary",10,30)) makePatroller(mobs[mobs.length-1], cas);
+    if(cent===0 && Math.random()<0.20 && spawnMob("centurion",12,28)){
+      makePatroller(mobs[mobs.length-1], cas);
+      showName("⚔ 百夫长率队巡视要塞！⚔");
     }
   }
   // 凯撒行宫: 终局 Boss, 只在行宫附近出现
@@ -4721,7 +4780,7 @@ function trySpawns(dt){
   if(pal){
     let cae=0, leg2=0;
     for(const m of mobs){ if(m.type==="caesar") cae++; if(m.type==="legionary") leg2++; }
-    if(leg2<3 && Math.random()<0.35) spawnMob("legionary",10,28);
+    if(leg2<3 && Math.random()<0.35 && spawnMob("legionary",10,28)) makePatroller(mobs[mobs.length-1], pal);
     if(cae===0 && !hasBoss && Math.random()<0.30){
       if(spawnMob("caesar",12,26)) showName("👑 凯撒亲临！帝国的终章开始了！👑");
     }
@@ -4775,6 +4834,10 @@ function trySpawns(dt){
   if(planes<3 && Math.random()<0.30) spawnMob("plane", 30, 60);
   // 悬浮摩托: 保证附近总有一辆可骑
   if(bikes<1 && Math.random()<0.5) spawnMob("bike", 6, 16);
+  // 罗马战车: 军团要塞/行宫/广场/斗兽场附近可征用(快速 + 冲撞), 复用坐骑系统
+  let chariots=0; for(const m of mobs) if(m.type==="chariot") chariots++;
+  if(chariots<1 && nearStructure(["castrum","palace","forum","colosseum"],72) && Math.random()<0.4)
+    spawnMob("chariot", 8, 22);
   // 白天生态更热闹: 按群系刷不同动物
   if(!night && pc<18 && Math.random()<0.62){
     const bio=biomeAt(Math.floor(player.x),Math.floor(player.z));
@@ -5863,6 +5926,56 @@ function render(now){
     gl.drawArrays(gl.TRIANGLES,0,drops.length*6);
   }
 
+  // 机关落石/滚石(实体块, 用广告牌绘制)
+  if(typeof trapEnts!=="undefined" && trapEnts.length){
+    const [ldx,ldy,ldz]=lookDir();
+    let rx=-ldz, rz=ldx; const rl=Math.hypot(rx,rz)||1; rx/=rl; rz/=rl;
+    const ux=ldy*rz, uy2=ldz*rx-ldx*rz, uz=-ldy*rx;
+    const tt=TS-2*EP, arr=[];
+    for(const e of trapEnts){
+      const s=e.size, u0=(e.tile%16)*TS+EP, v0=Math.floor(e.tile/16)*TS+EP;
+      const c4=[[-1,-1,0,tt],[1,-1,tt,tt],[1,1,tt,0],[-1,-1,0,tt],[1,1,tt,0],[-1,1,0,0]];
+      for(const [a,b2,du,dv] of c4)
+        arr.push(e.x+(rx*a+ux*b2)*s, e.y+(uy2*b2)*s, e.z+(rz*a+uz*b2)*s, u0+du, v0+dv, 1.0);
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER,partVbo);
+    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(arr),gl.DYNAMIC_DRAW);
+    bindMeshAttribs();
+    gl.drawArrays(gl.TRIANGLES,0,trapEnts.length*6);
+  }
+
+  // 海市蜃楼: 远处幻影绿洲(半透明 billboard, 按 g.alpha 淡入淡出); 每处一簇: 水泊+棕榈冠+仙人掌
+  if(typeof mirages!=="undefined" && mirages.length){
+    const [ldx,ldy,ldz]=lookDir();
+    let rx=-ldz, rz=ldx; const rl=Math.hypot(rx,rz)||1; rx/=rl; rz/=rl;
+    const ux=ldy*rz, uy2=ldz*rx-ldx*rz, uz=-ldy*rx;
+    const tt=TS-2*EP;
+    gl.uniform1i(U.uMode,1);                               // 透明模式: c.a *= uAlpha
+    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+    gl.depthMask(false);
+    // 一簇幻影的相对billboard: [dx,dy(基准), size, tile]  (WATER=5 水泊, LEAVES=8 棕榈冠, CACTUS=73 仙人掌)
+    const cluster=[[0,0.2,3.2,5],[-1.2,2.4,1.9,8],[1.1,2.2,1.7,8],[1.9,1.6,1.3,73]];
+    for(const g of mirages){
+      if(g.alpha<=0.02) continue;
+      const shimmer=Math.sin(mirageT*2+g.phase)*0.18;      // 轻微上下浮动模拟热浪蒸腾
+      const arr=[];
+      for(const [ox,oy,s,tile] of cluster){
+        const u0=(tile%16)*TS+EP, v0=Math.floor(tile/16)*TS+EP;
+        const bx=g.x+rx*ox, bz=g.z+rz*ox, by=g.y+oy+shimmer;
+        const c4=[[-1,-1,0,tt],[1,-1,tt,tt],[1,1,tt,0],[-1,-1,0,tt],[1,1,tt,0],[-1,1,0,0]];
+        for(const [a,b2,du,dv] of c4)
+          arr.push(bx+(rx*a+ux*b2)*s, by+(uy2*b2)*s, bz+(rz*a+uz*b2)*s, u0+du, v0+dv, 1.3);
+      }
+      gl.uniform1f(U.uAlpha, Math.min(0.72, g.alpha*0.72));
+      gl.bindBuffer(gl.ARRAY_BUFFER,partVbo);
+      gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(arr),gl.DYNAMIC_DRAW);
+      bindMeshAttribs();
+      gl.drawArrays(gl.TRIANGLES,0,arr.length/6);
+    }
+    gl.depthMask(true);
+    gl.uniform1i(U.uMode,0); gl.uniform1f(U.uAlpha,1.0);
+  }
+
   // 选择框(跟随瞄准方向)
   const hit=raycast(5.5, currentAim());
   if(hit){
@@ -6224,6 +6337,9 @@ function frame(now){
     updateArch(dt);
     updateArena(dt);
     updateCurse(dt);
+    updateTraps(dt);
+    updatePatrols(dt);
+    updateMirage(dt);
     updateStatsHUD();
     playerEnt.animT += dt*Math.hypot(player.vx,player.vz);
     playerEnt.hurtT = Math.max(0,playerEnt.hurtT-dt);
@@ -6262,6 +6378,8 @@ function collectSave(){
     arch:{ pottery:archState.pottery, pages:archState.pages, digs:archState.digs },
     arena:{ bestWave:arenaState.bestWave, cleared:arenaState.cleared, keys:arenaState.keys },
     curse:{ pharaohSlain:curseState.pharaohSlain },
+    // 尾巴系统累计战绩(机关触发/踩塌/砸中 + 战车碾压); 老存档无 feats → 全归零
+    feats:{ trapsTriggered:trapState.triggered, trapsSprung:trapState.sprung, trapHits:trapState.hits, chariotRams:chariotState.rams },
     // 同时写 id 与下标: 以后往 QUESTS 中间插关卡时, 老存档靠 id 仍能落回正确的关
     bag:(function(){ const o={}; for(const [k,v] of bag) o[k]=v; return o; })(),
     dmgMul:+dmgMul.toFixed(3),
@@ -6323,6 +6441,11 @@ function loadGame(){
   arenaState.active=false; arenaState.wave=0; arenaState.delay=0;
   // 法老诅咒: 只保留击杀战绩; 进行中的诅咒不跨存档(老存档无 curse → 归零)
   const CU=s.curse||{}; curseState.pharaohSlain=CU.pharaohSlain|0; curseState.active=false; curseState.t=0;
+  // 尾巴系统: 恢复累计战绩(老存档无 feats → 归零); 清掉本世界的机关/幻影瞬时状态
+  const FT=s.feats||{};
+  trapState.triggered=FT.trapsTriggered|0; trapState.sprung=FT.trapsSprung|0; trapState.hits=FT.trapHits|0;
+  chariotState.rams=FT.chariotRams|0;
+  trapFired.clear(); trapEnts.length=0; mirages.length=0; mirageSpawnT=2;
   blessT=0; blessKind=""; updateBuffHUD();
   if(s.weather==="sand"||s.weather==="storm"||s.weather==="rain"||s.weather==="clear") weather=s.weather;
   if(s.dmgMul) dmgMul=s.dmgMul;
@@ -6655,6 +6778,208 @@ function updateCurse(dt){
   }
 }
 
+/* ---- D. 金字塔实体机关陷阱: 压力板触发落石/暗箭/滚石, 松沙隐藏陷坑 ----
+   全部是"真方块"机关: 玩家能看见刻纹压力板并绕开, 松沙陷坑外观同沙可跳过; 踩中即触发实体威胁。*/
+const trapState={ triggered:0, sprung:0, hits:0 };
+const trapEnts=[];                                 // 落石/滚石实体(有上限, 防刷屏)
+const trapFired=new Set();                         // 本局已触发的机关坐标(防重复触发)
+const TRAP_CAP=48;
+function tkey(x,y,z){ return x+","+y+","+z; }
+function spawnRock(x,y,z,vy){
+  if(trapEnts.length>=TRAP_CAP) return;
+  trapEnts.push({kind:"rock", x:x+0.5, y, z:z+0.5, vx:0, vz:0, vy:vy||0, tile:(Math.random()<0.5?71:10), size:0.42, life:5});
+}
+function fireDartVolley(px,py,pz){                  // 暗箭: 从四壁向玩家射来(复用敌方箭矢)
+  const dirs=[[1,0],[-1,0],[0,1],[0,-1]];
+  for(const [dx,dz] of dirs){
+    const ox=px - dx*2.4, oz=pz - dz*2.4, oy=py+0.9;
+    const tx=px-ox, ty=(py+0.9)-oy, tz=pz-oz, tl=Math.hypot(tx,ty,tz)||1, sp=15;
+    makeArrow(ox,oy,oz, tx/tl*sp, ty/tl*sp+1.2, tz/tl*sp, true);
+  }
+}
+/* 触发一块压力板: 按坐标散列决定机关类型(落石/暗箭/滚石), 制造步步惊心 */
+function triggerPlate(x,y,z){
+  const k=tkey(x,y,z); if(trapFired.has(k)) return; trapFired.add(k);
+  trapState.triggered++;
+  if(getBlock(x,y,z)===TRAPPLATE) setBlock(x,y,z,SANDSTONE);   // 压下后露出"已触发"的素砂岩
+  const roll=hash3(x*3+1,y*5+2,z*7+3);
+  for(let i=0;i<14;i++) particles.push({x:x+0.5+(Math.random()-.5), y:y+1+Math.random(), z:z+0.5+(Math.random()-.5),
+    vx:(Math.random()-.5)*2, vy:0.5+Math.random()*2, vz:(Math.random()-.5)*2, life:.5, size:.08, u:(83%16)*TS, v:0, l:1.4});
+  if(roll<0.4){                                     // 落石: 从头顶天花板砸下一串碎石
+    showName("⚠ 咔哒——头顶传来碎石松动声！(落石)");
+    for(let n=0;n<4+((roll*10)|0)%3;n++){
+      const cx=Math.floor(player.x)+((Math.random()*3)|0)-1, cz=Math.floor(player.z)+((Math.random()*3)|0)-1;
+      spawnRock(cx, player.y+4+Math.random()*2, cz, -1-Math.random()*2);
+    }
+  } else if(roll<0.72){                              // 暗箭: 四壁齐射
+    showName("⚠ 咻！墙缝射出暗箭！(暗箭)");
+    fireDartVolley(player.x,player.y,player.z);
+  } else {                                           // 滚石: 从走廊深处滚来
+    showName("⚠ 轰隆——巨石滚落，快跑！(滚石)");
+    if(trapEnts.length<TRAP_CAP){
+      const dz=(player.z>z)?1:-1;                    // 朝玩家一侧滚
+      trapEnts.push({kind:"boulder", x:x+0.5, y:y+1.0, z:z+0.5 - dz*3, vx:0, vz:dz*5.5, vy:0, tile:71, size:0.75, life:6});
+    }
+  }
+  sfxLevel && sfxLevel();
+}
+/* 踩塌松沙: 脚下与相邻的松沙一并塌陷, 玩家跌进坑里 */
+function collapsePit(x,y,z){
+  const k=tkey(x,y,z); if(trapFired.has(k)) return; trapFired.add(k);
+  trapState.sprung++;
+  showName("⚠ 脚下一空——松沙陷坑！");
+  for(let ax=-1;ax<=1;ax++) for(let az=-1;az<=1;az++){
+    if(getBlock(x+ax,y,z+az)===LOOSESAND){ setBlock(x+ax,y,z+az,AIR); trapFired.add(tkey(x+ax,y,z+az)); }
+  }
+  for(let i=0;i<18;i++) particles.push({x:x+0.5+(Math.random()-.5)*1.4, y:y+0.4, z:z+0.5+(Math.random()-.5)*1.4,
+    vx:(Math.random()-.5)*2, vy:-Math.random()*2, vz:(Math.random()-.5)*2, life:.5, size:.08, u:(4%16)*TS, v:0, l:1.0});
+  sfxLevel && sfxLevel();
+}
+/* 每帧: 检测玩家脚下机关 + 推进落石/滚石实体 */
+function updateTraps(dt){
+  if(!worldGenReady || dead) return;
+  // 站立方块检测(脚下 0.2 格处即当前踩踏的实体块)
+  if(player.onGround){
+    const bx=Math.floor(player.x), bz=Math.floor(player.z), by=Math.floor(player.y-0.2);
+    const sb=getBlock(bx,by,bz);
+    if(sb===TRAPPLATE) triggerPlate(bx,by,bz);
+    else if(sb===LOOSESAND) collapsePit(bx,by,bz);
+  }
+  // 落石/滚石物理
+  for(let i=trapEnts.length-1;i>=0;i--){
+    const e=trapEnts[i];
+    e.life-=dt; if(e.life<=0){ trapEnts.splice(i,1); continue; }
+    if(e.kind==="rock"){
+      e.vy-=26*dt; e.y+=e.vy*dt;
+      if(Math.random()<dt*22) particles.push({x:e.x+(Math.random()-.5)*.5, y:e.y, z:e.z+(Math.random()-.5)*.5,
+        vx:0, vy:-0.5, vz:0, life:.4, size:.07, u:(83%16)*TS, v:0, l:1.1});
+      // 砸中玩家
+      if(Math.abs(e.x-player.x)<0.7 && Math.abs(e.z-player.z)<0.7 && e.y>player.y-0.3 && e.y<player.y+PH){
+        if(!dead){ damagePlayer(6,0,0); trapState.hits++; }
+        for(let k=0;k<10;k++) particles.push({x:e.x,y:e.y,z:e.z,vx:(Math.random()-.5)*4,vy:Math.random()*3,vz:(Math.random()-.5)*4,life:.4,size:.1,u:(83%16)*TS,v:0,l:1.2});
+        trapEnts.splice(i,1); continue;
+      }
+      // 落地
+      const gb=getBlock(Math.floor(e.x),Math.floor(e.y-0.4),Math.floor(e.z));
+      if(SOLID(gb) || e.y<-8){
+        for(let k=0;k<8;k++) particles.push({x:e.x,y:e.y,z:e.z,vx:(Math.random()-.5)*3,vy:Math.random()*2,vz:(Math.random()-.5)*3,life:.4,size:.09,u:(83%16)*TS,v:0,l:1.0});
+        trapEnts.splice(i,1); continue;
+      }
+    } else {                                         // boulder: 沿走廊滚动
+      const nx=e.x+e.vx*dt, nz=e.z+e.vz*dt;
+      if(SOLID(getBlock(Math.floor(nx),Math.floor(e.y),Math.floor(nz)))){ trapEnts.splice(i,1); continue; } // 撞墙停
+      e.x=nx; e.z=nz;
+      if(Math.random()<dt*30) particles.push({x:e.x+(Math.random()-.5)*.8, y:e.y-0.3, z:e.z+(Math.random()-.5)*.8,
+        vx:0, vy:0.3, vz:0, life:.4, size:.09, u:(83%16)*TS, v:0, l:1.1});
+      if(Math.abs(e.x-player.x)<0.9 && Math.abs(e.z-player.z)<0.9 && player.y>e.y-1.2 && player.y<e.y+1.4){
+        if(!dead){ const d=Math.hypot(e.vx,e.vz)||1; damagePlayer(6, e.vx/d*9, e.vz/d*9); trapState.hits++; }
+        trapEnts.splice(i,1); continue;
+      }
+    }
+  }
+}
+
+/* ---- E. 军团据点巡逻 AI: 军团兵沿据点绕圈巡逻 + 警戒呼叫同袍 + 脱战返岗 ----
+   patrol 兵在 updateMobs 的敌对分支里被特殊处理: 不追击时走 patrolSteer(绕据点/返岗),
+   追击时走原有追杀逻辑; patrolAlert 负责"发现玩家→拉高警戒并召集附近同袍"。*/
+const patrolState={ alerts:0, active:0 };
+// 把一名刚生成的军团兵登记为据点巡逻兵(home = 据点结构中心)
+function makePatroller(m, home){
+  if(!m || !home) return false;
+  m.patrol=true; m.homeX=home.x; m.homeZ=home.z;
+  m.patrolR=7+Math.random()*7; m.wpAng=Math.random()*6.283; m.wpT=0; m.alertT=0; m.state="patrol";
+  return true;
+}
+// 不追击时的巡逻转向: 离据点太远→返岗; 否则沿半径 patrolR 的圆周一段段巡逻。返回本帧移动速度。
+function patrolSteer(m,dt){
+  const D=m.def;
+  const hx=(m.homeX!==undefined?m.homeX:m.x), hz=(m.homeZ!==undefined?m.homeZ:m.z);
+  const R=m.patrolR||8;
+  const distHome=Math.hypot(m.x-hx, m.z-hz);
+  if(distHome > R+10){                              // 脱战/走太远 → 直线返岗
+    m.state="return";
+    m.tgtYaw=Math.atan2(hx-m.x, -(hz-m.z));
+    return D.speed*0.9;
+  }
+  m.state="patrol";
+  if(m.wpT===undefined) m.wpT=0;
+  m.wpT-=dt;
+  const tx=hx+Math.sin(m.wpAng)*R, tz=hz+Math.cos(m.wpAng)*R;
+  const dxt=tx-m.x, dzt=tz-m.z, dd=Math.hypot(dxt,dzt);
+  if(dd<2.2 || m.wpT<=0){                           // 到点或超时 → 沿圆周推进到下一个巡逻点
+    m.wpAng += 0.6+Math.random()*0.5;
+    m.wpT=6;
+  }
+  m.tgtYaw=Math.atan2(dxt,-dzt);
+  return D.speed*0.55;                              // 行军速度(慢于追击, 快于普通游荡)
+}
+// 巡逻兵发现玩家: 拉高自身警戒(扩大侦测半径, 见 aggro 计算), 并召集附近同袍一起警戒
+function patrolAlert(m, chasing, dist){
+  if(chasing && mobCanSeePlayer(m)){
+    if(m.alertT<=0){
+      patrolState.alerts++;
+      if(dist<22 && Math.random()<0.5) showName("⚔ 罗马军团发现入侵者——列队迎敌！");
+    }
+    m.alertT=6;
+    for(const o of mobs){
+      if(o!==m && o.patrol && Math.hypot(o.x-m.x,o.z-m.z)<18) o.alertT=Math.max(o.alertT,4);
+    }
+  }
+}
+// 每帧统计(实际转向在 updateMobs 内完成; 这里维护调试可读的驻防数量)
+function updatePatrols(dt){
+  if(!worldGenReady) return;
+  let n=0; for(const m of mobs) if(m.patrol) n++;
+  patrolState.active=n;
+}
+
+/* ---- F. 海市蜃楼: 干旱群系远处渲染幻影绿洲(棕榈/水泊/仙人掌), 走近到一定距离淡出消散 ----
+   纯视觉 + 距离逻辑, 有数量上限(MIRAGE_CAP); 不产生碰撞、不掉落、不进战斗。*/
+const mirages=[];
+const MIRAGE_CAP=6;
+let mirageT=0, mirageSpawnT=2;
+function biomeDryHere(){
+  const b=biomeAt(Math.floor(player.x),Math.floor(player.z));
+  return b===BIO_DESERT||b===BIO_MESA||b===BIO_SAVANNA;
+}
+function spawnMirage(){
+  if(mirages.length>=MIRAGE_CAP) return false;
+  const ang=Math.random()*6.283, d=72+Math.random()*46;         // 放在地平线附近(远处)
+  mirages.push({ x:player.x+Math.sin(ang)*d, z:player.z+Math.cos(ang)*d, y:WATER_Y+2+Math.random()*2,
+                 phase:Math.random()*6.283, alpha:0, born:0 });
+  return true;
+}
+function updateMirage(dt){
+  if(!worldGenReady) return;
+  mirageT+=dt;
+  const dry=biomeDryHere();
+  mirageSpawnT-=dt;
+  if(dry && mirageSpawnT<=0){
+    mirageSpawnT=4+Math.random()*4;
+    if(mirages.length<MIRAGE_CAP && Math.random()<0.7) spawnMirage();
+  }
+  const fadeNear=26, fadeFar=48;
+  for(let i=mirages.length-1;i>=0;i--){
+    const g=mirages[i];
+    const dist=Math.hypot(g.x-player.x, g.z-player.z);
+    g.born+=dt;
+    const target = dry ? clamp((dist-fadeNear)/(fadeFar-fadeNear),0,1) : 0;  // 远处清晰, 走近淡出
+    g.alpha += (target-g.alpha)*Math.min(1,dt*2.5);
+    if((dist<fadeNear-4 && g.alpha<0.03) || (!dry && g.alpha<0.02) || g.born>60){ mirages.splice(i,1); continue; }
+    if(dist<fadeNear+8){                                          // 可望不可及: 靠近时幻影缓缓后退
+      const ux=(g.x-player.x)/(dist||1), uz=(g.z-player.z)/(dist||1);
+      g.x+=ux*dt*3.2; g.z+=uz*dt*3.2;
+    }
+  }
+}
+
+/* ---- G. 罗马战车坐骑: 复用坐骑(groundMount)系统的"战车"变体 — 更快 + 冲撞伤害 ----
+   骑乘/驾驶沿用 toggleRide/updateRidden/driving 逻辑; 战车额外在高速时碾压沿途敌对生物。*/
+const chariotState={ rams:0 };
+window.__sandsea_ext = {
+  patrolState, mirages, chariotState, makePatroller, patrolSteer, spawnMirage
+};
+
 window.__game = {
   get player(){ return player; },
   get mobs(){ return mobs; },
@@ -6677,6 +7002,23 @@ window.__game = {
   startArena, endArena:(w)=>endArena(!!w), spawnArenaWave:(i)=>{ arenaState.cx=player.x; arenaState.cz=player.z; return spawnArenaWave(i|0); },
   get curse(){ return { active:curseState.active, t:+curseState.t.toFixed(1), pharaohSlain:curseState.pharaohSlain }; },
   applyCurse, slayPharaoh:()=>onPharaohSlain(), awakenPharaoh:()=>{ const p=player; awakenPharaoh(Math.floor(p.x)+2, Math.floor(p.y), Math.floor(p.z)); return curseState.active; },
+  // 金字塔实体机关陷阱
+  get traps(){ return { triggered:trapState.triggered, sprung:trapState.sprung, hits:trapState.hits, ents:trapEnts.length, cap:TRAP_CAP, fired:trapFired.size }; },
+  triggerTrapAt:(x,y,z)=>{ triggerPlate(x|0,y|0,z|0); return trapState.triggered; },
+  // 军团据点巡逻 AI
+  get patrolInfo(){ return { alerts:patrolState.alerts, active:patrolState.active,
+    patrollers:mobs.filter(m=>m.patrol).map(m=>({type:m.type, state:m.state, alert:m.alertT>0,
+      homeDist:+Math.hypot(m.x-m.homeX,m.z-m.homeZ).toFixed(1)})) }; },
+  makePatrollerHere:(type)=>{ const home={x:player.x,z:player.z}; if(!spawnMob(type||"legionary",6,12)) return false;
+    const m=mobs[mobs.length-1]; return makePatroller(m, home) ? m.type : false; },
+  // 海市蜃楼
+  get mirage(){ return { count:mirages.length, cap:MIRAGE_CAP, dry:biomeDryHere(),
+    items:mirages.map(g=>({dist:+Math.hypot(g.x-player.x,g.z-player.z).toFixed(1), alpha:+g.alpha.toFixed(2)})) }; },
+  spawnMirageNow:()=>spawnMirage(), updateMirageStep:(dt)=>{ updateMirage(dt||0.05); return mirages.length; },
+  // 罗马战车坐骑
+  get chariot(){ return { rams:chariotState.rams, spawned:mobs.filter(m=>m.type==="chariot").length,
+    riding:!!(riding&&riding.def.chariot), speed:MOB_DEFS.chariot.speed, horseSpeed:MOB_DEFS.horse.speed }; },
+  spawnChariot:()=>{ const r=spawnMob("chariot",6,12); return r?mobs[mobs.length-1].type:false; },
   spawnNPC:(role)=>spawnNPC(role, 4, 6),
   spawnDigSite(){ const bx=Math.floor(player.x)+2, bz=Math.floor(player.z), gy=groundY(bx,bz); if(gy<0) return false;
     setBlock(bx,gy-1,bz,SUSGRAVEL); digSites.push({x:bx,y:gy-1,z:bz}); return true; },
@@ -7030,6 +7372,106 @@ function selftest(){
     ok("诅咒战绩能从存档还原", curseState.pharaohSlain===3, "slain="+curseState.pharaohSlain);
     Object.assign(curseState,curseSnap); arenaState.keys=akeys0;
     bag.clear(); for(const [k,v] of bagSnapC) bag.set(k,v); xp=xpC; lvl=lvlC; maxHp=maxC; dmgMul=dmgC; hp=hpC; updateHearts(); updateXPHUD();
+
+    // 8j. 军团据点巡逻 AI: 登记/巡逻/返岗/警戒呼叫/驻防计数
+    {
+      const mobsSnapP=mobs.slice(); mobs.length=0;
+      const pAlerts0=patrolState.alerts, py0=player.y;
+      player.y=120;                                   // 抬到高空, 保证视线不被地形挡(警戒断言稳定)
+      const mk=(dx,dz)=>({type:"legionary",def:MOB_DEFS.legionary,x:player.x+dx,y:player.y,z:player.z+dz,
+        vx:0,vy:0,vz:0,kbx:0,kbz:0,yaw:0,tgtYaw:0,hp:34,hurtT:0,animT:0,t:0,atkCd:0,burnT:0,swingT:0,
+        groanT:0,fleeT:0,onGround:true,pause:false,burning:false,held:null,alertT:0});
+      const p1=mk(3,0), p2=mk(4,0); mobs.push(p1,p2);
+      ok("巡逻兵可登记到据点", makePatroller(p1,{x:player.x,z:player.z})===true && p1.patrol && p1.homeX!==undefined, "home=("+(p1.homeX|0)+","+(p1.homeZ|0)+")");
+      makePatroller(p2,{x:player.x,z:player.z});
+      p1.x=player.x+40; p1.z=player.z;                // 远离据点 → 应返岗
+      const rsp=patrolSteer(p1,0.1);
+      ok("巡逻兵脱离据点会返岗", p1.state==="return" && rsp>0, "state="+p1.state+" spd="+rsp.toFixed(2));
+      p1.x=player.x+9; p1.z=player.z;                 // 回到巡逻半径内 → 绕圈巡逻
+      const psp=patrolSteer(p1,0.1);
+      ok("巡逻兵在据点范围内绕圈巡逻", p1.state==="patrol" && psp>0, "state="+p1.state+" spd="+psp.toFixed(2));
+      p1.x=player.x+1.4; p1.z=player.z; p2.x=player.x+1.6; p2.z=player.z; p2.alertT=0;
+      patrolAlert(p1, true, 1.4);
+      ok("巡逻兵发现玩家进入警戒", p1.alertT>0 && patrolState.alerts===pAlerts0+1, "alertT="+p1.alertT.toFixed(1)+" alerts="+patrolState.alerts);
+      ok("警戒会呼叫附近同袍一起戒备", p2.alertT>0, "同袍alertT="+p2.alertT.toFixed(1));
+      updatePatrols(0.05);
+      ok("驻防巡逻数量统计正确", patrolState.active===2, "active="+patrolState.active);
+      player.y=py0; patrolState.alerts=pAlerts0;
+      mobs.length=0; for(const m of mobsSnapP) mobs.push(m);
+    }
+
+    // 8k. 海市蜃楼: 干旱群系生成 / 上限 / 远处淡入 / 走近淡出消散
+    {
+      const mSnap=mirages.slice(); mirages.length=0;
+      const fx=player.x, fz=player.z; let moved=false;
+      // 找一处干旱群系(沙漠/台地/草原)站上去, 让 biomeDryHere() 为真(biomeAt 是纯噪声, 不需加载区块)
+      outer: for(let ax=-3000;ax<=3000;ax+=96) for(let az=-3000;az<=3000;az+=96){
+        const b=biomeAt(Math.floor(fx+ax),Math.floor(fz+az));
+        if(b===BIO_DESERT||b===BIO_MESA||b===BIO_SAVANNA){ player.x=fx+ax; player.z=fz+az; moved=true; break outer; }
+      }
+      ok("能定位到干旱群系(海市蜃楼场景)", moved && biomeDryHere(), "dry="+biomeDryHere());
+      ok("海市蜃楼可生成幻影绿洲", spawnMirage()===true && mirages.length===1, "count="+mirages.length);
+      for(let i=0;i<20;i++) spawnMirage();
+      ok("幻影数量有 draw 上限(≤"+MIRAGE_CAP+")", mirages.length<=MIRAGE_CAP, "count="+mirages.length);
+      mirages.length=0; mirages.push({x:player.x+60,z:player.z,y:WATER_Y+2,phase:0,alpha:0,born:0});
+      for(let i=0;i<30;i++) updateMirage(0.1);
+      const farA=mirages.length?mirages[0].alpha:0;
+      ok("远处幻影会淡入显现", farA>0.3, "alpha="+farA.toFixed(2));
+      mirages.length=0; mirages.push({x:player.x+10,z:player.z,y:WATER_Y+2,phase:0,alpha:0.7,born:0});
+      for(let i=0;i<40;i++) updateMirage(0.1);
+      const nearGone = mirages.length===0 || mirages[0].alpha<0.3;
+      ok("走近后幻影淡出消散", nearGone, mirages.length?("alpha="+mirages[0].alpha.toFixed(2)):"已移除");
+      mirages.length=0; for(const g of mSnap) mirages.push(g);
+      player.x=fx; player.z=fz; pcx=1e9; refreshChunks();
+    }
+
+    // 8l. 罗马战车坐骑: 已注册/更快/模型合法/高速冲撞击杀累计
+    {
+      ok("战车已注册为坐骑(groundMount)", !!MOB_DEFS.chariot && !!MOB_DEFS.chariot.mount && !!MOB_DEFS.chariot.groundMount && !!MOB_DEFS.chariot.chariot, "def="+!!MOB_DEFS.chariot);
+      ok("战车比马更快(操控区分度)", MOB_DEFS.chariot.speed>MOB_DEFS.horse.speed, "战车="+MOB_DEFS.chariot.speed+" 马="+MOB_DEFS.horse.speed);
+      let badC=null;
+      for(const pt of MOB_DEFS.chariot.parts){ for(const k of ["tF","tS","tT","tB"]){ const ti=pt[k]; if(!(ti>=0&&ti<=255)){ badC=k+"="+ti; break; } } if(badC) break; }
+      ok("战车模型贴图索引合法(0-255)", !badC, badC||(MOB_DEFS.chariot.parts.length+" 部件通过"));
+      const mobsSnapC=mobs.slice(); mobs.length=0;
+      const rams0=chariotState.rams, ridingPrev=riding, vxP=player.vx, vzP=player.vz;
+      const killsP=kills, xpP=xp, lvlP=lvl, dmgP=dmgMul, maxP=maxHp, hpP=hp;
+      const qiP=questIdx, qpP=questProg, qdP=questDone, dropLen=drops.length;
+      const ch={type:"chariot",def:MOB_DEFS.chariot,x:player.x,y:player.y,z:player.z,vx:0,vy:0,vz:0,kbx:0,kbz:0,yaw:0,tgtYaw:0,hp:30,hurtT:0,animT:0,t:0,atkCd:0,burnT:0,swingT:0,groanT:0,fleeT:0,onGround:true,pause:false,burning:false,held:null};
+      const foe={type:"zombie",def:MOB_DEFS.zombie,x:player.x+1,y:player.y,z:player.z,vx:0,vy:0,vz:0,kbx:0,kbz:0,yaw:0,tgtYaw:0,hp:2,hurtT:0,animT:0,t:0,atkCd:0,burnT:0,swingT:0,groanT:0,fleeT:0,onGround:true,pause:false,burning:false,held:null,_ramCd:0};
+      mobs.push(ch,foe); riding=ch; player.vx=12; player.vz=0;
+      chariotRam(0.05);
+      ok("战车高速冲撞造成伤害/击杀敌人", mobs.indexOf(foe)<0 || foe.hp<2, "foeHp="+foe.hp+" 存活="+(mobs.indexOf(foe)>=0));
+      ok("战车碾压击杀会累计 rams", chariotState.rams>=rams0+1, "rams="+chariotState.rams+"(基线"+rams0+")");
+      riding=ridingPrev; player.vx=vxP; player.vz=vzP;
+      kills=killsP; xp=xpP; lvl=lvlP; dmgMul=dmgP; maxHp=maxP; hp=hpP;
+      questIdx=qiP; questProg=qpP; questDone=qdP; drops.length=dropLen;
+      chariotState.rams=rams0;
+      mobs.length=0; for(const m of mobsSnapC) mobs.push(m);
+      updateHearts(); updateXPHUD(); updateQuestHUD();
+    }
+
+    // 8m. 金字塔实体机关陷阱 + 尾巴战绩 feats 存档往返 + 老存档兼容
+    {
+      const trapSnap=Object.assign({},trapState), chSnap=Object.assign({},chariotState);
+      const firedSnap=new Set(trapFired), entLen=trapEnts.length, arrLen=arrows.length;
+      const t0=trapState.triggered;
+      triggerPlate(999999,60,999999);
+      ok("机关压力板可被触发", trapState.triggered===t0+1, "triggered="+trapState.triggered);
+      triggerPlate(999999,60,999999);                 // 重复触发同一坐标应被 trapFired 挡下
+      ok("同一机关不会重复触发", trapState.triggered===t0+1, "triggered="+trapState.triggered);
+      for(let i=0;i<80;i++) spawnRock(999990+i,70,999990,-1);
+      ok("落石/滚石实体有上限(≤"+TRAP_CAP+")", trapEnts.length<=TRAP_CAP, "ents="+trapEnts.length);
+      trapState.triggered=12; trapState.sprung=3; trapState.hits=5; chariotState.rams=4;
+      const wroteF=collectSave();
+      ok("尾巴战绩写入存档(feats)", wroteF.feats && wroteF.feats.trapsTriggered===12 && wroteF.feats.chariotRams===4, "feats="+JSON.stringify(wroteF.feats));
+      { const legacy=Object.assign({},wroteF); delete legacy.feats;   // 模拟老存档缺 feats 字段
+        const F=legacy.feats||{}; trapState.triggered=F.trapsTriggered|0; chariotState.rams=F.chariotRams|0; }
+      ok("老存档(无feats字段)兼容归零", trapState.triggered===0 && chariotState.rams===0, "triggered="+trapState.triggered+" rams="+chariotState.rams);
+      { const F=wroteF.feats; trapState.triggered=F.trapsTriggered|0; trapState.sprung=F.trapsSprung|0; trapState.hits=F.trapHits|0; chariotState.rams=F.chariotRams|0; }
+      ok("尾巴战绩能从存档还原", trapState.triggered===12 && chariotState.rams===4, "triggered="+trapState.triggered+" rams="+chariotState.rams);
+      Object.assign(trapState,trapSnap); Object.assign(chariotState,chSnap);
+      trapFired.clear(); for(const k of firedSnap) trapFired.add(k); trapEnts.length=entLen; arrows.length=arrLen;
+    }
 
     // 9. 渲染管线仍然可用
     let renderErr=null;
