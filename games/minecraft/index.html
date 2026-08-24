@@ -4641,7 +4641,7 @@ let xp=0, lvl=1;
 const xpNeed = l => 20+ (l-1)*18;
 let dmgMul=1, maxHp=20;
 function addXP(n){
-  xp+=n;
+  xp+=Math.round(n*omenXpMul());              // 阿波罗天象 → 经验 ×1.5
   while(xp>=xpNeed(lvl)){
     xp-=xpNeed(lvl); lvl++;
     maxHp=Math.min(40,20+(lvl-1)*2);
@@ -6324,6 +6324,7 @@ function frame(now){
     }
     eatCd=Math.max(0,eatCd-dt);
     djinnState.cd=Math.max(0,djinnState.cd-dt);
+    tickOmen(dt);
     arrowCd=Math.max(0,arrowCd-dt);
     gunCd=Math.max(0,gunCd-dt);
     rocketCd=Math.max(0,rocketCd-dt);
@@ -6818,6 +6819,28 @@ function summonDjinn(){
   return w.n;
 }
 
+/* ---- 🏛 希腊神谕 · 天象预言: 定期宣告随机天象, 给世界加"限时修正", 每局节奏不同 ---- */
+const omenState={ kind:"", t:0 };
+let omenTimer=140;                                 // 首次约 2 分钟后, 之后每 ~180s 一则
+const OMENS=[
+  { k:"apollo",  n:"☀️ 阿波罗的恩泽 · 经验 ×1.5" },
+  { k:"hermes",  n:"🪙 赫尔墨斯的慷慨 · 考古掘宝更丰" },
+  { k:"ares",    n:"⚔️ 阿瑞斯的躁动 · 战意高涨，夜色不宁" },
+  { k:"demeter", n:"🌾 得墨忒耳的丰饶 · 万物生息" },
+];
+function omenXpMul(){ return omenState.kind==="apollo" ? 1.5 : 1; }
+function omenActive(k){ return omenState.kind===k && omenState.t>0; }
+function proclaimOmen(force){
+  const o = force ? (OMENS.find(x=>x.k===force)||OMENS[0]) : OMENS[Math.floor(Math.random()*OMENS.length)];
+  omenState.kind=o.k; omenState.t=180;
+  showName("🔮 神谕宣示："+o.n+"（180 秒）");
+  return o.k;
+}
+function tickOmen(dt){
+  if(omenState.t>0){ omenState.t-=dt; if(omenState.t<=0){ omenState.kind=""; showName("🔮 天象消退，神谕归于沉寂。"); } }
+  else { omenTimer-=dt; if(omenTimer<=0){ omenTimer=180; proclaimOmen(); } }
+}
+
 /* ---- D. 金字塔实体机关陷阱: 压力板触发落石/暗箭/滚石, 松沙隐藏陷坑 ----
    全部是"真方块"机关: 玩家能看见刻纹压力板并绕开, 松沙陷坑外观同沙可跳过; 踩中即触发实体威胁。*/
 const trapState={ triggered:0, sprung:0, hits:0 };
@@ -7037,6 +7060,8 @@ window.__game = {
   addFaction:(side,n)=>addFaction(side,n),
   get djinn(){ return { rubs:djinnState.rubs, cd:+djinnState.cd.toFixed(1), wishes:WISHES.map(w=>w.n) }; },
   summonDjinn:()=>summonDjinn(),
+  get omen(){ return { kind:omenState.kind, t:+omenState.t.toFixed(1), xpMul:omenXpMul(), all:OMENS.map(o=>o.n) }; },
+  proclaimOmen:(k)=>proclaimOmen(k),
   get payoff(){ return { landmarks:[...landSeen], types:[...landTypesSeen()], total:PAYOFF_N, weather, underCover:underCover(), yield:BIOME_YIELD }; },
   get npc(){ return { relics:npcState.relics, traderMet:npcState.traderMet, oracleMet:npcState.oracleMet, trades:npcState.trades, blessings:npcState.blessings,
                       bless:{kind:blessKind, t:+blessT.toFixed(1)}, talk:talkNpc?talkNpc.npcRole:null, panelOpen:npcPanelOpen,
