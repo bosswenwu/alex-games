@@ -3088,7 +3088,7 @@ function chronicleHTML(){
   const ex = expeditionState.active ? ("进行中 · 距"+Math.round(expeditionDist())+"m · 剩"+Math.ceil(expeditionState.t)+"s") : "无";
   const row=(k,v)=>'<div class="cr-row"><span class="cr-k">'+k+'</span><span class="cr-v">'+v+'</span></div>';
   return '<h2>📜 沙海编年史</h2>'
-    + row('🦅 罗马军团', rt.name+' ('+faction.rome+'/100)'+(faction.rome<12?' · ⚠敌对':''))
+    + row('🦅 罗马军团', rt.name+' ('+faction.rome+'/100)'+(romeWanted()?' · ⚔通缉中'+Math.ceil(romeWantedT)+'s':(faction.rome<12?' · ⚠冷淡':'')))
     + row('☥ 埃及祭司', et.name+' ('+faction.egypt+'/100)')
     + row('🗺 群系图鉴', bioSeen.size+' / '+CODEX_TOTAL)
     + row('🏺 文物碎片', npcState.relics)
@@ -4222,6 +4222,10 @@ function hurtMob(m,dmg,kx,kz,silent){
       if(m.type==="centurion") questSet("centurion");
       if(m.type==="caesar")    questSet("caesar");
       if(m.type==="pharaoh")   onPharaohSlain();     // 斩杀法老: 解咒 + 开法老宝库
+      if((m.type==="legionary"||m.type==="centurion") && !m.arena){   // 斩杀非斗兽场军团兵 → 触怒罗马 + 通缉
+        romeWantedT=Math.min(90, romeWantedT+35); addFaction('rome',-5);
+        if(romeWantedT<=35) showName("⚔ 你袭击了罗马军团！据点巡逻兵已被激怒，将主动追杀你…");
+      }
     }
     addXP(MOB_XP[m.type]||3);
     if(m.def.boss){ boss=null; showName("★ 你击败了"+m.def.name+"！★"); sfxLevel(); }
@@ -4485,7 +4489,7 @@ function updateMobs(dt){
     if(D.hostile){
       if(m.alertT>0) m.alertT-=dt;
       // 巡逻兵被警戒(自身发现或被同袍呼叫)后, 侦测范围临时扩大, 更难甩脱
-      const aggro=(D.aggroRange||28)+(m.patrol&&m.alertT>0?16:0);
+      const aggro=(D.aggroRange||28)+(m.patrol&&m.alertT>0?16:0)+((m.patrol&&romeWanted())?45:0);   // 通缉期间: 罗马巡逻兵警戒范围暴涨, 主动来袭
       const chasing = !dead && dist<aggro;                   // 鳄鱼等伏击型生物用短探测距离(装作潜伏)
       if(m.patrol) patrolAlert(m, chasing, dist);            // 巡逻兵: 发现玩家→警戒并呼叫同袍
       if(chasing){
@@ -6361,6 +6365,7 @@ function frame(now){
     }
     eatCd=Math.max(0,eatCd-dt);
     djinnState.cd=Math.max(0,djinnState.cd-dt);
+    romeWantedT=Math.max(0,romeWantedT-dt);
     tickOmen(dt);
     tickBazaar(dt);
     tickExpedition(dt);
@@ -6836,6 +6841,8 @@ const FAC_MAX=100;
 const faction={ rome:0, egypt:0 };
 const FAC_TIERS=[[0,'相识'],[25,'友善'],[50,'盟友'],[75,'尊崇']];
 function facTier(v){ let idx=0; for(let i=0;i<FAC_TIERS.length;i++) if(v>=FAC_TIERS[i][0]) idx=i; return {name:FAC_TIERS[idx][1], idx}; }
+let romeWantedT=0;                                  // 通缉计时: 斩杀(非斗兽场)军团兵→结仇, 期间罗马巡逻兵主动来袭
+function romeWanted(){ return romeWantedT>0; }
 function addFaction(side,n){
   const before=facTier(faction[side]).idx;
   faction[side]=Math.max(0, Math.min(FAC_MAX, faction[side]+n));
@@ -7174,9 +7181,10 @@ window.__game = {
   openBazaar:()=>openBazaar(), buyWare:(i)=>buyWare(i),
   get expedition(){ return { active:expeditionState.active, dist:expeditionState.active?+expeditionDist().toFixed(0):-1, t:+expeditionState.t.toFixed(1), fleeces:expeditionState.fleeces }; },
   startExpedition:()=>startExpedition(), claimExpedition:(f)=>claimExpedition(f),
-  get chains(){ return { aresRaid:omenActive('ares'), aresSpawnMul:omenActive('ares')?0.55:1, hermesDig:omenActive('hermes'), demeterRegen:omenActive('demeter'), poseidonStorm:omenActive('poseidon'), romeBazaarDiscount:facTier(faction.rome).idx>=2?1:0 }; },
+  get chains(){ return { aresRaid:omenActive('ares'), aresSpawnMul:omenActive('ares')?0.55:1, hermesDig:omenActive('hermes'), demeterRegen:omenActive('demeter'), poseidonStorm:omenActive('poseidon'), romeBazaarDiscount:facTier(faction.rome).idx>=2?1:0, romeWanted:romeWanted(), romeWantedT:+romeWantedT.toFixed(1) }; },
   get undeadNight(){ return { active:undeadNight.active, t:+undeadNight.t.toFixed(1), spawnMul:undeadSpawnMul(), survived:undeadNight.survived }; },
   startUndeadNight:()=>startUndeadNight(),
+  provokeRome:()=>{ romeWantedT=Math.min(90, romeWantedT+35); addFaction('rome',-5); return { wanted:romeWanted(), t:+romeWantedT.toFixed(1) }; },   // 等效于斩杀军团兵(调试/程序触发)
   get payoff(){ return { landmarks:[...landSeen], types:[...landTypesSeen()], total:PAYOFF_N, weather, underCover:underCover(), yield:BIOME_YIELD }; },
   get npc(){ return { relics:npcState.relics, traderMet:npcState.traderMet, oracleMet:npcState.oracleMet, trades:npcState.trades, blessings:npcState.blessings,
                       bless:{kind:blessKind, t:+blessT.toFixed(1)}, talk:talkNpc?talkNpc.npcRole:null, panelOpen:npcPanelOpen,
