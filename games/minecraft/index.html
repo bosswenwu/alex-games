@@ -6945,12 +6945,25 @@ function tickExpedition(dt){
 }
 
 /* ---- 🌑 亡者之夜围城: 定期降临的亡者之潮, 刷怪暴增, 撑到潮落得厚赏; 阿瑞斯天象使其更勤(连锁) ---- */
-const undeadNight={ active:false, t:0, cd:280, survived:0 };
-function startUndeadNight(){ undeadNight.active=true; undeadNight.t=100;
+const undeadNight={ active:false, t:0, cd:280, survived:0, bossSpawned:false };
+function startUndeadNight(){ undeadNight.active=true; undeadNight.t=100; undeadNight.bossSpawned=false;
   showName("🌑 亡者之夜降临！沙海亡魂倾巢而出 — 撑到潮落(约100秒)必有厚赏！"); return true; }
 function undeadSpawnMul(){ return undeadNight.active ? 0.45 : 1; }   // 亡者之夜 → 刷怪极急
+function spawnUndeadPharaoh(){   // 亡者之夜潮尾: 亡灵法老亲临(复用法老Boss, 斩杀→onPharaohSlain 给宝库钥匙+宝藏)
+  if(mobs.some(m=>m.type==="pharaoh")) return false;
+  const def=MOB_DEFS.pharaoh; if(!def) return false;
+  const ang=Math.random()*6.283, px=Math.round(player.x+Math.cos(ang)*8), pz=Math.round(player.z+Math.sin(ang)*8);
+  const py=(typeof groundY==="function"?groundY(px,pz):Math.round(player.y))+1;
+  mobs.push({type:"pharaoh", def, x:px+0.5, y:py, z:pz+0.5, vx:0,vy:0,vz:0, kbx:0,kbz:0,
+             yaw:Math.random()*6.283, tgtYaw:0, hp:def.hp, hurtT:0, animT:0, t:0,
+             atkCd:0, burnT:0, swingT:0, groanT:0, fleeT:0, onGround:false, pause:false, burning:false,
+             held: heldFor(def.weapon, def.handP)});
+  showName("🏺 亡灵法老亲临亡者之夜！斩杀祂可夺法老宝库 ☥");
+  return true;
+}
 function tickUndeadNight(dt){
   if(undeadNight.active){ undeadNight.t-=dt;
+    if(undeadNight.t<=25 && !undeadNight.bossSpawned){ undeadNight.bossSpawned=true; spawnUndeadPharaoh(); }   // 潮尾: 亡灵法老登场
     if(undeadNight.t<=0){ undeadNight.active=false; undeadNight.survived++;
       giveBlock(GOLD_ORE,16); giveBlock(GEM_ORE,6); addXP(140); if(armor<5){ armor++; updateHearts(); }
       showName("🌅 亡者之潮退去，你挺过了亡者之夜！(金x16 钻x6 +140经验 护甲+1) · 累计幸存 "+undeadNight.survived+" 夜"); }
@@ -7185,7 +7198,7 @@ window.__game = {
   startExpedition:()=>startExpedition(), claimExpedition:(f)=>claimExpedition(f),
   get chains(){ return { aresRaid:omenActive('ares'), aresSpawnMul:omenActive('ares')?0.55:1, hermesDig:omenActive('hermes'), demeterRegen:omenActive('demeter'), poseidonStorm:omenActive('poseidon'), romeBazaarDiscount:facTier(faction.rome).idx>=2?1:0, romeWanted:romeWanted(), romeWantedT:+romeWantedT.toFixed(1) }; },
   get undeadNight(){ return { active:undeadNight.active, t:+undeadNight.t.toFixed(1), spawnMul:undeadSpawnMul(), survived:undeadNight.survived }; },
-  startUndeadNight:()=>startUndeadNight(),
+  startUndeadNight:()=>startUndeadNight(), spawnUndeadPharaoh:()=>spawnUndeadPharaoh(),
   provokeRome:()=>{ romeWantedT=Math.min(90, romeWantedT+35); addFaction('rome',-5); return { wanted:romeWanted(), t:+romeWantedT.toFixed(1) }; },   // 等效于斩杀军团兵(调试/程序触发)
   get payoff(){ return { landmarks:[...landSeen], types:[...landTypesSeen()], total:PAYOFF_N, weather, underCover:underCover(), yield:BIOME_YIELD }; },
   get npc(){ return { relics:npcState.relics, traderMet:npcState.traderMet, oracleMet:npcState.oracleMet, trades:npcState.trades, blessings:npcState.blessings,
