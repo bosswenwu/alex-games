@@ -6308,7 +6308,7 @@ function frame(now){
     const regenBless=(blessKind==="regen"&&blessT>0);
     if(!dead && hp<maxHp && (regenBless || performance.now()-lastDmg>7000)){
       regenAcc+=dt;
-      if(regenAcc>(regenBless?0.4:1.5)){ regenAcc=0; hp=Math.min(maxHp,hp+1); updateHearts(); }
+      if(regenAcc>(regenBless?0.4:(omenActive('demeter')?0.7:1.5))){ regenAcc=0; hp=Math.min(maxHp,hp+1); updateHearts(); }   // 连锁: 得墨忒耳丰饶天象 → 回血更快
     }
     updateArrows(dt);
     updateFuses(dt);
@@ -6870,13 +6870,15 @@ const OMENS=[
   { k:"apollo",  n:"☀️ 阿波罗的恩泽 · 经验 ×1.5" },
   { k:"hermes",  n:"🪙 赫尔墨斯的慷慨 · 考古掘宝更丰" },
   { k:"ares",    n:"⚔️ 阿瑞斯的躁动 · 战意高涨，夜色不宁" },
-  { k:"demeter", n:"🌾 得墨忒耳的丰饶 · 万物生息" },
+  { k:"demeter", n:"🌾 得墨忒耳的丰饶 · 万物生息，生命回复加快" },
+  { k:"poseidon",n:"🌊 波塞冬的怒涛 · 卷起漫天沙暴" },
 ];
 function omenXpMul(){ return omenState.kind==="apollo" ? 1.5 : 1; }
 function omenActive(k){ return omenState.kind===k && omenState.t>0; }
 function proclaimOmen(force){
   const o = force ? (OMENS.find(x=>x.k===force)||OMENS[0]) : OMENS[Math.floor(Math.random()*OMENS.length)];
   omenState.kind=o.k; omenState.t=180;
+  if(o.k==='poseidon'){ weather="sand"; weatherT=Math.max(weatherT,70); }   // 连锁: 波塞冬天象 → 立即卷起沙暴
   showName("🔮 神谕宣示："+o.n+"（180 秒）");
   return o.k;
 }
@@ -7172,7 +7174,7 @@ window.__game = {
   openBazaar:()=>openBazaar(), buyWare:(i)=>buyWare(i),
   get expedition(){ return { active:expeditionState.active, dist:expeditionState.active?+expeditionDist().toFixed(0):-1, t:+expeditionState.t.toFixed(1), fleeces:expeditionState.fleeces }; },
   startExpedition:()=>startExpedition(), claimExpedition:(f)=>claimExpedition(f),
-  get chains(){ return { aresRaid:omenActive('ares'), aresSpawnMul:omenActive('ares')?0.55:1, hermesDig:omenActive('hermes'), romeBazaarDiscount:facTier(faction.rome).idx>=2?1:0 }; },
+  get chains(){ return { aresRaid:omenActive('ares'), aresSpawnMul:omenActive('ares')?0.55:1, hermesDig:omenActive('hermes'), demeterRegen:omenActive('demeter'), poseidonStorm:omenActive('poseidon'), romeBazaarDiscount:facTier(faction.rome).idx>=2?1:0 }; },
   get undeadNight(){ return { active:undeadNight.active, t:+undeadNight.t.toFixed(1), spawnMul:undeadSpawnMul(), survived:undeadNight.survived }; },
   startUndeadNight:()=>startUndeadNight(),
   get payoff(){ return { landmarks:[...landSeen], types:[...landTypesSeen()], total:PAYOFF_N, weather, underCover:underCover(), yield:BIOME_YIELD }; },
