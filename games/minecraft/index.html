@@ -3090,6 +3090,7 @@ function chronicleHTML(){
   const ex = expeditionState.active ? ("进行中 · 距"+Math.round(expeditionDist())+"m · 剩"+Math.ceil(expeditionState.t)+"s") : "无";
   const row=(k,v)=>'<div class="cr-row"><span class="cr-k">'+k+'</span><span class="cr-v">'+v+'</span></div>';
   return '<h2>📜 沙海编年史</h2>'
+    + '<div class="cr-row"><span class="cr-k">🏅 称号</span><span class="cr-v" style="color:#ffd23f">'+currentTitle()+'（'+titleScore()+' 分）</span></div>'
     + row('🦅 罗马军团', rt.name+' ('+faction.rome+'/100)'+(romeWanted()?' · ⚔通缉中'+Math.ceil(romeWantedT)+'s':(faction.rome<12?' · ⚠冷淡':'')))
     + row('☥ 埃及祭司', et.name+' ('+faction.egypt+'/100)')
     + row('🗺 群系图鉴', bioSeen.size+' / '+CODEX_TOTAL)
@@ -6373,6 +6374,7 @@ function frame(now){
     tickBazaar(dt);
     tickExpedition(dt);
     tickUndeadNight(dt);
+    tickTitle();
     arrowCd=Math.max(0,arrowCd-dt);
     gunCd=Math.max(0,gunCd-dt);
     rocketCd=Math.max(0,rocketCd-dt);
@@ -7002,6 +7004,13 @@ function addFragment(civ,n){
   return true;
 }
 
+/* ---- 🏅 称号: 由所有系统的累计成就推算, 晋升时通报, 编年史面板置顶显示 ---- */
+function titleScore(){ return mythicState.done.length*8 + curseState.pharaohSlain*5 + expeditionState.fleeces*4 + undeadNight.survived*4 + arenaState.bestWave*2 + bioSeen.size*2 + facTier(faction.rome).idx*3 + facTier(faction.egypt).idx*3 + djinnState.rubs; }
+const TITLES=[[0,'沙海旅人'],[12,'遗迹寻踪'],[28,'斗兽勇士'],[46,'法老克星'],[68,'文明守望者'],[95,'沙海传说']];
+function currentTitle(){ let t=TITLES[0][1]; for(const x of TITLES) if(titleScore()>=x[0]) t=x[1]; return t; }
+let _lastTitle="";
+function tickTitle(){ const c=currentTitle(); if(c!==_lastTitle){ if(_lastTitle) showName("🏅 称号晋升：「"+c+"」！ 沙海的传说在流传…"); _lastTitle=c; } }
+
 /* ---- D. 金字塔实体机关陷阱: 压力板触发落石/暗箭/滚石, 松沙隐藏陷坑 ----
    全部是"真方块"机关: 玩家能看见刻纹压力板并绕开, 松沙陷坑外观同沙可跳过; 踩中即触发实体威胁。*/
 const trapState={ triggered:0, sprung:0, hits:0 };
@@ -7231,6 +7240,7 @@ window.__game = {
   get undeadNight(){ return { active:undeadNight.active, t:+undeadNight.t.toFixed(1), spawnMul:undeadSpawnMul(), survived:undeadNight.survived }; },
   startUndeadNight:()=>startUndeadNight(), spawnUndeadPharaoh:()=>spawnUndeadPharaoh(),
   get mythic(){ return { frags:Object.assign({},mythicState.frags), done:mythicState.done.slice(), total:MYTHIC.length, need:MYTHIC_NEED, xpMul:mythicXpMul(), curseImmune:mythicCurseImmune() }; },
+  get title(){ return { name:currentTitle(), score:titleScore(), tiers:TITLES.map(t=>t[1]) }; },
   addFragment:(civ,n)=>addFragment(civ,n),
   provokeRome:()=>{ romeWantedT=Math.min(90, romeWantedT+35); addFaction('rome',-5); return { wanted:romeWanted(), t:+romeWantedT.toFixed(1) }; },   // 等效于斩杀军团兵(调试/程序触发)
   get payoff(){ return { landmarks:[...landSeen], types:[...landTypesSeen()], total:PAYOFF_N, weather, underCover:underCover(), yield:BIOME_YIELD }; },
