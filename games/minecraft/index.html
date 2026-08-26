@@ -3103,6 +3103,7 @@ function chronicleHTML(){
     + row('🐫 波斯集市', bz)
     + row('🌊 金羊毛远征', ex)
     + row('🌑 亡者之夜', (undeadNight.active?('围城中 · 剩'+Math.ceil(undeadNight.t)+'s'):'平静')+' · 幸存 '+undeadNight.survived+' 夜')
+    + row('✨ 神话遗物', mythicState.done.length+' / '+MYTHIC.length+'（碎片 '+Object.values(mythicState.frags).reduce((a,b)=>a+b,0)+'）')
     + '<div style="margin-top:12px;color:#c9b98a;font-size:12px">按 <b style="color:#ffd23f">T</b> 或点此关闭 · 声望随行为涨落，天象/集市/远征会自行降临</div>';
 }
 function toggleChronicle(){
@@ -4684,7 +4685,7 @@ let xp=0, lvl=1;
 const xpNeed = l => 20+ (l-1)*18;
 let dmgMul=1, maxHp=20;
 function addXP(n){
-  xp+=Math.round(n*omenXpMul());              // 阿波罗天象 → 经验 ×1.5
+  xp+=Math.round(n*omenXpMul()*mythicXpMul());   // 阿波罗天象 ×1.5 / 罗马鹰徽遗物 ×1.2
   while(xp>=xpNeed(lvl)){
     xp-=xpNeed(lvl); lvl++;
     maxHp=Math.min(40,20+(lvl-1)*2);
@@ -6433,6 +6434,7 @@ function collectSave(){
     djinn:{ rubs:djinnState.rubs },
     expedition:{ fleeces:expeditionState.fleeces },
     undead:{ survived:undeadNight.survived },
+    mythic:{ frags:mythicState.frags, done:mythicState.done },
     // 同时写 id 与下标: 以后往 QUESTS 中间插关卡时, 老存档靠 id 仍能落回正确的关
     bag:(function(){ const o={}; for(const [k,v] of bag) o[k]=v; return o; })(),
     dmgMul:+dmgMul.toFixed(3),
@@ -6502,6 +6504,8 @@ function loadGame(){
   djinnState.rubs=(s.djinn&&s.djinn.rubs)|0; djinnState.cd=0;   // 神灯许愿次数(老存档无→0)
   expeditionState.fleeces=(s.expedition&&s.expedition.fleeces)|0; expeditionState.active=false; expeditionState.cd=200;   // 金羊毛战利品(老存档无→0)
   undeadNight.survived=(s.undead&&s.undead.survived)|0; undeadNight.active=false; undeadNight.cd=280;   // 亡者之夜幸存(老存档无→0)
+  for(const k in mythicState.frags) mythicState.frags[k]=(s.mythic&&s.mythic.frags&&s.mythic.frags[k])|0;   // 神话遗物碎片/已成(老存档无→空)
+  mythicState.done=(s.mythic&&Array.isArray(s.mythic.done))?s.mythic.done.filter(c=>c in mythicState.frags):[];
   trapFired.clear(); trapEnts.length=0; mirages.length=0; mirageSpawnT=2;
   blessT=0; blessKind=""; updateBuffHUD();
   if(s.weather==="sand"||s.weather==="storm"||s.weather==="rain"||s.weather==="clear") weather=s.weather;
@@ -6714,6 +6718,7 @@ function tickDigSparkle(dt){
 function archaeologyDig(x,y,z){
   archState.digs++; addFaction('egypt',2);
   if(Math.random()<0.05){ showName("🪔 沙中掘出一盏古神灯！"); summonDjinn(); }   // 5% 掘出神灯 → 精灵随机恩惠(冷却内则仅提示)
+  if(Math.random()<0.08){ addFragment(randomCiv()); }   // 8% 出土一枚神话遗物碎片(随机文明)
   for(let i=0;i<20;i++) particles.push({x:x+0.5+(Math.random()-.5)*0.9, y:y+0.3+Math.random()*0.7, z:z+0.5+(Math.random()-.5)*0.9,
     vx:(Math.random()-.5)*2.6, vy:1+Math.random()*2.4, vz:(Math.random()-.5)*2.6, life:.5+Math.random()*.4, size:.09, u:15*TS, v:0, l:1.8});
   const r=Math.random();
@@ -6782,7 +6787,7 @@ function endArena(win){
     giveBlock(GOLD_ORE,10); giveBlock(GEM_ORE,4); giveBlock(MARBLE,16); addXP(150);
     if(armor<5){ armor++; updateHearts(); showName("🏆 角斗通关！开启宝库 → 宝库钥匙 x1 + 罗马板甲(护甲 "+armor+"/5) + 金x10 钻x4 大理石x16 + 150经验"); }
     else showName("🏆 角斗通关！开启宝库 → 宝库钥匙 x1 + 罗马赏赐(金x10 钻x4 大理石x16) + 150经验");
-    addFaction('rome',12);
+    addFaction('rome',12); addFragment('rome');
     { const rt=facTier(faction.rome).idx; if(rt>=2){ giveBlock(GOLD_ORE,rt*4); showName("🦅 罗马"+facTier(faction.rome).name+"额外赏赐 金x"+(rt*4)); } }
   }
 }
@@ -6822,7 +6827,7 @@ function applyCurse(){ curseState.active=true; curseState.t=CURSE_MAX; curseStat
 function liftCurse(){ curseState.active=false; curseState.t=0; }
 function onPharaohSlain(){
   curseState.pharaohSlain++; liftCurse(); arenaState.keys++;
-  giveBlock(GOLD_ORE,12); giveBlock(GEM_ORE,5); addXP(120); addFaction('rome',10);
+  giveBlock(GOLD_ORE,12); giveBlock(GEM_ORE,5); addXP(120); addFaction('rome',10); addFragment('egypt');
   showName("☥ 法老伏诛 · 诅咒解除！开启法老宝库 → 宝库钥匙 x1 + 法老宝藏(金x12 钻x5) + 120经验");
 }
 function updateCurse(dt){
@@ -6832,7 +6837,7 @@ function updateCurse(dt){
   if(!alive || curseState.t<=0){ liftCurse(); if(!alive) showName("法老之力消散，诅咒随之解除…"); return; }
   curseState.dmgT-=dt;
   if(curseState.dmgT<=0){ curseState.dmgT=5;
-    if(!dead && Math.random()>=facTier(faction.egypt).idx*0.2) damagePlayer(1,0,0);   // 埃及声望越高越能抵御诅咒灼蚀
+    if(!dead && !mythicCurseImmune() && Math.random()>=facTier(faction.egypt).idx*0.2) damagePlayer(1,0,0);   // 埃及声望越高越抗诅咒; 安卡遗物则完全免疫
     for(let i=0;i<8;i++) particles.push({x:player.x+(Math.random()-.5)*1.2, y:player.y+0.5+Math.random()*1.4, z:player.z+(Math.random()-.5)*1.2,
       vx:0, vy:0.6+Math.random(), vz:0, life:.6, size:.09, u:15*TS, v:0, l:1.5});
   }
@@ -6934,7 +6939,7 @@ function claimExpedition(force){
   if(!expeditionState.active) return false;
   if(!force && expeditionDist()>6) return false;
   expeditionState.active=false; expeditionState.fleeces++;
-  giveBlock(GOLD_ORE,20); giveBlock(GEM_ORE,8); addXP(160); if(armor<5){ armor++; updateHearts(); }
+  giveBlock(GOLD_ORE,20); giveBlock(GEM_ORE,8); addXP(160); if(armor<5){ armor++; updateHearts(); } addFragment('medit');
   showName("🏆 寻得金羊毛！(金x20 钻x8 +160经验 护甲+1) · 累计金羊毛 "+expeditionState.fleeces); return true;
 }
 function tickExpedition(dt){
@@ -6969,6 +6974,32 @@ function tickUndeadNight(dt){
       showName("🌅 亡者之潮退去，你挺过了亡者之夜！(金x16 钻x6 +140经验 护甲+1) · 累计幸存 "+undeadNight.survived+" 夜"); }
   } else { undeadNight.cd -= dt*(omenActive('ares')?2:1);   // 连锁: 阿瑞斯躁动 → 亡者之夜来得更勤
     if(undeadNight.cd<=0){ undeadNight.cd=280; startUndeadNight(); } }
+}
+
+/* ---- ✨ 神话遗物收集: 六文明神器, 碎片从考古/斗兽场/法老/远征汇集, 集齐3枚拼合 → 一次性奖励+被动神力 ---- */
+const MYTHIC=[
+  { id:"aegis",  civ:"greece", n:"🏛 雅典娜的埃癸斯神盾", f:()=>{ maxHp=Math.min(40,maxHp+2); updateHearts(); } },
+  { id:"aquila", civ:"rome",   n:"🦅 罗马军团的黄金鹰徽", f:()=>{} },   // 被动: 经验 ×1.2
+  { id:"ankh",   civ:"egypt",  n:"☥ 埃及生命之符 · 安卡", f:()=>{} },   // 被动: 免疫法老诅咒灼蚀
+  { id:"farr",   civ:"persia", n:"🔥 波斯王者荣光 · 法尔", f:()=>{ if(armor<5){ armor++; updateHearts(); } else giveBlock(GEM_ORE,4); } },
+  { id:"lamp",   civ:"arabia", n:"🪔 阿拉伯不灭神灯",     f:()=>{ giveBlock(GEM_ORE,6); } },
+  { id:"fleece", civ:"medit",  n:"🌊 地中海黄金羊毛圣物", f:()=>{ giveBlock(GOLD_ORE,20); addXP(60); } },
+];
+const MYTHIC_NEED=3;
+const mythicState={ frags:{greece:0,rome:0,egypt:0,persia:0,arabia:0,medit:0}, done:[] };
+function mythicDone(civ){ return mythicState.done.indexOf(civ)>=0; }
+function mythicXpMul(){ return mythicDone('rome')?1.2:1; }
+function mythicCurseImmune(){ return mythicDone('egypt'); }
+function randomCiv(){ const cs=Object.keys(mythicState.frags); return cs[Math.floor(Math.random()*cs.length)]; }
+function addFragment(civ,n){
+  if(!(civ in mythicState.frags) || mythicDone(civ)) return false;
+  mythicState.frags[civ]=Math.min(MYTHIC_NEED, mythicState.frags[civ]+(n||1));
+  const rel=MYTHIC.find(r=>r.civ===civ);
+  if(mythicState.frags[civ]>=MYTHIC_NEED){ mythicState.done.push(civ);
+    showName("✨ 神话遗物拼合成功：「"+rel.n+"」！"); try{ rel.f(); }catch(e){}
+    if(mythicState.done.length===MYTHIC.length){ showName("🌟 六大文明神器俱全 · 你已成为沙海的传说！(+300经验)"); addXP(300); }
+  } else showName("🧩 拾得 "+rel.n+" 碎片（"+mythicState.frags[civ]+"/"+MYTHIC_NEED+"）");
+  return true;
 }
 
 /* ---- D. 金字塔实体机关陷阱: 压力板触发落石/暗箭/滚石, 松沙隐藏陷坑 ----
@@ -7199,6 +7230,8 @@ window.__game = {
   get chains(){ return { aresRaid:omenActive('ares'), aresSpawnMul:omenActive('ares')?0.55:1, hermesDig:omenActive('hermes'), demeterRegen:omenActive('demeter'), poseidonStorm:omenActive('poseidon'), romeBazaarDiscount:facTier(faction.rome).idx>=2?1:0, romeWanted:romeWanted(), romeWantedT:+romeWantedT.toFixed(1) }; },
   get undeadNight(){ return { active:undeadNight.active, t:+undeadNight.t.toFixed(1), spawnMul:undeadSpawnMul(), survived:undeadNight.survived }; },
   startUndeadNight:()=>startUndeadNight(), spawnUndeadPharaoh:()=>spawnUndeadPharaoh(),
+  get mythic(){ return { frags:Object.assign({},mythicState.frags), done:mythicState.done.slice(), total:MYTHIC.length, need:MYTHIC_NEED, xpMul:mythicXpMul(), curseImmune:mythicCurseImmune() }; },
+  addFragment:(civ,n)=>addFragment(civ,n),
   provokeRome:()=>{ romeWantedT=Math.min(90, romeWantedT+35); addFaction('rome',-5); return { wanted:romeWanted(), t:+romeWantedT.toFixed(1) }; },   // 等效于斩杀军团兵(调试/程序触发)
   get payoff(){ return { landmarks:[...landSeen], types:[...landTypesSeen()], total:PAYOFF_N, weather, underCover:underCover(), yield:BIOME_YIELD }; },
   get npc(){ return { relics:npcState.relics, traderMet:npcState.traderMet, oracleMet:npcState.oracleMet, trades:npcState.trades, blessings:npcState.blessings,
