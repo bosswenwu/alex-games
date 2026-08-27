@@ -4738,7 +4738,9 @@ function trySpawns(dt){
   const hasBoss=mobs.some(m=>m.def.boss);
   let zc=0, pc=0;
   for(const m of mobs){ if(m.def.boss||m.def.ambient||m.def.car||m.def.plane||m.def.mount) continue; if(m.def.hostile) zc++; else pc++; }
-  const cap=Math.min(4, 1+Math.floor(diff/2));  // 敌对上限最多 4 只, 只作点缀不作压力
+  let cap=Math.min(4, 1+Math.floor(diff/2));    // 敌对上限: 平时最多 4 只, 只作点缀
+  if(omenActive('ares')) cap+=3;                // 连锁: 阿瑞斯躁动天象 → 敌对更多
+  if(undeadNight.active) cap=Math.max(cap,10);  // 亡者之夜: 真围城, 敌对上限拉到 10
   if(night){
     if(dayCount>=3 && !hasBoss && !bossSpawnedTonight){   // Boss: 第3晚起才出现,给足准备时间
       // Boss 轮换: 第3晚僵尸王 → 第4晚起飞龙/泰坦随机登场
@@ -4756,7 +4758,7 @@ function trySpawns(dt){
         sfxZombie(1);
       }
     }
-    if(zc<cap && Math.random()<0.25){   // 夜里也只是偶尔来一两只
+    if(zc<cap && Math.random()<(undeadNight.active?0.75:(omenActive('ares')?0.45:0.25))){   // 亡者之夜/躁动 → 刷得更急更多
       const bio=biomeAt(Math.floor(player.x),Math.floor(player.z));
       const r=Math.random();
       // 敌人按群系分化, 不再永远是僵尸
@@ -6975,7 +6977,7 @@ function tickUndeadNight(dt){
       giveBlock(GOLD_ORE,16); giveBlock(GEM_ORE,6); addXP(140); if(armor<5){ armor++; updateHearts(); }
       showName("🌅 亡者之潮退去，你挺过了亡者之夜！(金x16 钻x6 +140经验 护甲+1) · 累计幸存 "+undeadNight.survived+" 夜"); }
   } else { undeadNight.cd -= dt*(omenActive('ares')?2:1);   // 连锁: 阿瑞斯躁动 → 亡者之夜来得更勤
-    if(undeadNight.cd<=0){ undeadNight.cd=280; startUndeadNight(); } }
+    if(undeadNight.cd<=0 && sunH<0.06){ undeadNight.cd=280; startUndeadNight(); } }   // 修复: 亡者之夜只在夜里降临(刷怪整段受 night 门控, 白天触发则一片空)
 }
 
 /* ---- ✨ 神话遗物收集: 六文明神器, 碎片从考古/斗兽场/法老/远征汇集, 集齐3枚拼合 → 一次性奖励+被动神力 ---- */
@@ -7279,6 +7281,7 @@ window.__game = {
   offers:(role)=>npcOffers(role).map(o=>({t:o.t, have:offerHave(o)})),
   setWeather(w,t){ if(["clear","rain","storm","sand"].includes(w)){ weather=w; weatherT=(t==null?40:t); return weather; } return false; },
   get weather(){ return { kind:weather, t:+weatherT.toFixed(1) }; },
+  get night(){ return sunH<0.06; }, get hostiles(){ return mobs.filter(m=>m.def&&m.def.hostile&&!m.def.boss).length; },
   claimLandmark(type,sx,sz){ const key=type+":"+(sx|0)+":"+(sz|0); landSeen.add(key); return [...landSeen]; },
   getBlock, setBlock, groundY, heightAt, biomeAt,
   save:()=>saveGame(true), load:()=>loadGame(), hasSave, deleteSave,
