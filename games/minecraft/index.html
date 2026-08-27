@@ -156,6 +156,14 @@
   #chronicle h2 { color:#ffd23f; margin:0 0 12px; font-size:19px; }
   #chronicle .cr-row { display:flex; justify-content:space-between; gap:14px; border-bottom:1px solid #ffffff14; padding:5px 0; }
   #chronicle .cr-k { color:#c9b98a; } #chronicle .cr-v { color:#fff; font-weight:700; text-align:right; }
+  #bazaar-panel { position:fixed; inset:0; z-index:62; display:none; align-items:center; justify-content:center; padding:20px; background:rgba(8,6,3,.82); cursor:pointer; }
+  #bazaar-panel.on { display:flex; }
+  #bazaar-panel .bz-card { max-width:460px; width:100%; background:linear-gradient(#241a0d,#160f07); border:2px solid #d8b24b; border-radius:12px; padding:20px 24px; color:#f0e6d0; box-shadow:0 10px 40px #000a; cursor:default; }
+  #bazaar-panel h2 { color:#ffd23f; margin:0 0 6px; font-size:19px; }
+  #bazaar-panel .bz-ware { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:11px 13px; margin:7px 0; border:1px solid #ffffff1e; border-radius:9px; background:#ffffff08; cursor:pointer; transition:.15s; }
+  #bazaar-panel .bz-ware:hover { background:#ffd23f22; border-color:#ffd23f66; }
+  #bazaar-panel .bz-poor { opacity:.45; cursor:not-allowed; }
+  #bazaar-panel .bz-cost { color:#ffd23f; font-weight:700; white-space:nowrap; }
   #help { margin-top:30px; color:#d8d8d8; font-size:14px; line-height:1.9; text-shadow:1px 1px 0 #000; text-align:center; }
   #help b { color:#ffff88; }
   #toast { position:absolute; left:50%; top:44%; transform:translateX(-50%); display:none;
@@ -247,6 +255,7 @@
 </div>
 
 <div id="chronicle" onclick="toggleChronicle()"><div class="cr-card"></div></div>
+<div id="bazaar-panel" onclick="closeBazaarPanel()"><div class="bz-card" onclick="event.stopPropagation()"></div></div>
 
 <div id="overlay">
   <canvas id="brandmark" width="120" height="120"></canvas>
@@ -3156,6 +3165,7 @@ document.addEventListener("keydown",e=>{
   if(e.code==="F5"){ e.preventDefault(); camMode=(camMode+1)%3; showName(["第一人称","第三人称(背后)","第三人称(正面)"][camMode]); return; }
   if(e.code==="KeyH" && !e.repeat){ e.preventDefault(); toggleFullHelp(); return; }
   if(e.code==="KeyT" && !e.repeat){ e.preventDefault(); toggleChronicle(); return; }
+  if(e.code==="KeyY" && !e.repeat){ e.preventDefault(); toggleBazaarPanel(); return; }
   if(e.code==="Escape" && npcPanelOpen){ closeNPCPanel(); return; }
   if(e.code==="Escape" && craftOpen){ toggleCraft(); return; }
   if(e.code==="Escape" && softLock){ pauseGame(); return; }
@@ -6913,8 +6923,20 @@ const BAZAAR_WARES=[
   { n:"💎 天青琉璃 · 钻石x4",       cost:5, f:()=>{ giveBlock(GEM_ORE,4); } },
   { n:"🏛 大理石料 · x24",         cost:4, f:()=>{ giveBlock(MARBLE,24); } },
 ];
+function renderBazaar(){
+  const card=document.querySelector('#bazaar-panel .bz-card'); if(!card) return;
+  let h='<h2>🐫 波斯行商 · 珍宝集市</h2><div style="color:#c9b98a;margin-bottom:10px">🏺 文物碎片交易 · 现有 <b style="color:#ffd23f">'+npcState.relics+'</b> · 剩 '+Math.ceil(bazaarState.t)+'s</div>';
+  BAZAAR_WARES.forEach((w,i)=>{ const cost=Math.max(1,w.cost-(facTier(faction.rome).idx>=2?1:0)); const afford=npcState.relics>=cost;
+    h+='<div class="bz-ware'+(afford?'':' bz-poor')+'" data-i="'+i+'"><span>'+w.n+'</span><span class="bz-cost">'+cost+' 🏺'+(cost<w.cost?' 折':'')+'</span></div>'; });
+  h+='<div style="margin-top:12px;color:#c9b98a;font-size:12px">点击货品购买 · 按 <b style="color:#ffd23f">Y</b> 或点空白关闭</div>';
+  card.innerHTML=h;
+  card.querySelectorAll('.bz-ware').forEach(el=>el.onclick=()=>{ buyWare(+el.dataset.i); renderBazaar(); });
+}
+function openBazaarPanel(){ const el=document.getElementById('bazaar-panel'); if(!el||!bazaarState.active) return; renderBazaar(); el.classList.add('on'); }
+function closeBazaarPanel(){ const el=document.getElementById('bazaar-panel'); if(el) el.classList.remove('on'); }
+function toggleBazaarPanel(){ const el=document.getElementById('bazaar-panel'); if(!el) return; if(el.classList.contains('on')) closeBazaarPanel(); else openBazaarPanel(); }
 function openBazaar(){ bazaarState.active=true; bazaarState.t=90;
-  showName("🐫 波斯行商的珍宝集市到来！(90秒) 文物碎片交易 · 现有文物 "+npcState.relics); return true; }
+  showName("🐫 波斯行商的珍宝集市到来！按 Y 交易(90秒) · 现有文物 "+npcState.relics); return true; }
 function buyWare(i){
   if(!bazaarState.active){ showName("集市已散去…"); return false; }
   const w=BAZAAR_WARES[i]; if(!w) return false;
@@ -6925,7 +6947,7 @@ function buyWare(i){
   return true;
 }
 function tickBazaar(dt){
-  if(bazaarState.active){ bazaarState.t-=dt; if(bazaarState.t<=0){ bazaarState.active=false; showName("🐫 波斯行商收拾行囊，隐入沙海…"); } }
+  if(bazaarState.active){ bazaarState.t-=dt; if(bazaarState.t<=0){ bazaarState.active=false; closeBazaarPanel(); showName("🐫 波斯行商收拾行囊，隐入沙海…"); } }
   else { bazaarState.cd-=dt; if(bazaarState.cd<=0){ bazaarState.cd=220; openBazaar(); } }
 }
 
