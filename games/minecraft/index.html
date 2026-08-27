@@ -2842,15 +2842,21 @@ function nearestLandmark(px,pz){
 }
 function updateCompassHUD(){
   const el=document.getElementById("compass");
-  const land=nearestLandmark(player.x,player.z);
-  if(!land){ el.style.display="none"; return; }
+  let tx,tz,label,dist;
+  if(typeof expeditionState!=="undefined" && expeditionState.active){   // 远征进行中: 指南针优先指向金羊毛宝藏(带倒计时)
+    tx=expeditionState.tx; tz=expeditionState.tz; dist=expeditionDist(); label="🌊 金羊毛 "+Math.ceil(expeditionState.t)+"s";
+  } else {
+    const land=nearestLandmark(player.x,player.z);
+    if(!land){ el.style.display="none"; return; }
+    tx=land.x; tz=land.z; dist=land.dist; label=LANDMARKS[land.type];
+  }
   el.style.display="block";
-  const dx=land.x-player.x, dz=land.z-player.z;
+  const dx=tx-player.x, dz=tz-player.z;
   const bearing=Math.atan2(dx,-dz);        // forward=(sin yaw,-cos yaw) ⇒ 世界方位角
   const rel=bearing-player.yaw;             // 相对视线的角度; 0=正前方
   el.querySelector(".carrow").style.transform="rotate("+rel+"rad)";
-  el.querySelector(".clabel").textContent=LANDMARKS[land.type];
-  const m=Math.round(land.dist);
+  el.querySelector(".clabel").textContent=label;
+  const m=Math.round(dist);
   el.querySelector(".cdist").textContent = m>=1000 ? (m/1000).toFixed(1)+"km" : m+"m";
 }
 function updateStatsHUD(){
