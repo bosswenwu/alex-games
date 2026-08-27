@@ -6510,7 +6510,7 @@ function loadGame(){
   mythicState.done=(s.mythic&&Array.isArray(s.mythic.done))?s.mythic.done.filter(c=>c in mythicState.frags):[];
   trapFired.clear(); trapEnts.length=0; mirages.length=0; mirageSpawnT=2;
   blessT=0; blessKind=""; updateBuffHUD();
-  if(s.weather==="sand"||s.weather==="storm"||s.weather==="rain"||s.weather==="clear") weather=s.weather;
+  if(["sand","storm","rain","clear"].includes(s.weather)){ weather=s.weather; weatherT = weather==="clear" ? (240+Math.random()*120) : (8+Math.random()*12); }   // 修复: 存档没存 weatherT, 读档后给风暴短时收尾, 避免沙暴"一直持续"
   if(s.dmgMul) dmgMul=s.dmgMul;
   bag.clear(); if(s.bag) for(const k in s.bag) bag.set(+k, s.bag[k]);
   // 优先用 id 定位关卡(抗关卡表变动), 没有 id 的老存档才退回下标
@@ -7277,7 +7277,8 @@ window.__game = {
   buyFromNPC:(i)=>npcBuy(i),
   bless:(k,s)=>applyBless(k, s||60),
   offers:(role)=>npcOffers(role).map(o=>({t:o.t, have:offerHave(o)})),
-  setWeather(w){ if(["clear","rain","storm","sand"].includes(w)){ weather=w; weatherT=40; return weather; } return false; },
+  setWeather(w,t){ if(["clear","rain","storm","sand"].includes(w)){ weather=w; weatherT=(t==null?40:t); return weather; } return false; },
+  get weather(){ return { kind:weather, t:+weatherT.toFixed(1) }; },
   claimLandmark(type,sx,sz){ const key=type+":"+(sx|0)+":"+(sz|0); landSeen.add(key); return [...landSeen]; },
   getBlock, setBlock, groundY, heightAt, biomeAt,
   save:()=>saveGame(true), load:()=>loadGame(), hasSave, deleteSave,
