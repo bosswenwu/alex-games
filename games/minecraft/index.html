@@ -6911,14 +6911,14 @@ function omenXpMul(){ return omenState.kind==="apollo" ? 1.5 : 1; }
 function omenActive(k){ return omenState.kind===k && omenState.t>0; }
 function proclaimOmen(force){
   const o = force ? (OMENS.find(x=>x.k===force)||OMENS[0]) : OMENS[Math.floor(Math.random()*OMENS.length)];
-  omenState.kind=o.k; omenState.t=180;
+  omenState.kind=o.k; omenState.t=120;
   if(o.k==='poseidon'){ weather="sand"; weatherT=Math.max(weatherT,70); }   // 连锁: 波塞冬天象 → 立即卷起沙暴
-  showName("🔮 神谕宣示："+o.n+"（180 秒）");
+  showName("🔮 神谕宣示："+o.n+"（"+Math.round(omenState.t)+" 秒）");
   return o.k;
 }
 function tickOmen(dt){
   if(omenState.t>0){ omenState.t-=dt; if(omenState.t<=0){ omenState.kind=""; showName("🔮 天象消退，神谕归于沉寂。"); } }
-  else { omenTimer-=dt; if(omenTimer<=0){ omenTimer=180; proclaimOmen(); } }
+  else { omenTimer-=dt; if(omenTimer<=0){ omenTimer=240; proclaimOmen(); } }   // 天象更稀更特殊: 活跃120s + 间隔240s(约33%常驻)
 }
 
 /* ---- 🐫 波斯行商 · 珍宝集市: 定期现身有限时窗口, 用文物碎片换稀有货, 错过即散 ---- */
