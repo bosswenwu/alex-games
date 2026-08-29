@@ -51,8 +51,12 @@
     color:#f0e6d2; font-size:13px; z-index:30; pointer-events:none; white-space:nowrap; }
   #npcPrompt b { color:#ffd98a; }
   #buffHud { position:absolute; left:12px; bottom:118px; display:none; z-index:30;
-    background:rgba(30,20,44,.7); border:1px solid #9a7ad0; border-radius:6px; padding:4px 10px;
-    color:#e6d9ff; font-size:12px; font-weight:bold; pointer-events:none; }
+    background:rgba(30,20,44,.7); border:1px solid #9a7ad0; border-radius:6px; padding:5px 10px;
+    color:#e6d9ff; font-size:12px; font-weight:bold; pointer-events:none; line-height:1.55; max-width:280px; }
+  #vaultPrompt { position:absolute; left:50%; bottom:128px; transform:translateX(-50%); display:none;
+    background:rgba(20,14,26,.82); border:1px solid #c9a24b; border-radius:20px; padding:6px 16px;
+    color:#f0e6d2; font-size:13px; z-index:30; pointer-events:none; white-space:nowrap; }
+  #vaultPrompt b { color:#ffd98a; }
   #hotbar { position:absolute; left:50%; bottom:10px; transform:translateX(-50%); display:flex; background:rgba(0,0,0,.35); border:2px solid rgba(0,0,0,.55); padding:2px; }
   .slot { width:50px; height:50px; border:2px solid #8b8b8b; border-right-color:#555; border-bottom-color:#555; background:rgba(139,139,139,.28); margin:1px; display:flex; align-items:center; justify-content:center; position:relative; }
   .slot.sel { border:3px solid #fff; box-shadow:0 0 0 2px #000 inset; }
@@ -191,6 +195,7 @@
 </div>
 <div id="hud">
   <div id="npcPrompt"></div>
+  <div id="vaultPrompt"></div>
   <div id="buffHud"></div>
   <div id="watertint"></div>
   <div id="lavatint"></div>
@@ -240,12 +245,13 @@
 <div id="fullhelp">
   <div class="fh-card">
     <div class="fh-title">完整帮助 · 按 <b>H</b> 或点此关闭</div>
-    <b>F5</b> 第三人称　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成　<b>Esc</b> 暂停　<b>T</b> 编年史<br>
+    <b>F5</b> 第三人称　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成　<b>Esc</b> 暂停　<b>T</b> 编年史　<b>U</b> 开宝库<br>
     <b>物品栏</b>：1烟花 2钩爪 3可乐 4铁剑 5机关枪 6火箭筒 7弓 8=TNT(右键放·左键点燃) 9弹跳板<br>
     <b>2 钩爪</b>甩向准星把你拉过去；<b>3 可乐</b>回血+加速；<b>9 弹跳板</b>踩上去高高弹飞不摔伤<br>
     击杀获得<b>经验</b>升级(提升生命与伤害)。白天长、夜晚短而亮，敌人只是点缀<br>
     <b>🏛 古文明玩法</b>(按 <b style="color:#ffd23f">T</b> 看编年史)：<b>考古</b>用镐刨可疑沙砾出文物/神灯　<b>斗兽场</b>站场地按 <b>G</b> 打五波夺宝　<b>金字塔石棺</b>唤法老王(诅咒缠身，斩杀解咒)<br>
-    　<b>阵营声望</b>：助罗马/敬埃及各有回报，袭击军团会被<b>通缉</b>　<b>🔮天象·🐫波斯集市·🌊金羊毛远征·🌑亡者之夜</b>会不时自行降临，留意顶部提示<br>
+    　<b>阵营声望</b>：助罗马/敬埃及各有回报，袭击军团会被<b>通缉</b>　<b>🔮天象</b>（希腊+罗马/埃及/波斯/阿拉伯/地中海）·<b>🐫波斯集市·🌊金羊毛远征·🌑亡者之夜</b>会不时自行降临，左下状态栏会挂着倒计时<br>
+    　<b>宝库钥匙</b>：通关斗兽场或斩杀法老获得，站在金字塔/宫殿/斗兽场按 <b>U</b> 开启封印宝库（钥匙会真正被花掉）<br>
     <b>群系</b>：沙海·红土台地·干草原为主，另有盐湖·峡谷·火山·<b>晶洞高地·古代遗迹带</b><br>
     　💎 晶洞高地：地表紫晶标出入口，地下方解石洞可采　⛵ 遗迹带：沉船/商队残骸藏金<br>
     <b>地标</b>：金字塔(墓室石棺唤醒法老王Boss)·斗兽场·宫殿·绿洲·彩虹桥·机场·赛车场·陨石坑·游乐场<br>
@@ -2684,11 +2690,26 @@ const BLESS_INFO={ regen:{n:"丰饶祝福",tag:"❤",d:"生命快速回复"},
 function applyBless(kind,secs){ blessKind=kind; blessT=Math.max(blessT,secs); npcState.blessings++; updateBuffHUD(); }
 function updateBuffHUD(){
   const el=document.getElementById("buffHud"); if(!el) return;
+  const bits=[];
   if(blessT>0 && BLESS_INFO[blessKind]){
     const b=BLESS_INFO[blessKind];
-    el.style.display="block";
-    el.textContent=b.tag+" "+b.n+" "+Math.ceil(blessT)+"s";
-  } else el.style.display="none";
+    bits.push(b.tag+" "+b.n+" "+Math.ceil(blessT)+"s");
+  }
+  if(typeof omenState!=="undefined" && omenState.kind && omenState.t>0){
+    const o=OMENS.find(x=>x.k===omenState.kind);
+    bits.push((o?o.n:omenState.kind)+" · "+Math.ceil(omenState.t)+"s");
+  }
+  if(typeof bazaarState!=="undefined" && bazaarState.active){
+    bits.push("🐫 波斯集市 "+Math.ceil(bazaarState.t)+"s · 按 Y");
+  }
+  if(typeof undeadNight!=="undefined" && undeadNight.active){
+    bits.push("🌑 亡者之夜 "+Math.ceil(undeadNight.t)+"s");
+  }
+  if(typeof expeditionState!=="undefined" && expeditionState.active){
+    bits.push("🌊 金羊毛 "+Math.ceil(expeditionState.t)+"s");
+  }
+  if(bits.length){ el.style.display="block"; el.innerHTML=bits.join("<br>"); }
+  else el.style.display="none";
 }
 const NPC_ROLES={
   trader:{ name:"商队商人", tag:"🐫", greet:"沙海无垠，旅人。可有货物交换？" },
@@ -3110,7 +3131,7 @@ function chronicleHTML(){
     + row('☥ 埃及祭司', et.name+' ('+faction.egypt+'/100)')
     + row('🗺 群系图鉴', bioSeen.size+' / '+CODEX_TOTAL)
     + row('🏺 文物碎片', npcState.relics)
-    + row('🏛 斗兽场最高', '第 '+arenaState.bestWave+' 波 · 宝库钥匙 '+arenaState.keys)
+    + row('🏛 斗兽场最高', '第 '+arenaState.bestWave+' 波 · 宝库钥匙 '+arenaState.keys+' · 已开宝库 '+vaultState.opened)
     + row('☠ 法老伏诛', curseState.pharaohSlain+' 尊')
     + row('🪔 神灯许愿', djinnState.rubs+' 次')
     + row('🌊 金羊毛', expeditionState.fleeces+' 束')
@@ -3190,6 +3211,7 @@ document.addEventListener("keydown",e=>{
     if(e.code==="KeyF"){ e.preventDefault(); if(npcPanelOpen) closeNPCPanel(); else if(talkNpc) openNPCPanel(); }
     if(e.code==="KeyB"){ e.preventDefault(); toggleCraft(); }
     if(e.code==="KeyG" && !e.repeat){ e.preventDefault(); startArena(); }   // 斗兽场开战
+    if(e.code==="KeyU" && !e.repeat){ e.preventDefault(); openVault(); }     // 封印宝库(花钥匙)
   }
   keys[e.code]=true;
 });
@@ -3346,8 +3368,9 @@ function doBreak(){
   const rm=raycastMob(isSword?4.5:3.8, dir);
   if(rm){
     const mightMul=(blessKind==="might"&&blessT>0)?1.35:1;   // 战意祝福: 近战增伤
+    const omenMul=(typeof omenMeleeMul==="function")?omenMeleeMul():1;   // 连锁: 马尔斯天象 → 近战更狠
     const d=Math.hypot(rm.m.x-player.x, rm.m.z-player.z)||1e-6;
-    hurtMob(rm.m, Math.round((isSword?12:5)*dmgMul*mightMul), (rm.m.x-player.x)/d*(isSword?10:8), (rm.m.z-player.z)/d*(isSword?10:8));
+    hurtMob(rm.m, Math.round((isSword?12:5)*dmgMul*mightMul*omenMul), (rm.m.x-player.x)/d*(isSword?10:8), (rm.m.z-player.z)/d*(isSword?10:8));
     return;
   }
   const hit=raycast(5.5, dir);
@@ -6265,6 +6288,7 @@ function frame(now){
     if(water && !player.flying) spd*=0.55;
     if(lava && !player.flying) spd*=0.32;              // 岩浆里寸步难行
     if(colaBuffT>0) spd*=1.35;                          // 可乐: 移动速度提升
+    if(typeof omenMoveMul==="function") spd*=omenMoveMul();   // 连锁: 西罗科热风天象 → 步履如飞
     const cy=Math.cos(player.yaw), sy=Math.sin(player.yaw);
     player.vx = (f*sy + s*cy)*spd + player.kbx;
     player.vz = (-f*cy + s*sy)*spd + player.kbz;
@@ -6381,12 +6405,16 @@ function frame(now){
         if(underCover() || water) sandDmgT=0;
         else {
           sandDmgT-=dt;
-          if(sandDmgT<=0){ sandDmgT=2.8; damagePlayer(1,0,0); showName("🌪 沙暴刮伤 — 找掩体或建筑躲进去"); }
+          if(sandDmgT<=0){ sandDmgT=2.8;
+            if(!(typeof omenSandImmune==="function" && omenSandImmune())){
+              damagePlayer(1,0,0); showName("🌪 沙暴刮伤 — 找掩体或建筑躲进去");
+            }
+          }
         }
       } else sandDmgT=0;
     }
     eatCd=Math.max(0,eatCd-dt);
-    djinnState.cd=Math.max(0,djinnState.cd-dt);
+    djinnState.cd=Math.max(0,djinnState.cd-dt*((typeof omenDjinnCdMul==="function")?omenDjinnCdMul():1));   // 连锁: 西罗科天象 → 神灯冷却翻倍快
     romeWantedT=Math.max(0,romeWantedT-dt);
     tickOmen(dt);
     tickBazaar(dt);
@@ -6411,6 +6439,8 @@ function frame(now){
     updatePatrols(dt);
     updateMirage(dt);
     updateStatsHUD();
+    updateBuffHUD();
+    updateVaultPrompt();
     playerEnt.animT += dt*Math.hypot(player.vx,player.vz);
     playerEnt.hurtT = Math.max(0,playerEnt.hurtT-dt);
     swingT = Math.max(0,swingT-dt);
@@ -6449,7 +6479,7 @@ function collectSave(){
     arena:{ bestWave:arenaState.bestWave, cleared:arenaState.cleared, keys:arenaState.keys },
     curse:{ pharaohSlain:curseState.pharaohSlain },
     // 尾巴系统累计战绩(机关触发/踩塌/砸中 + 战车碾压); 老存档无 feats → 全归零
-    feats:{ trapsTriggered:trapState.triggered, trapsSprung:trapState.sprung, trapHits:trapState.hits, chariotRams:chariotState.rams },
+    feats:{ trapsTriggered:trapState.triggered, trapsSprung:trapState.sprung, trapHits:trapState.hits, chariotRams:chariotState.rams, vaultsOpened:vaultState.opened },
     faction:{ rome:faction.rome, egypt:faction.egypt },
     djinn:{ rubs:djinnState.rubs },
     expedition:{ fleeces:expeditionState.fleeces },
@@ -6520,6 +6550,7 @@ function loadGame(){
   const FT=s.feats||{};
   trapState.triggered=FT.trapsTriggered|0; trapState.sprung=FT.trapsSprung|0; trapState.hits=FT.trapHits|0;
   chariotState.rams=FT.chariotRams|0;
+  if(typeof vaultState!=="undefined") vaultState.opened=FT.vaultsOpened|0;   // 封印宝库开启次数(老存档无→0)
   const FC=s.faction||{}; faction.rome=Math.max(0,Math.min(FAC_MAX,FC.rome|0)); faction.egypt=Math.max(0,Math.min(FAC_MAX,FC.egypt|0));   // 阵营声望(老存档无→归零)
   djinnState.rubs=(s.djinn&&s.djinn.rubs)|0; djinnState.cd=0;   // 神灯许愿次数(老存档无→0)
   expeditionState.fleeces=(s.expedition&&s.expedition.fleeces)|0; expeditionState.active=false; expeditionState.cd=200;   // 金羊毛战利品(老存档无→0)
@@ -6805,8 +6836,8 @@ function endArena(win){
   if(win){
     arenaState.cleared=true; arenaState.bestWave=ARENA_WAVES.length; arenaState.keys++;
     giveBlock(GOLD_ORE,10); giveBlock(GEM_ORE,4); giveBlock(MARBLE,16); addXP(150);
-    if(armor<5){ armor++; updateHearts(); showName("🏆 角斗通关！开启宝库 → 宝库钥匙 x1 + 罗马板甲(护甲 "+armor+"/5) + 金x10 钻x4 大理石x16 + 150经验"); }
-    else showName("🏆 角斗通关！开启宝库 → 宝库钥匙 x1 + 罗马赏赐(金x10 钻x4 大理石x16) + 150经验");
+    if(armor<5){ armor++; updateHearts(); showName("🏆 角斗通关！宝库钥匙 x1（现有 "+arenaState.keys+"）— 到金字塔/宫殿/斗兽场按 U 开启封印宝库 + 罗马板甲(护甲 "+armor+"/5) + 金x10 钻x4 大理石x16 + 150经验"); }
+    else showName("🏆 角斗通关！宝库钥匙 x1（现有 "+arenaState.keys+"）— 到金字塔/宫殿/斗兽场按 U 开启封印宝库 + 罗马赏赐(金x10 钻x4 大理石x16) + 150经验");
     addFaction('rome',12); addFragment('rome');
     { const rt=facTier(faction.rome).idx; if(rt>=2){ giveBlock(GOLD_ORE,rt*4); showName("🦅 罗马"+facTier(faction.rome).name+"额外赏赐 金x"+(rt*4)); } }
   }
@@ -6848,7 +6879,7 @@ function liftCurse(){ curseState.active=false; curseState.t=0; }
 function onPharaohSlain(){
   curseState.pharaohSlain++; liftCurse(); arenaState.keys++;
   giveBlock(GOLD_ORE,12); giveBlock(GEM_ORE,5); addXP(120); addFaction('rome',10); addFragment('egypt');
-  showName("☥ 法老伏诛 · 诅咒解除！开启法老宝库 → 宝库钥匙 x1 + 法老宝藏(金x12 钻x5) + 120经验");
+  showName("☥ 法老伏诛 · 诅咒解除！宝库钥匙 x1（现有 "+arenaState.keys+"）— 到金字塔/宫殿/斗兽场按 U 开启封印宝库 + 法老宝藏(金x12 钻x5) + 120经验");
 }
 function updateCurse(dt){
   if(!curseState.active) return;
@@ -6861,6 +6892,38 @@ function updateCurse(dt){
     for(let i=0;i<8;i++) particles.push({x:player.x+(Math.random()-.5)*1.2, y:player.y+0.5+Math.random()*1.4, z:player.z+(Math.random()-.5)*1.2,
       vx:0, vy:0.6+Math.random(), vz:0, life:.6, size:.09, u:15*TS, v:0, l:1.5});
   }
+}
+
+/* ---- 封印宝库: 钥匙曾经只是计数器(toast 写"开启宝库"却没有门可开)。现在站在金字塔/宫殿/斗兽场按 U 花掉一把钥匙, 真正开仓。 ---- */
+const VAULT_SITES=["pyramid","palace","colosseum"];
+const vaultState={ opened:0 };
+function vaultZone(){ return nearStructure(VAULT_SITES, 28); }
+function vaultCiv(type){ return type==="pyramid"?"egypt":(type==="colosseum"?"rome":"persia"); }
+function updateVaultPrompt(){
+  const el=document.getElementById("vaultPrompt"); if(!el) return;
+  if(!worldGenReady || dead || npcPanelOpen || craftOpen){ el.style.display="none"; return; }
+  const s=vaultZone();
+  if(!s){ el.style.display="none"; return; }
+  const land=LANDMARKS[s.type]||"地标";
+  el.style.display="block";
+  if(arenaState.keys>0) el.innerHTML="🔑 "+land+" 封印宝库　按 <b>U</b> 开启（钥匙 x"+arenaState.keys+"）";
+  else el.innerHTML="🔒 "+land+" 封印宝库　需要钥匙（通关斗兽场或斩杀法老）";
+}
+function openVault(force){
+  const s=force ? (vaultZone()||{type:"palace"}) : vaultZone();
+  if(!s){ showName("🔑 需站在金字塔、宫殿或斗兽场附近才能开启封印宝库"); return false; }
+  if(arenaState.keys<=0){ showName("🔑 没有宝库钥匙 — 通关斗兽场或斩杀法老可得"); return false; }
+  arenaState.keys--; vaultState.opened++;
+  const n=vaultState.opened;
+  giveBlock(GOLD_ORE, 8+n*2); giveBlock(GEM_ORE, 3+n); addXP(70+n*10);
+  if(s.type==="pyramid") giveBlock(GOLD_ORE, 6);
+  else if(s.type==="colosseum") giveBlock(MARBLE, 12);
+  else giveBlock(MARBLE, 8);
+  addFragment(vaultCiv(s.type));
+  showName("🔓 "+(LANDMARKS[s.type]||"地标")+" 封印宝库开启！钥匙 -1（剩 "+arenaState.keys+"）· 第 "+n+" 座");
+  sfxLevel && sfxLevel();
+  updateVaultPrompt();
+  return true;
 }
 
 /* ---- 阵营声望: 罗马军团 🦅 vs 埃及祭司 ☥ — 战斗亲罗马 / 敬重古物亲埃及, 盗墓触怒祭司 ---- */
@@ -6897,27 +6960,41 @@ function summonDjinn(){
   return w.n;
 }
 
-/* ---- 🏛 希腊神谕 · 天象预言: 定期宣告随机天象, 给世界加"限时修正", 每局节奏不同 ---- */
+/* ---- 🏛 六文明天象: 定期宣告随机天象(希腊+罗马/埃及/波斯/阿拉伯/地中海), 给世界加"限时修正" ---- */
 const omenState={ kind:"", t:0 };
-let omenTimer=140;                                 // 首次约 2 分钟后, 之后每 ~180s 一则
+let omenTimer=140;                                 // 首次约 2 分钟后, 之后每 ~240s 一则
 const OMENS=[
   { k:"apollo",  n:"☀️ 阿波罗的恩泽 · 经验 ×1.5" },
   { k:"hermes",  n:"🪙 赫尔墨斯的慷慨 · 考古掘宝更丰" },
   { k:"ares",    n:"⚔️ 阿瑞斯的躁动 · 战意高涨，夜色不宁" },
   { k:"demeter", n:"🌾 得墨忒耳的丰饶 · 万物生息，生命回复加快" },
   { k:"poseidon",n:"🌊 波塞冬的怒涛 · 卷起漫天沙暴" },
+  { k:"mars",    n:"🦅 马尔斯的号角 · 近战更狠" },
+  { k:"ra",      n:"☀️ 拉神的烈日 · 沙暴无法灼伤" },
+  { k:"mithra",  n:"🔥 密特拉的契约 · 集市驻留更久" },
+  { k:"sirocco", n:"🌪 热风西罗科 · 步履如飞，神灯易醒" },
+  { k:"argos",   n:"🛡 阿尔戈的航程 · 金羊毛时限加倍" },
 ];
 function omenXpMul(){ return omenState.kind==="apollo" ? 1.5 : 1; }
 function omenActive(k){ return omenState.kind===k && omenState.t>0; }
+function omenMeleeMul(){ return omenActive("mars") ? 1.25 : 1; }
+function omenMoveMul(){ return omenActive("sirocco") ? 1.22 : 1; }
+function omenSandImmune(){ return omenActive("ra"); }
+function omenDjinnCdMul(){ return omenActive("sirocco") ? 2 : 1; }
+function omenBazaarDtMul(){ return omenActive("mithra") ? 0.5 : 1; }
+function omenExpeditionDtMul(){ return omenActive("argos") ? 0.5 : 1; }
 function proclaimOmen(force){
   const o = force ? (OMENS.find(x=>x.k===force)||OMENS[0]) : OMENS[Math.floor(Math.random()*OMENS.length)];
   omenState.kind=o.k; omenState.t=120;
   if(o.k==='poseidon'){ weather="sand"; weatherT=Math.max(weatherT,15); }   // 连锁: 波塞冬天象 → 立即卷起一场短沙暴(15s)
+  if(o.k==='mithra' && !bazaarState.active) openBazaar();                   // 连锁: 密特拉天象 → 集市开张
+  if(o.k==='argos' && !expeditionState.active) startExpedition();           // 连锁: 阿尔戈天象 → 金羊毛远征启程
   showName("🔮 神谕宣示："+o.n+"（"+Math.round(omenState.t)+" 秒）");
+  updateBuffHUD();
   return o.k;
 }
 function tickOmen(dt){
-  if(omenState.t>0){ omenState.t-=dt; if(omenState.t<=0){ omenState.kind=""; showName("🔮 天象消退，神谕归于沉寂。"); } }
+  if(omenState.t>0){ omenState.t-=dt; if(omenState.t<=0){ omenState.kind=""; showName("🔮 天象消退，神谕归于沉寂。"); updateBuffHUD(); } }
   else { omenTimer-=dt; if(omenTimer<=0){ omenTimer=240; proclaimOmen(); } }   // 天象更稀更特殊: 活跃120s + 间隔240s(约33%常驻)
 }
 
@@ -6940,8 +7017,13 @@ function renderBazaar(){
 }
 function openBazaarPanel(){ const el=document.getElementById('bazaar-panel'); if(!el||!bazaarState.active) return; renderBazaar(); el.classList.add('on'); }
 function closeBazaarPanel(){ const el=document.getElementById('bazaar-panel'); if(el) el.classList.remove('on'); }
-function toggleBazaarPanel(){ const el=document.getElementById('bazaar-panel'); if(!el) return; if(el.classList.contains('on')) closeBazaarPanel(); else openBazaarPanel(); }
-function openBazaar(){ bazaarState.active=true; bazaarState.t=90;
+function toggleBazaarPanel(){
+  const el=document.getElementById('bazaar-panel'); if(!el) return;
+  if(el.classList.contains('on')) closeBazaarPanel();
+  else if(bazaarState.active) openBazaarPanel();
+  else showName("🐫 波斯集市尚未到来 — 留意左下状态栏，天象/倒计时会提示开市");
+}
+function openBazaar(){ bazaarState.active=true; bazaarState.t=90; updateBuffHUD();
   showName("🐫 波斯行商的珍宝集市到来！按 Y 交易(90秒) · 现有文物 "+npcState.relics); return true; }
 function buyWare(i){
   if(!bazaarState.active){ showName("集市已散去…"); return false; }
@@ -6953,7 +7035,8 @@ function buyWare(i){
   return true;
 }
 function tickBazaar(dt){
-  if(bazaarState.active){ bazaarState.t-=dt; if(bazaarState.t<=0){ bazaarState.active=false; closeBazaarPanel(); showName("🐫 波斯行商收拾行囊，隐入沙海…"); } }
+  if(bazaarState.active){ bazaarState.t-=dt*omenBazaarDtMul();   // 连锁: 密特拉天象 → 集市倒计时减半(驻留更久)
+    if(bazaarState.t<=0){ bazaarState.active=false; closeBazaarPanel(); showName("🐫 波斯行商收拾行囊，隐入沙海…"); updateBuffHUD(); } }
   else { bazaarState.cd-=dt; if(bazaarState.cd<=0){ bazaarState.cd=220; openBazaar(); } }
 }
 
@@ -6964,7 +7047,7 @@ function startExpedition(){
   expeditionState.tx=Math.round(player.x+Math.cos(ang)*dist);
   expeditionState.tz=Math.round(player.z+Math.sin(ang)*dist);
   expeditionState.active=true; expeditionState.t=240;
-  showName("🌊 金羊毛远征启程！远方("+expeditionState.tx+","+expeditionState.tz+")有金羊毛宝藏 — 240 秒内寻得！"); return true;
+  showName("🌊 金羊毛远征启程！远方("+expeditionState.tx+","+expeditionState.tz+")有金羊毛宝藏 — 240 秒内寻得！"); updateBuffHUD(); return true;
 }
 function expeditionDist(){ return Math.hypot(player.x-expeditionState.tx, player.z-expeditionState.tz); }
 function claimExpedition(force){
@@ -6972,18 +7055,18 @@ function claimExpedition(force){
   if(!force && expeditionDist()>6) return false;
   expeditionState.active=false; expeditionState.fleeces++;
   giveBlock(GOLD_ORE,20); giveBlock(GEM_ORE,8); addXP(160); if(armor<5){ armor++; updateHearts(); } addFragment('medit');
-  showName("🏆 寻得金羊毛！(金x20 钻x8 +160经验 护甲+1) · 累计金羊毛 "+expeditionState.fleeces); return true;
+  showName("🏆 寻得金羊毛！(金x20 钻x8 +160经验 护甲+1) · 累计金羊毛 "+expeditionState.fleeces); updateBuffHUD(); return true;
 }
 function tickExpedition(dt){
-  if(expeditionState.active){ expeditionState.t-=dt;
-    if(expeditionDist()<=6){ claimExpedition(true); return; }
-    if(expeditionState.t<=0){ expeditionState.active=false; showName("🌊 金羊毛远征时限已过，宝藏隐没沙海…"); }
+  if(expeditionState.active){ expeditionState.t-=dt*omenExpeditionDtMul();   // 连锁: 阿尔戈天象 → 远征时限加倍
+    if(expeditionDist()<=6){ claimExpedition(true); updateBuffHUD(); return; }
+    if(expeditionState.t<=0){ expeditionState.active=false; showName("🌊 金羊毛远征时限已过，宝藏隐没沙海…"); updateBuffHUD(); }
   } else { expeditionState.cd-=dt; if(expeditionState.cd<=0){ expeditionState.cd=200; startExpedition(); } }
 }
 
 /* ---- 🌑 亡者之夜围城: 定期降临的亡者之潮, 刷怪暴增, 撑到潮落得厚赏; 阿瑞斯天象使其更勤(连锁) ---- */
 const undeadNight={ active:false, t:0, cd:280, survived:0, bossSpawned:false };
-function startUndeadNight(){ undeadNight.active=true; undeadNight.t=100; undeadNight.bossSpawned=false;
+function startUndeadNight(){ undeadNight.active=true; undeadNight.t=100; undeadNight.bossSpawned=false; updateBuffHUD();
   showName("🌑 亡者之夜降临！沙海亡魂倾巢而出 — 撑到潮落(约100秒)必有厚赏！"); return true; }
 function undeadSpawnMul(){ return undeadNight.active ? 0.45 : 1; }   // 亡者之夜 → 刷怪极急
 function spawnUndeadPharaoh(){   // 亡者之夜潮尾: 亡灵法老亲临(复用法老Boss, 斩杀→onPharaohSlain 给宝库钥匙+宝藏)
@@ -7003,7 +7086,7 @@ function tickUndeadNight(dt){
     if(undeadNight.t<=25 && !undeadNight.bossSpawned){ undeadNight.bossSpawned=true; spawnUndeadPharaoh(); }   // 潮尾: 亡灵法老登场
     if(undeadNight.t<=0){ undeadNight.active=false; undeadNight.survived++;
       giveBlock(GOLD_ORE,16); giveBlock(GEM_ORE,6); addXP(140); if(armor<5){ armor++; updateHearts(); }
-      showName("🌅 亡者之潮退去，你挺过了亡者之夜！(金x16 钻x6 +140经验 护甲+1) · 累计幸存 "+undeadNight.survived+" 夜"); }
+      showName("🌅 亡者之潮退去，你挺过了亡者之夜！(金x16 钻x6 +140经验 护甲+1) · 累计幸存 "+undeadNight.survived+" 夜"); updateBuffHUD(); }
   } else { undeadNight.cd -= dt*(omenActive('ares')?2:1);   // 连锁: 阿瑞斯躁动 → 亡者之夜来得更勤
     if(undeadNight.cd<=0 && sunH<0.06){ undeadNight.cd=280; startUndeadNight(); } }   // 修复: 亡者之夜只在夜里降临(刷怪整段受 night 门控, 白天触发则一片空)
 }
@@ -7260,13 +7343,13 @@ window.__game = {
   addFaction:(side,n)=>addFaction(side,n),
   get djinn(){ return { rubs:djinnState.rubs, cd:+djinnState.cd.toFixed(1), wishes:WISHES.map(w=>w.n) }; },
   summonDjinn:()=>summonDjinn(),
-  get omen(){ return { kind:omenState.kind, t:+omenState.t.toFixed(1), xpMul:omenXpMul(), all:OMENS.map(o=>o.n) }; },
+  get omen(){ return { kind:omenState.kind, t:+omenState.t.toFixed(1), xpMul:omenXpMul(), meleeMul:omenMeleeMul(), moveMul:omenMoveMul(), sandImmune:omenSandImmune(), djinnCdMul:omenDjinnCdMul(), bazaarDtMul:omenBazaarDtMul(), expeditionDtMul:omenExpeditionDtMul(), all:OMENS.map(o=>o.n), civs:OMENS.map(o=>o.k) }; },
   proclaimOmen:(k)=>proclaimOmen(k),
   get bazaar(){ return { active:bazaarState.active, t:+bazaarState.t.toFixed(1), bought:bazaarState.bought, wares:BAZAAR_WARES.map(w=>({n:w.n,cost:w.cost})), relics:npcState.relics }; },
   openBazaar:()=>openBazaar(), buyWare:(i)=>buyWare(i),
   get expedition(){ return { active:expeditionState.active, dist:expeditionState.active?+expeditionDist().toFixed(0):-1, t:+expeditionState.t.toFixed(1), fleeces:expeditionState.fleeces }; },
   startExpedition:()=>startExpedition(), claimExpedition:(f)=>claimExpedition(f),
-  get chains(){ return { aresRaid:omenActive('ares'), aresSpawnMul:omenActive('ares')?0.55:1, hermesDig:omenActive('hermes'), demeterRegen:omenActive('demeter'), poseidonStorm:omenActive('poseidon'), romeBazaarDiscount:facTier(faction.rome).idx>=2?1:0, romeWanted:romeWanted(), romeWantedT:+romeWantedT.toFixed(1) }; },
+  get chains(){ return { aresRaid:omenActive('ares'), aresSpawnMul:omenActive('ares')?0.55:1, hermesDig:omenActive('hermes'), demeterRegen:omenActive('demeter'), poseidonStorm:omenActive('poseidon'), marsMelee:omenActive('mars'), raSandImmune:omenActive('ra'), mithraBazaar:omenActive('mithra'), siroccoMove:omenActive('sirocco'), argosExpedition:omenActive('argos'), romeBazaarDiscount:facTier(faction.rome).idx>=2?1:0, romeWanted:romeWanted(), romeWantedT:+romeWantedT.toFixed(1) }; },
   get undeadNight(){ return { active:undeadNight.active, t:+undeadNight.t.toFixed(1), spawnMul:undeadSpawnMul(), survived:undeadNight.survived }; },
   startUndeadNight:()=>startUndeadNight(), spawnUndeadPharaoh:()=>spawnUndeadPharaoh(),
   get mythic(){ return { frags:Object.assign({},mythicState.frags), done:mythicState.done.slice(), total:MYTHIC.length, need:MYTHIC_NEED, xpMul:mythicXpMul(), curseImmune:mythicCurseImmune() }; },
@@ -7280,6 +7363,8 @@ window.__game = {
   get arch(){ return { pottery:archState.pottery, pages:archState.pages, digs:archState.digs, sites:digSites.length, cap:DIG_CAP }; },
   get arena(){ return { active:arenaState.active, wave:arenaState.wave, cleared:arenaState.cleared, bestWave:arenaState.bestWave, keys:arenaState.keys, alive:aliveArenaMobs(), inZone:!!arenaZone() }; },
   startArena, endArena:(w)=>endArena(!!w), spawnArenaWave:(i)=>{ arenaState.cx=player.x; arenaState.cz=player.z; return spawnArenaWave(i|0); },
+  get vault(){ return { keys:arenaState.keys, opened:vaultState.opened, inZone:!!vaultZone(), sites:VAULT_SITES.slice() }; },
+  openVault:(f)=>openVault(!!f),
   get curse(){ return { active:curseState.active, t:+curseState.t.toFixed(1), pharaohSlain:curseState.pharaohSlain }; },
   applyCurse, slayPharaoh:()=>onPharaohSlain(), awakenPharaoh:()=>{ const p=player; awakenPharaoh(Math.floor(p.x)+2, Math.floor(p.y), Math.floor(p.z)); return curseState.active; },
   // 金字塔实体机关陷阱
@@ -7755,6 +7840,66 @@ function selftest(){
       trapFired.clear(); for(const k of firedSnap) trapFired.add(k); trapEnts.length=entLen; arrows.length=arrLen;
     }
 
+    // 8n. 封印宝库: 钥匙可花掉 / 无钥匙拒绝 / 存档往返 + 老存档兼容
+    {
+      const vSnap=vaultState.opened, kSnap=arenaState.keys;
+      const bagSnapV=new Map(bag), xpV=xp, lvlV=lvl, dmgV=dmgMul, maxV=maxHp, hpV=hp, armorV=armor;
+      const mythSnap={frags:Object.assign({},mythicState.frags), done:mythicState.done.slice()};
+      arenaState.keys=0; vaultState.opened=0;
+      ok("无钥匙时拒绝开宝库", openVault(true)===false && arenaState.keys===0 && vaultState.opened===0, "keys="+arenaState.keys+" opened="+vaultState.opened);
+      arenaState.keys=2;
+      const gold0=bagCount(GOLD_ORE), gem0=bagCount(GEM_ORE);
+      ok("有钥匙时可强制开启封印宝库", openVault(true)===true, "opened="+vaultState.opened);
+      ok("开宝库会花掉一把钥匙", arenaState.keys===1, "keys="+arenaState.keys);
+      ok("开宝库会计入开启次数", vaultState.opened===1, "opened="+vaultState.opened);
+      ok("开宝库会掉金/钻", bagCount(GOLD_ORE)>gold0 && bagCount(GEM_ORE)>gem0, "金="+(bagCount(GOLD_ORE)-gold0)+" 钻="+(bagCount(GEM_ORE)-gem0));
+      vaultState.opened=7;
+      const wroteV=collectSave();
+      ok("宝库开启次数写入存档(feats)", wroteV.feats && wroteV.feats.vaultsOpened===7, "feats="+JSON.stringify(wroteV.feats));
+      { const legacy=Object.assign({},wroteV); delete legacy.feats;
+        const F=legacy.feats||{}; vaultState.opened=F.vaultsOpened|0; }
+      ok("老存档(无feats.vaultsOpened)兼容归零", vaultState.opened===0, "opened="+vaultState.opened);
+      { const F=wroteV.feats; vaultState.opened=F.vaultsOpened|0; }
+      ok("宝库开启次数能从存档还原", vaultState.opened===7, "opened="+vaultState.opened);
+      ok("编年史提到宝库钥匙/开启", /宝库/.test(chronicleHTML()), "html-len="+chronicleHTML().length);
+      ok("开宝库提示条存在", !!document.getElementById("vaultPrompt"), "");
+      arenaState.keys=kSnap; vaultState.opened=vSnap;
+      mythicState.frags=mythSnap.frags; mythicState.done=mythSnap.done;
+      bag.clear(); for(const [k,v] of bagSnapV) bag.set(k,v); xp=xpV; lvl=lvlV; dmgMul=dmgV; maxHp=maxV; hp=hpV; armor=armorV;
+      updateHearts(); updateXPHUD();
+    }
+
+    // 8o. 六文明天象 + 左下状态栏(不再只靠 toast)
+    {
+      const omSnap={kind:omenState.kind, t:omenState.t, timer:omenTimer};
+      const bzSnap=Object.assign({},bazaarState), exSnap=Object.assign({},expeditionState);
+      const unSnap=Object.assign({},undeadNight), wSnap=weather, wtSnap=weatherT;
+      const civs=OMENS.map(o=>o.k);
+      ok("天象覆盖六文明(希腊+罗马/埃及/波斯/阿拉伯/地中海)", civs.indexOf("mars")>=0 && civs.indexOf("ra")>=0 && civs.indexOf("mithra")>=0 && civs.indexOf("sirocco")>=0 && civs.indexOf("argos")>=0 && OMENS.length>=10, "n="+OMENS.length+" civs="+civs.join(","));
+      bazaarState.active=false; expeditionState.active=false;
+      proclaimOmen("mars");
+      ok("马尔斯天象提升近战伤害", omenState.kind==="mars" && omenMeleeMul()===1.25, "kind="+omenState.kind+" melee="+omenMeleeMul());
+      proclaimOmen("ra");
+      ok("拉神天象免疫沙暴灼伤", omenSandImmune()===true && omenMeleeMul()===1, "sandImmune="+omenSandImmune());
+      proclaimOmen("sirocco");
+      ok("西罗科天象加快移速并加速神灯冷却", omenMoveMul()>1 && omenDjinnCdMul()===2, "move="+omenMoveMul()+" djinnCd="+omenDjinnCdMul());
+      bazaarState.active=false; bazaarState.t=0;
+      proclaimOmen("mithra");
+      ok("密特拉天象会拉开波斯集市", bazaarState.active===true && omenBazaarDtMul()===0.5, "bazaar="+bazaarState.active+" dtMul="+omenBazaarDtMul());
+      expeditionState.active=false; expeditionState.t=0;
+      proclaimOmen("argos");
+      ok("阿尔戈天象会启程金羊毛远征", expeditionState.active===true && omenExpeditionDtMul()===0.5, "expedition="+expeditionState.active+" dtMul="+omenExpeditionDtMul());
+      const hud=document.getElementById("buffHud");
+      updateBuffHUD();
+      ok("进行中的天象会出现在左下状态栏", hud && hud.style.display==="block" && /阿尔戈|金羊毛|密特拉|集市/.test(hud.innerHTML), "hud="+(hud?hud.textContent.slice(0,80):"missing"));
+      bazaarState.active=false;
+      toggleBazaarPanel();
+      ok("集市未开时按 Y 会提示尚未到来", !document.getElementById("bazaar-panel").classList.contains("on"), "panel-on="+document.getElementById("bazaar-panel").classList.contains("on"));
+      omenState.kind=omSnap.kind; omenState.t=omSnap.t; omenTimer=omSnap.timer;
+      Object.assign(bazaarState,bzSnap); Object.assign(expeditionState,exSnap); Object.assign(undeadNight,unSnap);
+      weather=wSnap; weatherT=wtSnap; closeBazaarPanel(); updateBuffHUD();
+    }
+
     // 9. 渲染管线仍然可用
     let renderErr=null;
     try{ render(performance.now()); }catch(e){ renderErr=e.message; }
@@ -7787,6 +7932,20 @@ function selftest(){
   console.log((fail===0?"%c全部通过":"%c存在失败项")+"  "+pass+" passed / "+fail+" failed",
               "font-weight:bold;color:"+(fail===0?"#4caf50":"#f44336"));
   return {pass, fail, total:pass+fail, results};
+}
+if(/[?&]selftest=1/.test(location.search||"")){
+  (function waitSelftest(){
+    if(typeof worldGenReady!=="undefined" && worldGenReady && typeof selftest==="function"){
+      const r=selftest();
+      const pre=document.createElement("pre");
+      pre.id="selftest-out";
+      pre.style.cssText="position:fixed;inset:8px;overflow:auto;z-index:999;background:#111;color:#eee;padding:12px;font:12px/1.4 monospace";
+      pre.textContent=(r.fail?"FAIL":"PASS")+" "+r.pass+"/"+r.total+"\n"+r.results.map(x=>(x.ok?"OK":"NG")+" "+x.name+(x.detail?" ("+x.detail+")":"")).join("\n");
+      document.body.appendChild(pre);
+      document.title=(r.fail?"FAIL":"PASS")+" sandsea selftest "+r.pass+"/"+r.total;
+      window.__selftest = r;
+    } else setTimeout(waitSelftest, 250);
+  })();
 }
 </script>
 </body>
