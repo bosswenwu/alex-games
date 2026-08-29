@@ -168,6 +168,21 @@
   #bazaar-panel .bz-ware:hover { background:#ffd23f22; border-color:#ffd23f66; }
   #bazaar-panel .bz-poor { opacity:.45; cursor:not-allowed; }
   #bazaar-panel .bz-cost { color:#ffd23f; font-weight:700; white-space:nowrap; }
+  #pottery-panel, #sphinx-panel { position:fixed; inset:0; z-index:62; display:none; align-items:center; justify-content:center; padding:20px; background:rgba(8,6,3,.82); cursor:pointer; }
+  #pottery-panel.on, #sphinx-panel.on { display:flex; }
+  #pottery-panel .pt-card, #sphinx-panel .sx-card { max-width:520px; width:100%; max-height:86vh; overflow:auto; background:linear-gradient(#1a140c,#120d07); border:2px solid #c9a24b; border-radius:12px; padding:20px 24px; color:#f0e6d0; box-shadow:0 10px 40px #000a; cursor:default; }
+  #pottery-panel h2, #sphinx-panel h2 { color:#ffd23f; margin:0 0 8px; font-size:19px; }
+  #pottery-panel .pt-row { display:flex; justify-content:space-between; gap:12px; padding:8px 10px; margin:5px 0; border:1px solid #ffffff14; border-radius:8px; background:#ffffff08; }
+  #pottery-panel .pt-row.locked { opacity:.42; }
+  #pottery-panel .pt-n { font-weight:700; color:#ffe9c4; }
+  #pottery-panel .pt-d { color:#c9b98a; font-size:12px; margin-top:2px; }
+  #sphinx-panel .sx-q { color:#ffe9c4; font-size:16px; line-height:1.7; margin:8px 0 14px; }
+  #sphinx-panel .sx-ans { padding:11px 13px; margin:7px 0; border:1px solid #ffffff1e; border-radius:9px; background:#ffffff08; cursor:pointer; transition:.15s; }
+  #sphinx-panel .sx-ans:hover { background:#ffd23f22; border-color:#ffd23f66; }
+  #sphinxPrompt { position:absolute; left:50%; bottom:162px; transform:translateX(-50%); display:none;
+    background:rgba(20,14,26,.82); border:1px solid #c9a24b; border-radius:20px; padding:6px 16px;
+    color:#f0e6d2; font-size:13px; z-index:30; pointer-events:none; white-space:nowrap; }
+  #sphinxPrompt b { color:#ffd98a; }
   #help { margin-top:30px; color:#d8d8d8; font-size:14px; line-height:1.9; text-shadow:1px 1px 0 #000; text-align:center; }
   #help b { color:#ffff88; }
   #toast { position:absolute; left:50%; top:44%; transform:translateX(-50%); display:none;
@@ -196,6 +211,7 @@
 <div id="hud">
   <div id="npcPrompt"></div>
   <div id="vaultPrompt"></div>
+  <div id="sphinxPrompt"></div>
   <div id="buffHud"></div>
   <div id="watertint"></div>
   <div id="lavatint"></div>
@@ -245,11 +261,12 @@
 <div id="fullhelp">
   <div class="fh-card">
     <div class="fh-title">完整帮助 · 按 <b>H</b> 或点此关闭</div>
-    <b>F5</b> 第三人称　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成　<b>Esc</b> 暂停　<b>T</b> 编年史　<b>U</b> 开宝库<br>
+    <b>F5</b> 第三人称　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成　<b>Esc</b> 暂停　<b>T</b> 编年史　<b>P</b> 陶片图鉴　<b>U</b> 开宝库　<b>R</b> 答斯芬克斯<br>
     <b>物品栏</b>：1烟花 2钩爪 3可乐 4铁剑 5机关枪 6火箭筒 7弓 8=TNT(右键放·左键点燃) 9弹跳板<br>
     <b>2 钩爪</b>甩向准星把你拉过去；<b>3 可乐</b>回血+加速；<b>9 弹跳板</b>踩上去高高弹飞不摔伤<br>
     击杀获得<b>经验</b>升级(提升生命与伤害)。白天长、夜晚短而亮，敌人只是点缀<br>
-    <b>🏛 古文明玩法</b>(按 <b style="color:#ffd23f">T</b> 看编年史)：<b>考古</b>用镐刨可疑沙砾出文物/神灯　<b>斗兽场</b>站场地按 <b>G</b> 打五波夺宝　<b>金字塔石棺</b>唤法老王(诅咒缠身，斩杀解咒)<br>
+    <b>🏛 古文明玩法</b>(按 <b style="color:#ffd23f">T</b> 看编年史)：<b>考古</b>用镐刨可疑沙砾出文物/神灯/陶片　按 <b>P</b> 翻陶片图鉴　<b>斗兽场</b>站场地按 <b>G</b> 打五波夺宝　<b>金字塔石棺</b>唤法老王(诅咒缠身，斩杀解咒)<br>
+    　<b>斯芬克斯</b>守在金字塔外：靠近按 <b>R</b> 回答谜题，答对有赏；答错或动手则开战<br>
     　<b>阵营声望</b>：助罗马/敬埃及各有回报，袭击军团会被<b>通缉</b>　<b>🔮天象</b>（希腊+罗马/埃及/波斯/阿拉伯/地中海）·<b>🐫波斯集市·🌊金羊毛远征·🌑亡者之夜</b>会不时自行降临，左下状态栏会挂着倒计时<br>
     　<b>宝库钥匙</b>：通关斗兽场或斩杀法老获得，站在金字塔/宫殿/斗兽场按 <b>U</b> 开启封印宝库（钥匙会真正被花掉）<br>
     <b>群系</b>：沙海·红土台地·干草原为主，另有盐湖·峡谷·火山·<b>晶洞高地·古代遗迹带</b><br>
@@ -262,6 +279,8 @@
 
 <div id="chronicle" onclick="toggleChronicle()"><div class="cr-card"></div></div>
 <div id="bazaar-panel" onclick="closeBazaarPanel()"><div class="bz-card" onclick="event.stopPropagation()"></div></div>
+<div id="pottery-panel" onclick="closePotteryPanel()"><div class="pt-card" onclick="event.stopPropagation()"></div></div>
+<div id="sphinx-panel" onclick="closeSphinxPanel()"><div class="sx-card" onclick="event.stopPropagation()"></div></div>
 
 <div id="overlay">
   <canvas id="brandmark" width="120" height="120"></canvas>
@@ -3131,6 +3150,8 @@ function chronicleHTML(){
     + row('☥ 埃及祭司', et.name+' ('+faction.egypt+'/100)')
     + row('🗺 群系图鉴', bioSeen.size+' / '+CODEX_TOTAL)
     + row('🏺 文物碎片', npcState.relics)
+    + row('🏺 陶片图鉴', potterySeenCount()+' / '+POTTERY_TYPES.length+'（出土 '+archState.pottery+' 片）· 按 P')
+    + row('🦁 斯芬克斯', sphinxState.solved+' 题解开 · 错答 '+sphinxState.failed+' · 近旁按 R')
     + row('🏛 斗兽场最高', '第 '+arenaState.bestWave+' 波 · 宝库钥匙 '+arenaState.keys+' · 已开宝库 '+vaultState.opened)
     + row('☠ 法老伏诛', curseState.pharaohSlain+' 尊')
     + row('🪔 神灯许愿', djinnState.rubs+' 次')
@@ -3141,7 +3162,7 @@ function chronicleHTML(){
     + row('🌊 金羊毛远征', ex)
     + row('🌑 亡者之夜', (undeadNight.active?('围城中 · 剩'+Math.ceil(undeadNight.t)+'s'):'平静')+' · 幸存 '+undeadNight.survived+' 夜')
     + row('✨ 神话遗物', mythicState.done.length+' / '+MYTHIC.length+'（碎片 '+Object.values(mythicState.frags).reduce((a,b)=>a+b,0)+'）')
-    + '<div style="margin-top:12px;color:#c9b98a;font-size:12px">按 <b style="color:#ffd23f">T</b> 或点此关闭 · 声望随行为涨落，天象/集市/远征会自行降临</div>';
+    + '<div style="margin-top:12px;color:#c9b98a;font-size:12px">按 <b style="color:#ffd23f">T</b> 关闭 · <b>P</b> 陶片图鉴 · 声望随行为涨落，天象/集市/远征会自行降临</div>';
 }
 function toggleChronicle(){
   const el=document.getElementById("chronicle"); if(!el) return;
@@ -3193,8 +3214,12 @@ document.addEventListener("keydown",e=>{
   if(e.code==="KeyH" && !e.repeat){ e.preventDefault(); toggleFullHelp(); return; }
   if(e.code==="KeyT" && !e.repeat){ e.preventDefault(); toggleChronicle(); return; }
   if(e.code==="KeyY" && !e.repeat){ e.preventDefault(); toggleBazaarPanel(); return; }
+  if(e.code==="KeyP" && !e.repeat){ e.preventDefault(); togglePotteryPanel(); return; }
   if(e.code==="Escape" && npcPanelOpen){ closeNPCPanel(); return; }
   if(e.code==="Escape" && craftOpen){ toggleCraft(); return; }
+  const potEl=document.getElementById("pottery-panel"), sxEl=document.getElementById("sphinx-panel");
+  if(e.code==="Escape" && potEl && potEl.classList.contains("on")){ closePotteryPanel(); return; }
+  if(e.code==="Escape" && sxEl && sxEl.classList.contains("on")){ closeSphinxPanel(); return; }
   if(e.code==="Escape" && softLock){ pauseGame(); return; }
   if(!playing()) return;
   if(e.code==="KeyM" && !e.repeat){ musicOn=!musicOn; showName("音乐: "+(musicOn?"开":"关")); }
@@ -3212,6 +3237,7 @@ document.addEventListener("keydown",e=>{
     if(e.code==="KeyB"){ e.preventDefault(); toggleCraft(); }
     if(e.code==="KeyG" && !e.repeat){ e.preventDefault(); startArena(); }   // 斗兽场开战
     if(e.code==="KeyU" && !e.repeat){ e.preventDefault(); openVault(); }     // 封印宝库(花钥匙)
+    if(e.code==="KeyR" && !e.repeat){ e.preventDefault(); openSphinxPanel(); } // 斯芬克斯答谜
   }
   keys[e.code]=true;
 });
@@ -4250,6 +4276,7 @@ function hurtMob(m,dmg,kx,kz,silent){
   m.kbx+=kx; m.kbz+=kz;
   if(kx||kz) m.vy=Math.max(m.vy,4.2);
   if(!m.def.hostile){ m.fleeT=5; m.tgtYaw=Math.atan2(m.x-player.x,-(m.z-player.z)); }
+  if(m.type==="sphinx" && m.riddleReady && !m.riddleAngry) sphinxEnrage(m);   // 动手打断谜题 → 开战
   if(!silent) sfxHit();
   if(m.hp<=0){
     deathPoof(m);
@@ -4530,6 +4557,17 @@ function updateMobs(dt){
     }
     let speed=0;
     if(D.hostile){
+      if(m.type==="sphinx" && m.riddleReady && !m.riddleAngry){   // 答谜阶段: 坐镇不追击, 打了才开战
+        m.burning=false;
+        if(dist<14) m.tgtYaw=Math.atan2(dx,-dz);
+        let dy=m.tgtYaw-m.yaw; while(dy>Math.PI)dy-=6.283; while(dy<-Math.PI)dy+=6.283;
+        m.yaw+=clamp(dy,-2.2*dt,2.2*dt);
+        const kdS=Math.pow(0.01,dt); m.kbx*=kdS; m.kbz*=kdS;
+        m.vx=m.kbx; m.vz=m.kbz; m.vy-=28*dt; if(m.vy<-50)m.vy=-50;
+        entMove(m,dt,D.w,D.h);
+        m.animT+=dt*0.35;
+        continue;
+      }
       if(m.alertT>0) m.alertT-=dt;
       // 巡逻兵被警戒(自身发现或被同袍呼叫)后, 侦测范围临时扩大, 更难甩脱
       const aggro=(D.aggroRange||28)+(m.patrol&&m.alertT>0?16:0)+((m.patrol&&romeWanted())?45:0);   // 通缉期间: 罗马巡逻兵警戒范围暴涨, 主动来袭
@@ -4876,7 +4914,10 @@ function trySpawns(dt){
   if(pyr){
     let spx=0; for(const m of mobs) if(m.type==="sphinx") spx++;
     if(spx===0 && !hasBoss && Math.random()<0.22){
-      if(spawnMob("sphinx",14,30)) showName("🦁 斯芬克斯睁开了眼睛……回答，或者死。🦁");
+      if(spawnMob("sphinx",14,30)){
+        armSphinxRiddle(mobs[mobs.length-1]);
+        showName("🦁 斯芬克斯睁开了眼睛……回答，或者死。靠近按 R 应谜。🦁");
+      }
     }
   }
   // 巨蝎 / 沙虫: 沙漠与红土地的地表野兽
@@ -6441,6 +6482,7 @@ function frame(now){
     updateStatsHUD();
     updateBuffHUD();
     updateVaultPrompt();
+    updateSphinxPrompt();
     playerEnt.animT += dt*Math.hypot(player.vx,player.vz);
     playerEnt.hurtT = Math.max(0,playerEnt.hurtT-dt);
     swingT = Math.max(0,swingT-dt);
@@ -6475,13 +6517,14 @@ function collectSave(){
     yaw:+player.yaw.toFixed(3), pitch:+player.pitch.toFixed(3),
     hp, maxHp, lvl, xp, armor, kills, dayCount, bioSeen:[...bioSeen], landSeen:[...landSeen], weather,
     npc:{ relics:npcState.relics, traderMet:npcState.traderMet, oracleMet:npcState.oracleMet, trades:npcState.trades, blessings:npcState.blessings },
-    arch:{ pottery:archState.pottery, pages:archState.pages, digs:archState.digs },
+    arch:{ pottery:archState.pottery, pages:archState.pages, digs:archState.digs, shards:archState.shards.slice(), setComplete:!!archState.setComplete },
     arena:{ bestWave:arenaState.bestWave, cleared:arenaState.cleared, keys:arenaState.keys },
     curse:{ pharaohSlain:curseState.pharaohSlain },
     // 尾巴系统累计战绩(机关触发/踩塌/砸中 + 战车碾压); 老存档无 feats → 全归零
     feats:{ trapsTriggered:trapState.triggered, trapsSprung:trapState.sprung, trapHits:trapState.hits, chariotRams:chariotState.rams, vaultsOpened:vaultState.opened },
     faction:{ rome:faction.rome, egypt:faction.egypt },
     djinn:{ rubs:djinnState.rubs },
+    sphinx:{ solved:sphinxState.solved, failed:sphinxState.failed },
     expedition:{ fleeces:expeditionState.fleeces },
     undead:{ survived:undeadNight.survived },
     mythic:{ frags:mythicState.frags, done:mythicState.done },
@@ -6540,6 +6583,8 @@ function loadGame(){
   npcState.traderMet=!!N.traderMet; npcState.oracleMet=!!N.oracleMet;
   // 考古进度: 老存档无 arch 字段 → 全部归零, 自然向后兼容
   const A=s.arch||{}; archState.pottery=A.pottery|0; archState.pages=A.pages|0; archState.digs=A.digs|0;
+  archState.shards=Array.isArray(A.shards)?A.shards.filter(id=>POTTERY_TYPES.some(t=>t.id===id)):[];   // 陶片图鉴器型(老存档无→空)
+  archState.setComplete=!!A.setComplete;
   digSites.length=0; digSpawnT=3;
   // 斗兽场进度: 老存档无 arena 字段 → 归零, 自然兼容; 进行中的挑战不跨存档保留
   const AR=s.arena||{}; arenaState.bestWave=AR.bestWave|0; arenaState.cleared=!!AR.cleared; arenaState.keys=AR.keys|0;
@@ -6551,6 +6596,7 @@ function loadGame(){
   trapState.triggered=FT.trapsTriggered|0; trapState.sprung=FT.trapsSprung|0; trapState.hits=FT.trapHits|0;
   chariotState.rams=FT.chariotRams|0;
   if(typeof vaultState!=="undefined") vaultState.opened=FT.vaultsOpened|0;   // 封印宝库开启次数(老存档无→0)
+  sphinxState.solved=(s.sphinx&&s.sphinx.solved)|0; sphinxState.failed=(s.sphinx&&s.sphinx.failed)|0;   // 斯芬克斯答谜战绩(老存档无→0)
   const FC=s.faction||{}; faction.rome=Math.max(0,Math.min(FAC_MAX,FC.rome|0)); faction.egypt=Math.max(0,Math.min(FAC_MAX,FC.egypt|0));   // 阵营声望(老存档无→归零)
   djinnState.rubs=(s.djinn&&s.djinn.rubs)|0; djinnState.cd=0;   // 神灯许愿次数(老存档无→0)
   expeditionState.fleeces=(s.expedition&&s.expedition.fleeces)|0; expeditionState.active=false; expeditionState.cd=200;   // 金羊毛战利品(老存档无→0)
@@ -6728,7 +6774,7 @@ drawViewmodel();
    B. 罗马斗兽场波次: 站上竞技场沙地开战, 五波角斗 → 通关掉宝库钥匙+主题装备
    C. 法老诅咒 + 宝库钥匙: 挖开石棺唤醒法老 → 诅咒 debuff, 斩杀法老解咒并落钥匙
    ========================================================= */
-const archState={ pottery:0, pages:0, digs:0 };       // 陶片(图鉴) / 图纸残页(集5复原) / 已发掘刷点数
+const archState={ pottery:0, pages:0, digs:0, shards:[], setComplete:false };       // 陶片出土次数 / 图纸残页 / 发掘次数 / 已鉴定器型 / 集齐奖励
 const digSites=[]; let digSpawnT=3, digSparkT=0;
 const DIG_CAP=6;                                       // 同时存在的可疑沙砾上限(防刷屏)
 /* 在沙漠/台地地表撒下"可疑沙砾"刷点 */
@@ -6784,15 +6830,70 @@ function archaeologyDig(x,y,z){
   } else if(r<0.45){                                    // 文物碎片(供 NPC 交易)
     npcState.relics++; addXP(8); if(omenActive('hermes')){ npcState.relics++; }   // 连锁: 赫尔墨斯天象 → 考古掘宝翻倍
     showName("🏺 出土 文物碎片！(文物 x"+npcState.relics+"，+8 经验) — 交给商队商人或神谕祭司");
-  } else {                                              // 陶片(收藏图鉴)
-    archState.pottery++; addXP(5);
-    const milestone=[10,25,50,100].includes(archState.pottery);
-    if(milestone){ addXP(30); showName("🏺 陶片图鉴 "+archState.pottery+" 片 · 考古学有所成！(+30 经验)"); }
-    else showName("🏺 出土 陶片（图鉴 "+archState.pottery+" 片，+5 经验）");
+  } else {                                              // 陶片(收藏图鉴: 鉴定器型, 可按 P 翻看)
+    grantPotteryShard();
   }
   sfxLevel && sfxLevel();
 }
 function updateArch(dt){ maintainDigSites(dt); tickDigSparkle(dt); }
+
+/* ---- 陶片图鉴: 出土不再只是一个数字, 按 P 可翻已鉴定的器型; 老存档缺 shards → 空图鉴 ---- */
+const POTTERY_TYPES=[
+  {id:"blacktop", n:"黑顶红陶", d:"上埃及黎明时期的酒罐口沿"},
+  {id:"faience",  n:"釉砂残片", d:"尼罗蓝的小护身符碎屑"},
+  {id:"ostracon", n:"陶片文书", d:"墨书未写完的商队账目"},
+  {id:"canopic",  n:"卡诺匹斯盖", d:"内脏罐上裂开的胡狼头"},
+  {id:"amphora",  n:"酒罐把手", d:"双耳瓶残留的一只耳"},
+  {id:"scarab",   n:"圣甲虫印", d:"湿陶上压出的甲虫纹"},
+  {id:"lotus",    n:"莲纹陶盘", d:"碗心一朵褪色莲花"},
+  {id:"ushabti",  n:"沙弗提残足", d:"陪葬俑裂开的一只脚"},
+  {id:"sistrum",  n:"叉铃陶模", d:"祭祀乐器的模具碎片"},
+  {id:"cartouche",n:"王名圈陶印", d:"烧裂的王名框印记"},
+  {id:"nile",     n:"河泥灰陶", d:"尼罗泛滥层里的粗陶"},
+  {id:"predyn",   n:"前王朝彩陶", d:"几何纹红白双色陶片"},
+];
+function potterySeenCount(){ return archState.shards.filter(id=>POTTERY_TYPES.some(t=>t.id===id)).length; }
+function potteryHave(id){ return archState.shards.indexOf(id)>=0; }
+function pickPotteryId(){
+  const missing=POTTERY_TYPES.filter(t=>!potteryHave(t.id));
+  if(missing.length && Math.random()<0.72) return missing[(Math.random()*missing.length)|0].id;
+  return POTTERY_TYPES[(Math.random()*POTTERY_TYPES.length)|0].id;
+}
+function grantPotteryShard(forceId){
+  archState.pottery++;
+  const id=forceId && POTTERY_TYPES.some(t=>t.id===forceId) ? forceId : pickPotteryId();
+  const neu=!potteryHave(id);
+  if(neu) archState.shards.push(id);
+  addXP(neu?12:5);
+  const t=POTTERY_TYPES.find(x=>x.id===id);
+  const seen=potterySeenCount();
+  if(neu && seen===POTTERY_TYPES.length && !archState.setComplete){
+    archState.setComplete=true; addXP(80);
+    showName("🏺 陶片图鉴集齐 "+POTTERY_TYPES.length+" 种！「"+t.n+"」入册 · +80 经验 · 按 P 翻看");
+  } else if(neu){
+    showName("🏺 鉴定新器型：「"+t.n+"」（"+seen+"/"+POTTERY_TYPES.length+"）— 按 P 打开图鉴");
+  } else {
+    const milestone=[10,25,50,100].includes(archState.pottery);
+    if(milestone){ addXP(30); showName("🏺 又见「"+t.n+"」· 出土 "+archState.pottery+" 片 · 图鉴 "+seen+"/"+POTTERY_TYPES.length+" (+30 经验)"); }
+    else showName("🏺 又见「"+t.n+"」（图鉴已有 · 出土 "+archState.pottery+" 片）");
+  }
+  if(document.getElementById("pottery-panel") && document.getElementById("pottery-panel").classList.contains("on")) renderPottery();
+  return {id, neu, seen};
+}
+function renderPottery(){
+  const card=document.querySelector("#pottery-panel .pt-card"); if(!card) return;
+  const seen=potterySeenCount();
+  let h='<h2>🏺 沙海陶片图鉴</h2><div style="color:#c9b98a;margin-bottom:10px">已鉴定 <b style="color:#ffd23f">'+seen+' / '+POTTERY_TYPES.length+'</b> 种 · 出土 '+archState.pottery+' 片'+(archState.setComplete?' · 已集齐':'')+'</div>';
+  POTTERY_TYPES.forEach(t=>{
+    const have=potteryHave(t.id);
+    h+='<div class="pt-row'+(have?'':' locked')+'"><div><div class="pt-n">'+(have?t.n:'？？？')+'</div><div class="pt-d">'+(have?t.d:'继续发掘可疑沙砾以鉴定此器型')+'</div></div><div>'+(have?'✓':'🔒')+'</div></div>';
+  });
+  h+='<div style="margin-top:12px;color:#c9b98a;font-size:12px">按 <b style="color:#ffd23f">P</b> 或点空白关闭 · 新器型会写入编年史</div>';
+  card.innerHTML=h;
+}
+function openPotteryPanel(){ const el=document.getElementById("pottery-panel"); if(!el) return; renderPottery(); el.classList.add("on"); if(document.pointerLockElement) document.exitPointerLock(); }
+function closePotteryPanel(){ const el=document.getElementById("pottery-panel"); if(el) el.classList.remove("on"); }
+function togglePotteryPanel(){ const el=document.getElementById("pottery-panel"); if(!el) return; if(el.classList.contains("on")) closePotteryPanel(); else openPotteryPanel(); }
 
 /* ---- B. 罗马斗兽场波次挑战: 站上竞技场沙地按 G 开战, 五波角斗 → 通关落宝库钥匙+罗马主题赏赐 ---- */
 const ARENA_WAVES=[
@@ -6924,6 +7025,102 @@ function openVault(force){
   sfxLevel && sfxLevel();
   updateVaultPrompt();
   return true;
+}
+
+/* ---- 斯芬克斯谜题: 金字塔看守者先问后打。按 R 答题, 答错或动手则开战。 ---- */
+const SPHINX_RIDDLES=[
+  { q:"何物早晨四足、正午两足、黄昏三足？", a:["人","骆驼","法老","斯芬克斯"], ok:0 },
+  { q:"我有城墙却无门窗，越走越矮把人埋。我是什么？", a:["沙丘","金字塔","绿洲","渡槽"], ok:0 },
+  { q:"白天跟着你，夜里躲进沙。踩不死、抓不着。", a:["影子","热风","海市蜃楼","蝎子"], ok:0 },
+  { q:"金子做的船，不走尼罗河，只走天河。那是？", a:["太阳","月亮","战车","神灯"], ok:0 },
+  { q:"无腿能吞绿洲，无嘴能打沙海。白昼里最凶。", a:["沙暴","商队","河马","狮鹫"], ok:0 },
+  { q:"金字塔连底一共有几面？", a:["五面","四面","三面","六面"], ok:0 },
+];
+const sphinxState={ solved:0, failed:0 };
+let sphinxTalk=null;
+function armSphinxRiddle(m){
+  if(!m || m.type!=="sphinx") return false;
+  m.riddleReady=true; m.riddleAngry=false; m.riddleSolved=false;
+  m.riddleIdx=(Math.random()*SPHINX_RIDDLES.length)|0;
+  return true;
+}
+function nearSphinx(){
+  let best=null, bd=8;
+  for(const m of mobs){
+    if(m.type!=="sphinx") continue;
+    const d=Math.hypot(m.x-player.x, m.y-player.y, m.z-player.z);
+    if(d<bd){ bd=d; best=m; }
+  }
+  return best;
+}
+function sphinxEnrage(m){
+  if(!m) m=sphinxTalk || nearSphinx();
+  if(!m) return false;
+  const wasReady=!!m.riddleReady;
+  m.riddleReady=false; m.riddleAngry=true;
+  if(wasReady){ sphinxState.failed++; showName("🦁 斯芬克斯怒了！谜题作废——只有死战！"); }
+  closeSphinxPanel();
+  updateSphinxPrompt();
+  return true;
+}
+function updateSphinxPrompt(){
+  const el=document.getElementById("sphinxPrompt"); if(!el) return;
+  if(!worldGenReady || dead){ el.style.display="none"; return; }
+  const m=nearSphinx();
+  if(!m || !m.riddleReady || m.riddleAngry){ el.style.display="none"; return; }
+  el.style.display="block";
+  el.innerHTML="🦁 斯芬克斯出谜　按 <b>R</b> 回答（动手则开战）";
+}
+function renderSphinx(){
+  const card=document.querySelector("#sphinx-panel .sx-card"); if(!card) return;
+  const m=sphinxTalk;
+  const r=m && SPHINX_RIDDLES[m.riddleIdx|0] || SPHINX_RIDDLES[0];
+  let h='<h2>🦁 斯芬克斯的谜题</h2><div class="sx-q">'+r.q+'</div>';
+  r.a.forEach((t,i)=>{ h+='<div class="sx-ans" data-i="'+i+'">'+t+'</div>'; });
+  h+='<div style="margin-top:12px;color:#c9b98a;font-size:12px">点选一项作答 · 答错或逃开会激怒祂 · 按 <b style="color:#ffd23f">Esc</b> 关闭（视为拒答）</div>';
+  card.innerHTML=h;
+  card.querySelectorAll(".sx-ans").forEach(el=>el.onclick=()=>{ answerSphinx(+el.dataset.i); });
+}
+function openSphinxPanel(){
+  const m=nearSphinx();
+  if(!m){ showName("🦁 附近没有斯芬克斯 — 去金字塔外寻找看守者"); return false; }
+  if(m.riddleAngry){ showName("🦁 斯芬克斯已经动怒，只能刀剑相见"); return false; }
+  if(!m.riddleReady){ showName("🦁 这位看守者已经点过头，不再出谜"); return false; }
+  sphinxTalk=m;
+  if(m.riddleIdx==null) m.riddleIdx=(Math.random()*SPHINX_RIDDLES.length)|0;
+  const el=document.getElementById("sphinx-panel"); if(!el) return false;
+  renderSphinx(); el.classList.add("on");
+  if(document.pointerLockElement) document.exitPointerLock();
+  return true;
+}
+function closeSphinxPanel(){
+  const el=document.getElementById("sphinx-panel");
+  const wasOpen=el && el.classList.contains("on");
+  if(el) el.classList.remove("on");
+  // 打开着却不答就走: 视为拒答 → 开战 (自测/调试用 force 路径不走这里)
+  if(wasOpen && sphinxTalk && sphinxTalk.riddleReady && !sphinxTalk.riddleAngry){
+    sphinxEnrage(sphinxTalk);
+  }
+  sphinxTalk=null;
+}
+function answerSphinx(i){
+  const m=sphinxTalk || nearSphinx();
+  if(!m || !m.riddleReady){ showName("🦁 没有可答的谜题"); return false; }
+  const r=SPHINX_RIDDLES[m.riddleIdx|0] || SPHINX_RIDDLES[0];
+  if((i|0)===r.ok){
+    m.riddleReady=false; m.riddleSolved=true; m.riddleAngry=false;
+    sphinxState.solved++;
+    giveBlock(GOLD_ORE,8); giveBlock(GEM_ORE,3); addXP(90); addFaction("egypt",8); addFragment("egypt");
+    showName("🦁 「……通过。」斯芬克斯让开道路！(金x8 钻x3 +90经验) · 累计解开 "+sphinxState.solved+" 题");
+    const el=document.getElementById("sphinx-panel"); if(el) el.classList.remove("on");
+    sphinxTalk=null;
+    const ix=mobs.indexOf(m); if(ix>=0) mobs.splice(ix,1);   // 点头离去, 不占 Boss 位
+    sfxLevel && sfxLevel();
+    updateSphinxPrompt();
+    return true;
+  }
+  sphinxEnrage(m);
+  return false;
 }
 
 /* ---- 阵营声望: 罗马军团 🦅 vs 埃及祭司 ☥ — 战斗亲罗马 / 敬重古物亲埃及, 盗墓触怒祭司 ---- */
@@ -7360,7 +7557,12 @@ window.__game = {
   get npc(){ return { relics:npcState.relics, traderMet:npcState.traderMet, oracleMet:npcState.oracleMet, trades:npcState.trades, blessings:npcState.blessings,
                       bless:{kind:blessKind, t:+blessT.toFixed(1)}, talk:talkNpc?talkNpc.npcRole:null, panelOpen:npcPanelOpen,
                       count:{trader:countNPC("trader"), oracle:countNPC("oracle")} }; },
-  get arch(){ return { pottery:archState.pottery, pages:archState.pages, digs:archState.digs, sites:digSites.length, cap:DIG_CAP }; },
+  get arch(){ return { pottery:archState.pottery, pages:archState.pages, digs:archState.digs, sites:digSites.length, cap:DIG_CAP,
+                      shards:archState.shards.slice(), seen:potterySeenCount(), total:POTTERY_TYPES.length, setComplete:!!archState.setComplete }; },
+  grantPottery:(id)=>grantPotteryShard(id), openPottery:()=>openPotteryPanel(), closePottery:()=>closePotteryPanel(),
+  get sphinx(){ const m=nearSphinx(); return { solved:sphinxState.solved, failed:sphinxState.failed, riddles:SPHINX_RIDDLES.map(r=>r.q),
+                      near:!!m, ready:!!(m&&m.riddleReady), angry:!!(m&&m.riddleAngry), dist:m?+Math.hypot(m.x-player.x,m.z-player.z).toFixed(1):-1 }; },
+  armSphinxRiddle, openSphinx:()=>openSphinxPanel(), answerSphinx:(i)=>answerSphinx(i), sphinxEnrage:(m)=>sphinxEnrage(m),
   get arena(){ return { active:arenaState.active, wave:arenaState.wave, cleared:arenaState.cleared, bestWave:arenaState.bestWave, keys:arenaState.keys, alive:aliveArenaMobs(), inZone:!!arenaZone() }; },
   startArena, endArena:(w)=>endArena(!!w), spawnArenaWave:(i)=>{ arenaState.cx=player.x; arenaState.cz=player.z; return spawnArenaWave(i|0); },
   get vault(){ return { keys:arenaState.keys, opened:vaultState.opened, inZone:!!vaultZone(), sites:VAULT_SITES.slice() }; },
@@ -7676,8 +7878,8 @@ function selftest(){
 
     // 8g. 沙漠考古: 可疑沙砾方块存在 / 挖开产出三类文物 / 存档往返 + 老存档兼容
     ok("可疑沙砾方块已定义", !!BLOCKS[SUSGRAVEL] && BLOCKS[SUSGRAVEL].t===83, "SUSGRAVEL="+SUSGRAVEL);
-    const archSnap=Object.assign({},archState), relicSnap2=npcState.relics;
-    archState.pottery=0; archState.pages=0; archState.digs=0; npcState.relics=0;
+    const archSnap=Object.assign({},archState, {shards:(archState.shards||[]).slice()}), relicSnap2=npcState.relics;
+    archState.pottery=0; archState.pages=0; archState.digs=0; archState.shards=[]; archState.setComplete=false; npcState.relics=0;
     let gotPottery=0, gotPages=0, gotRelic=0;
     for(let i=0;i<400;i++){ const b={pottery:archState.pottery,pages:archState.pages,relics:npcState.relics};
       archaeologyDig(0,80,0);
@@ -7694,7 +7896,8 @@ function selftest(){
     ok("老存档(无arch字段)兼容归零", archState.pottery===0 && archState.pages===0, "pottery="+archState.pottery);
     { const A=wroteArch.arch; archState.pottery=A.pottery|0; archState.pages=A.pages|0; archState.digs=A.digs|0; }
     ok("考古进度能从存档还原", archState.pottery===7 && archState.pages===3, "pottery="+archState.pottery);
-    Object.assign(archState,archSnap); npcState.relics=relicSnap2;
+    Object.assign(archState, {pottery:archSnap.pottery, pages:archSnap.pages, digs:archSnap.digs, setComplete:!!archSnap.setComplete});
+    archState.shards=(archSnap.shards||[]).slice(); npcState.relics=relicSnap2;
 
     // 8h. 罗马斗兽场波次: 能刷波 / 清场无残留 / 通关落钥匙 / 存档往返 + 老存档兼容
     const arenaSnap=Object.assign({},arenaState);
@@ -7769,7 +7972,7 @@ function selftest(){
 
     // 8k. 海市蜃楼: 干旱群系生成 / 上限 / 远处淡入 / 走近淡出消散
     {
-      const mSnap=mirages.slice(); mirages.length=0;
+      const mSnap=mirages.slice(), spawnSnap=mirageSpawnT; mirages.length=0; mirageSpawnT=999;
       const fx=player.x, fz=player.z; let moved=false;
       // 找一处干旱群系(沙漠/台地/草原)站上去, 让 biomeDryHere() 为真(biomeAt 是纯噪声, 不需加载区块)
       outer: for(let ax=-3000;ax<=3000;ax+=96) for(let az=-3000;az<=3000;az+=96){
@@ -7788,7 +7991,7 @@ function selftest(){
       for(let i=0;i<40;i++) updateMirage(0.1);
       const nearGone = mirages.length===0 || mirages[0].alpha<0.3;
       ok("走近后幻影淡出消散", nearGone, mirages.length?("alpha="+mirages[0].alpha.toFixed(2)):"已移除");
-      mirages.length=0; for(const g of mSnap) mirages.push(g);
+      mirages.length=0; for(const g of mSnap) mirages.push(g); mirageSpawnT=spawnSnap;
       player.x=fx; player.z=fz; pcx=1e9; refreshChunks();
     }
 
@@ -7898,6 +8101,89 @@ function selftest(){
       omenState.kind=omSnap.kind; omenState.t=omSnap.t; omenTimer=omSnap.timer;
       Object.assign(bazaarState,bzSnap); Object.assign(expeditionState,exSnap); Object.assign(undeadNight,unSnap);
       weather=wSnap; weatherT=wtSnap; closeBazaarPanel(); updateBuffHUD();
+    }
+
+    // 8p. 陶片图鉴: 鉴定器型 / 面板可翻 / 编年史有行 / 存档往返 + 老存档缺 shards 归零
+    {
+      const archSnapP=Object.assign({},archState,{shards:(archState.shards||[]).slice()});
+      const bagSnapP=new Map(bag), xpP=xp, lvlP=lvl, dmgP=dmgMul, maxP=maxHp, hpP=hp;
+      archState.pottery=0; archState.shards=[]; archState.setComplete=false;
+      ok("陶片图鉴收录多种器型", POTTERY_TYPES.length>=8, "n="+POTTERY_TYPES.length);
+      const g1=grantPotteryShard("blacktop");
+      ok("出土能鉴定新器型", g1.neu===true && potteryHave("blacktop") && potterySeenCount()===1, "seen="+potterySeenCount()+" id="+g1.id);
+      const g2=grantPotteryShard("blacktop");
+      ok("重复出土不重复入册", g2.neu===false && potterySeenCount()===1 && archState.pottery===2, "seen="+potterySeenCount()+" pottery="+archState.pottery);
+      openPotteryPanel();
+      const pt=document.getElementById("pottery-panel");
+      const card=pt && pt.querySelector(".pt-card");
+      ok("陶片图鉴面板能打开并列出器型", pt && pt.classList.contains("on") && card && /黑顶红陶/.test(card.innerHTML) && /？？？/.test(card.innerHTML), "open="+(pt&&pt.classList.contains("on")));
+      closePotteryPanel();
+      ok("编年史列出陶片图鉴", /陶片图鉴/.test(chronicleHTML()), "");
+      archState.shards=["blacktop","lotus"]; archState.pottery=4;
+      const wrotePt=collectSave();
+      ok("器型写入存档", wrotePt.arch && Array.isArray(wrotePt.arch.shards) && wrotePt.arch.shards.indexOf("blacktop")>=0, "shards="+JSON.stringify((wrotePt.arch||{}).shards));
+      { const A={}; archState.shards=Array.isArray(A.shards)?A.shards:[]; }   // 老存档无 shards
+      ok("老存档(无shards)图鉴归零", potterySeenCount()===0, "seen="+potterySeenCount());
+      { const A=wrotePt.arch; archState.shards=Array.isArray(A.shards)?A.shards.slice():[]; }
+      ok("陶片图鉴能从存档还原", potteryHave("blacktop") && potteryHave("lotus"), "shards="+archState.shards.join(","));
+      archState.shards=[]; archState.setComplete=false; archState.pottery=0;
+      POTTERY_TYPES.forEach(t=>grantPotteryShard(t.id));
+      ok("集齐全部器型会发一次奖励", archState.setComplete===true && potterySeenCount()===POTTERY_TYPES.length, "seen="+potterySeenCount()+" done="+archState.setComplete);
+      Object.assign(archState,{pottery:archSnapP.pottery,pages:archSnapP.pages,digs:archSnapP.digs,setComplete:!!archSnapP.setComplete});
+      archState.shards=(archSnapP.shards||[]).slice();
+      bag.clear(); for(const [k,v] of bagSnapP) bag.set(k,v); xp=xpP; lvl=lvlP; dmgMul=dmgP; maxHp=maxP; hp=hpP;
+      updateHearts(); updateXPHUD(); closePotteryPanel();
+    }
+
+    // 8q. 斯芬克斯谜题: 先问后打 / 答对有赏 / 答错开战 / 动手也开战 / 老存档归零
+    {
+      const sxSnap=Object.assign({},sphinxState);
+      const bagSnapS=new Map(bag), xpS=xp, lvlS=lvl, dmgS=dmgMul, maxS=maxHp, hpS=hp, armorS=armor;
+      const mythSnapS={frags:Object.assign({},mythicState.frags), done:mythicState.done.slice()};
+      const facS={rome:faction.rome, egypt:faction.egypt};
+      const mobsSnapS=mobs.slice(); mobs.length=0;
+      sphinxState.solved=0; sphinxState.failed=0; sphinxTalk=null;
+      const sx={type:"sphinx", def:MOB_DEFS.sphinx, x:player.x+1, y:player.y, z:player.z, vx:0,vy:0,vz:0,kbx:0,kbz:0,
+        yaw:0,tgtYaw:0,hp:MOB_DEFS.sphinx.hp,hurtT:0,animT:0,t:0,atkCd:0,burnT:0,swingT:0,groanT:0,fleeT:0,
+        onGround:true,pause:false,burning:false,held:null};
+      mobs.push(sx);
+      ok("斯芬克斯可登记为出谜看守", armSphinxRiddle(sx)===true && sx.riddleReady===true && !sx.riddleAngry, "ready="+sx.riddleReady);
+      ok("靠近出谜斯芬克斯能识别", nearSphinx()===sx, "near="+(nearSphinx()&&nearSphinx().type));
+      openSphinxPanel();
+      const sp=document.getElementById("sphinx-panel");
+      ok("谜题面板能打开", sp && sp.classList.contains("on") && /斯芬克斯/.test((sp.querySelector(".sx-card")||{}).innerHTML||""), "open="+(sp&&sp.classList.contains("on")));
+      sx.riddleIdx=0; renderSphinx();   // 固定第一题: 人
+      const gold0=bagCount(GOLD_ORE);
+      ok("答对谜题有赏且看守离去", answerSphinx(0)===true && sphinxState.solved===1 && mobs.indexOf(sx)<0, "solved="+sphinxState.solved+" gold+"+(bagCount(GOLD_ORE)-gold0));
+      ok("答对后面板关闭", !document.getElementById("sphinx-panel").classList.contains("on"), "");
+      const sx2={type:"sphinx", def:MOB_DEFS.sphinx, x:player.x+1, y:player.y, z:player.z, vx:0,vy:0,vz:0,kbx:0,kbz:0,
+        yaw:0,tgtYaw:0,hp:MOB_DEFS.sphinx.hp,hurtT:0,animT:0,t:0,atkCd:0,burnT:0,swingT:0,groanT:0,fleeT:0,
+        onGround:true,pause:false,burning:false,held:null};
+      mobs.push(sx2); armSphinxRiddle(sx2); sx2.riddleIdx=0; sphinxTalk=sx2;
+      ok("答错则开战", answerSphinx(1)===false && sx2.riddleAngry===true && !sx2.riddleReady && sphinxState.failed>=1, "angry="+sx2.riddleAngry+" failed="+sphinxState.failed);
+      const sx3={type:"sphinx", def:MOB_DEFS.sphinx, x:player.x+1, y:player.y, z:player.z, vx:0,vy:0,vz:0,kbx:0,kbz:0,
+        yaw:0,tgtYaw:0,hp:MOB_DEFS.sphinx.hp,hurtT:0,animT:0,t:0,atkCd:0,burnT:0,swingT:0,groanT:0,fleeT:0,
+        onGround:true,pause:false,burning:false,held:null};
+      mobs.push(sx3); armSphinxRiddle(sx3);
+      const fail0=sphinxState.failed;
+      hurtMob(sx3,1,0,0,true);
+      ok("动手打断谜题也会开战", sx3.riddleAngry===true && !sx3.riddleReady && sphinxState.failed===fail0+1, "angry="+sx3.riddleAngry+" failed="+sphinxState.failed);
+      sphinxState.solved=2; sphinxState.failed=3;
+      const wroteSx=collectSave();
+      ok("答谜战绩写入存档", wroteSx.sphinx && wroteSx.sphinx.solved===2 && wroteSx.sphinx.failed===3, "sphinx="+JSON.stringify(wroteSx.sphinx));
+      { const legacy=Object.assign({},wroteSx); delete legacy.sphinx;
+        sphinxState.solved=(legacy.sphinx&&legacy.sphinx.solved)|0; sphinxState.failed=(legacy.sphinx&&legacy.sphinx.failed)|0; }
+      ok("老存档(无sphinx字段)答谜归零", sphinxState.solved===0 && sphinxState.failed===0, "solved="+sphinxState.solved);
+      { const S=wroteSx.sphinx; sphinxState.solved=S.solved|0; sphinxState.failed=S.failed|0; }
+      ok("答谜战绩能从存档还原", sphinxState.solved===2 && sphinxState.failed===3, "solved="+sphinxState.solved);
+      ok("编年史列出斯芬克斯", /斯芬克斯/.test(chronicleHTML()), "");
+      const elSx=document.getElementById("sphinx-panel"); if(elSx) elSx.classList.remove("on"); sphinxTalk=null;
+      Object.assign(sphinxState,sxSnap);
+      mythicState.frags=mythSnapS.frags; mythicState.done=mythSnapS.done;
+      faction.rome=facS.rome; faction.egypt=facS.egypt;
+      bag.clear(); for(const [k,v] of bagSnapS) bag.set(k,v); xp=xpS; lvl=lvlS; dmgMul=dmgS; maxHp=maxS; hp=hpS; armor=armorS;
+      mobs.length=0; for(const m of mobsSnapS) mobs.push(m);
+      updateHearts(); updateXPHUD(); updateSphinxPrompt();
     }
 
     // 9. 渲染管线仍然可用
