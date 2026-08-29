@@ -168,10 +168,10 @@
   #bazaar-panel .bz-ware:hover { background:#ffd23f22; border-color:#ffd23f66; }
   #bazaar-panel .bz-poor { opacity:.45; cursor:not-allowed; }
   #bazaar-panel .bz-cost { color:#ffd23f; font-weight:700; white-space:nowrap; }
-  #pottery-panel, #sphinx-panel { position:fixed; inset:0; z-index:62; display:none; align-items:center; justify-content:center; padding:20px; background:rgba(8,6,3,.82); cursor:pointer; }
-  #pottery-panel.on, #sphinx-panel.on { display:flex; }
-  #pottery-panel .pt-card, #sphinx-panel .sx-card { max-width:520px; width:100%; max-height:86vh; overflow:auto; background:linear-gradient(#1a140c,#120d07); border:2px solid #c9a24b; border-radius:12px; padding:20px 24px; color:#f0e6d0; box-shadow:0 10px 40px #000a; cursor:default; }
-  #pottery-panel h2, #sphinx-panel h2 { color:#ffd23f; margin:0 0 8px; font-size:19px; }
+  #pottery-panel, #sphinx-panel, #mythic-panel { position:fixed; inset:0; z-index:62; display:none; align-items:center; justify-content:center; padding:20px; background:rgba(8,6,3,.82); cursor:pointer; }
+  #pottery-panel.on, #sphinx-panel.on, #mythic-panel.on { display:flex; }
+  #pottery-panel .pt-card, #sphinx-panel .sx-card, #mythic-panel .pt-card { max-width:520px; width:100%; max-height:86vh; overflow:auto; background:linear-gradient(#1a140c,#120d07); border:2px solid #c9a24b; border-radius:12px; padding:20px 24px; color:#f0e6d0; box-shadow:0 10px 40px #000a; cursor:default; }
+  #pottery-panel h2, #sphinx-panel h2, #mythic-panel h2 { color:#ffd23f; margin:0 0 8px; font-size:19px; }
   #pottery-panel .pt-row { display:flex; justify-content:space-between; gap:12px; padding:8px 10px; margin:5px 0; border:1px solid #ffffff14; border-radius:8px; background:#ffffff08; }
   #pottery-panel .pt-row.locked { opacity:.42; }
   #pottery-panel .pt-n { font-weight:700; color:#ffe9c4; }
@@ -261,7 +261,7 @@
 <div id="fullhelp">
   <div class="fh-card">
     <div class="fh-title">完整帮助 · 按 <b>H</b> 或点此关闭</div>
-    <b>F5</b> 第三人称　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成　<b>Esc</b> 暂停　<b>T</b> 编年史　<b>P</b> 陶片图鉴　<b>U</b> 开宝库　<b>R</b> 答斯芬克斯<br>
+    <b>F5</b> 第三人称　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成　<b>Esc</b> 暂停　<b>T</b> 编年史　<b>P</b> 陶片图鉴　<b>K</b> 神话遗物　<b>U</b> 开宝库　<b>R</b> 答斯芬克斯　<b>L</b> 擦神灯<br>
     <b>物品栏</b>：1烟花 2钩爪 3可乐 4铁剑 5机关枪 6火箭筒 7弓 8=TNT(右键放·左键点燃) 9弹跳板<br>
     <b>2 钩爪</b>甩向准星把你拉过去；<b>3 可乐</b>回血+加速；<b>9 弹跳板</b>踩上去高高弹飞不摔伤<br>
     击杀获得<b>经验</b>升级(提升生命与伤害)。白天长、夜晚短而亮，敌人只是点缀<br>
@@ -269,6 +269,7 @@
     　<b>斯芬克斯</b>守在金字塔外：靠近按 <b>R</b> 回答谜题，答对有赏；答错或动手则开战<br>
     　<b>阵营声望</b>：助罗马/敬埃及各有回报，袭击军团会被<b>通缉</b>　<b>🔮天象</b>（希腊+罗马/埃及/波斯/阿拉伯/地中海）·<b>🐫波斯集市·🌊金羊毛远征·🌑亡者之夜</b>会不时自行降临，左下状态栏会挂着倒计时<br>
     　<b>宝库钥匙</b>：通关斗兽场或斩杀法老获得，站在金字塔/宫殿/斗兽场按 <b>U</b> 开启封印宝库（钥匙会真正被花掉）<br>
+    　<b>神话遗物</b>：六文明碎片拼合后有被动神力（按 <b>K</b> 翻看）。拼合不灭神灯后按 <b>L</b> 可随时擦灯许愿<br>
     <b>群系</b>：沙海·红土台地·干草原为主，另有盐湖·峡谷·火山·<b>晶洞高地·古代遗迹带</b><br>
     　💎 晶洞高地：地表紫晶标出入口，地下方解石洞可采　⛵ 遗迹带：沉船/商队残骸藏金<br>
     <b>地标</b>：金字塔(墓室石棺唤醒法老王Boss)·斗兽场·宫殿·绿洲·彩虹桥·机场·赛车场·陨石坑·游乐场<br>
@@ -280,6 +281,7 @@
 <div id="chronicle" onclick="toggleChronicle()"><div class="cr-card"></div></div>
 <div id="bazaar-panel" onclick="closeBazaarPanel()"><div class="bz-card" onclick="event.stopPropagation()"></div></div>
 <div id="pottery-panel" onclick="closePotteryPanel()"><div class="pt-card" onclick="event.stopPropagation()"></div></div>
+<div id="mythic-panel" onclick="closeMythicPanel()"><div class="pt-card" onclick="event.stopPropagation()"></div></div>
 <div id="sphinx-panel" onclick="closeSphinxPanel()"><div class="sx-card" onclick="event.stopPropagation()"></div></div>
 
 <div id="overlay">
@@ -2727,6 +2729,10 @@ function updateBuffHUD(){
   if(typeof expeditionState!=="undefined" && expeditionState.active){
     bits.push("🌊 金羊毛 "+Math.ceil(expeditionState.t)+"s");
   }
+  if(typeof mythicDone==="function" && mythicDone("arabia")){
+    if(djinnState.cd>0) bits.push("🪔 神灯冷却 "+Math.ceil(djinnState.cd)+"s · 按 L");
+    else bits.push("🪔 神灯就绪 · 按 L");
+  }
   if(bits.length){ el.style.display="block"; el.innerHTML=bits.join("<br>"); }
   else el.style.display="none";
 }
@@ -2920,6 +2926,7 @@ let hurtTintTimer=null;
 function damagePlayer(d,kx,kz){
   if(dead||d<=0) return;
   if(blessKind==="ward"&&blessT>0) d=d*0.5;        // 庇护祝福: 受伤减半
+  if(typeof mythicAegisMul==="function") d=d*mythicAegisMul();  // 埃癸斯神盾: 受伤减轻一成
   d=Math.max(1, Math.round(d*(1-armor*0.06)));   // 护甲减伤(每层 6%, 最多 5 层=30%)
   hp=Math.max(0,hp-d); lastDmg=performance.now(); regenAcc=0;
   updateHearts(); sfxHurt();
@@ -3161,8 +3168,8 @@ function chronicleHTML(){
     + row('🐫 波斯集市', bz)
     + row('🌊 金羊毛远征', ex)
     + row('🌑 亡者之夜', (undeadNight.active?('围城中 · 剩'+Math.ceil(undeadNight.t)+'s'):'平静')+' · 幸存 '+undeadNight.survived+' 夜')
-    + row('✨ 神话遗物', mythicState.done.length+' / '+MYTHIC.length+'（碎片 '+Object.values(mythicState.frags).reduce((a,b)=>a+b,0)+'）')
-    + '<div style="margin-top:12px;color:#c9b98a;font-size:12px">按 <b style="color:#ffd23f">T</b> 关闭 · <b>P</b> 陶片图鉴 · 声望随行为涨落，天象/集市/远征会自行降临</div>';
+    + row('✨ 神话遗物', mythicState.done.length+' / '+MYTHIC.length+'（碎片 '+Object.values(mythicState.frags).reduce((a,b)=>a+b,0)+'）· 按 K')
+    + '<div style="margin-top:12px;color:#c9b98a;font-size:12px">按 <b style="color:#ffd23f">T</b> 关闭 · <b>P</b> 陶片图鉴 · <b>K</b> 神话遗物 · 声望随行为涨落，天象/集市/远征会自行降临</div>';
 }
 function toggleChronicle(){
   const el=document.getElementById("chronicle"); if(!el) return;
@@ -3215,10 +3222,12 @@ document.addEventListener("keydown",e=>{
   if(e.code==="KeyT" && !e.repeat){ e.preventDefault(); toggleChronicle(); return; }
   if(e.code==="KeyY" && !e.repeat){ e.preventDefault(); toggleBazaarPanel(); return; }
   if(e.code==="KeyP" && !e.repeat){ e.preventDefault(); togglePotteryPanel(); return; }
+  if(e.code==="KeyK" && !e.repeat){ e.preventDefault(); toggleMythicPanel(); return; }
   if(e.code==="Escape" && npcPanelOpen){ closeNPCPanel(); return; }
   if(e.code==="Escape" && craftOpen){ toggleCraft(); return; }
-  const potEl=document.getElementById("pottery-panel"), sxEl=document.getElementById("sphinx-panel");
+  const potEl=document.getElementById("pottery-panel"), sxEl=document.getElementById("sphinx-panel"), myEl=document.getElementById("mythic-panel");
   if(e.code==="Escape" && potEl && potEl.classList.contains("on")){ closePotteryPanel(); return; }
+  if(e.code==="Escape" && myEl && myEl.classList.contains("on")){ closeMythicPanel(); return; }
   if(e.code==="Escape" && sxEl && sxEl.classList.contains("on")){ closeSphinxPanel(); return; }
   if(e.code==="Escape" && softLock){ pauseGame(); return; }
   if(!playing()) return;
@@ -3238,6 +3247,7 @@ document.addEventListener("keydown",e=>{
     if(e.code==="KeyG" && !e.repeat){ e.preventDefault(); startArena(); }   // 斗兽场开战
     if(e.code==="KeyU" && !e.repeat){ e.preventDefault(); openVault(); }     // 封印宝库(花钥匙)
     if(e.code==="KeyR" && !e.repeat){ e.preventDefault(); openSphinxPanel(); } // 斯芬克斯答谜
+    if(e.code==="KeyL" && !e.repeat){ e.preventDefault(); rubLamp(); }         // 不灭神灯许愿
   }
   keys[e.code]=true;
 });
@@ -6363,7 +6373,7 @@ function frame(now){
     else if(!player.onGround) fallStart = fallStart===null ? player.y : Math.max(fallStart,player.y);
     else if(fallStart!==null){
       const drop=fallStart-player.y;
-      if(drop>3.5) damagePlayer(Math.min(15,Math.floor(drop-3)),0,0);
+      if(drop>3.5 && !(typeof mythicFallImmune==="function" && mythicFallImmune())) damagePlayer(Math.min(15,Math.floor(drop-3)),0,0);
       fallStart=null;
     }
     if(player.flying && player.onGround) player.flying=false;
@@ -6457,7 +6467,7 @@ function frame(now){
       } else sandDmgT=0;
     }
     eatCd=Math.max(0,eatCd-dt);
-    djinnState.cd=Math.max(0,djinnState.cd-dt*((typeof omenDjinnCdMul==="function")?omenDjinnCdMul():1));   // 连锁: 西罗科天象 → 神灯冷却翻倍快
+    djinnState.cd=Math.max(0,djinnState.cd-dt*((typeof omenDjinnCdMul==="function")?omenDjinnCdMul():1)*((typeof mythicDjinnCdMul==="function")?mythicDjinnCdMul():1));   // 西罗科天象 / 不灭神灯 → 冷却加快
     romeWantedT=Math.max(0,romeWantedT-dt);
     tickOmen(dt);
     tickBazaar(dt);
@@ -7234,7 +7244,7 @@ const BAZAAR_WARES=[
 function renderBazaar(){
   const card=document.querySelector('#bazaar-panel .bz-card'); if(!card) return;
   let h='<h2>🐫 波斯行商 · 珍宝集市</h2><div style="color:#c9b98a;margin-bottom:10px">🏺 文物碎片交易 · 现有 <b style="color:#ffd23f">'+npcState.relics+'</b> · 剩 '+Math.ceil(bazaarState.t)+'s</div>';
-  BAZAAR_WARES.forEach((w,i)=>{ const cost=Math.max(1,w.cost-(facTier(faction.rome).idx>=2?1:0)); const afford=npcState.relics>=cost;
+  BAZAAR_WARES.forEach((w,i)=>{ const cost=bazaarCost(w); const afford=npcState.relics>=cost;
     h+='<div class="bz-ware'+(afford?'':' bz-poor')+'" data-i="'+i+'"><span>'+w.n+'</span><span class="bz-cost">'+cost+' 🏺'+(cost<w.cost?' 折':'')+'</span></div>'; });
   h+='<div style="margin-top:12px;color:#c9b98a;font-size:12px">点击货品购买 · 按 <b style="color:#ffd23f">Y</b> 或点空白关闭</div>';
   card.innerHTML=h;
@@ -7250,13 +7260,23 @@ function toggleBazaarPanel(){
 }
 function openBazaar(){ bazaarState.active=true; bazaarState.t=90; updateBuffHUD();
   showName("🐫 波斯行商的珍宝集市到来！按 Y 交易(90秒) · 现有文物 "+npcState.relics); return true; }
+function bazaarDiscount(){
+  let n=0;
+  if(facTier(faction.rome).idx>=2) n++;            // 罗马声望≥盟友
+  if(typeof mythicDone==="function" && mythicDone("persia")) n++;  // 法尔: 波斯集市再减 1
+  return n;
+}
+function bazaarCost(w){ return Math.max(1, w.cost-bazaarDiscount()); }
 function buyWare(i){
   if(!bazaarState.active){ showName("集市已散去…"); return false; }
   const w=BAZAAR_WARES[i]; if(!w) return false;
-  const cost=Math.max(1, w.cost-(facTier(faction.rome).idx>=2?1:0));   // 连锁: 罗马声望≥盟友 → 集市打折 1 文物
+  const cost=bazaarCost(w);
   if(npcState.relics<cost){ showName("🚫 文物碎片不足（需 "+cost+"，现有 "+npcState.relics+"）— 去考古或斩敌收集"); return false; }
   npcState.relics-=cost; bazaarState.bought++;
-  showName("🤝 成交：「"+w.n+"」（-"+cost+" 文物"+(cost<w.cost?" · 罗马盟友折扣":"")+"）"); try{ w.f(); }catch(e){}
+  const tags=[];
+  if(facTier(faction.rome).idx>=2 && cost<w.cost) tags.push("罗马盟友");
+  if(typeof mythicDone==="function" && mythicDone("persia") && cost<w.cost) tags.push("法尔");
+  showName("🤝 成交：「"+w.n+"」（-"+cost+" 文物"+(tags.length?" · "+tags.join("/")+"折扣":"")+"）"); try{ w.f(); }catch(e){}
   return true;
 }
 function tickBazaar(dt){
@@ -7279,8 +7299,9 @@ function claimExpedition(force){
   if(!expeditionState.active) return false;
   if(!force && expeditionDist()>6) return false;
   expeditionState.active=false; expeditionState.fleeces++;
-  giveBlock(GOLD_ORE,20); giveBlock(GEM_ORE,8); addXP(160); if(armor<5){ armor++; updateHearts(); } addFragment('medit');
-  showName("🏆 寻得金羊毛！(金x20 钻x8 +160经验 护甲+1) · 累计金羊毛 "+expeditionState.fleeces); updateBuffHUD(); return true;
+  const bonus=typeof mythicDone==="function" && mythicDone("medit");   // 已有黄金羊毛圣物: 再寻更丰
+  giveBlock(GOLD_ORE, bonus?30:20); giveBlock(GEM_ORE, bonus?12:8); addXP(bonus?220:160); if(armor<5){ armor++; updateHearts(); } addFragment('medit');
+  showName("🏆 寻得金羊毛！"+(bonus?"(金x30 钻x12 +220经验":"(金x20 钻x8 +160经验")+" 护甲+1) · 累计金羊毛 "+expeditionState.fleeces); updateBuffHUD(); return true;
 }
 function tickExpedition(dt){
   if(expeditionState.active){ expeditionState.t-=dt*omenExpeditionDtMul();   // 连锁: 阿尔戈天象 → 远征时限加倍
@@ -7316,31 +7337,59 @@ function tickUndeadNight(dt){
     if(undeadNight.cd<=0 && sunH<0.06){ undeadNight.cd=280; startUndeadNight(); } }   // 修复: 亡者之夜只在夜里降临(刷怪整段受 night 门控, 白天触发则一片空)
 }
 
-/* ---- ✨ 神话遗物收集: 六文明神器, 碎片从考古/斗兽场/法老/远征汇集, 集齐3枚拼合 → 一次性奖励+被动神力 ---- */
+/* ---- ✨ 神话遗物收集: 六文明神器, 碎片从考古/斗兽场/法老/远征汇集, 集齐3枚拼合 → 一次性奖励+被动神力 ----
+   鹰徽/安卡早已有被动; 灯/羊毛/法尔曾只发一次性掉落。现在六件都有可感知的被动, 按 K 可翻图鉴。 */
 const MYTHIC=[
-  { id:"aegis",  civ:"greece", n:"🏛 雅典娜的埃癸斯神盾", f:()=>{ maxHp=Math.min(40,maxHp+2); updateHearts(); } },
-  { id:"aquila", civ:"rome",   n:"🦅 罗马军团的黄金鹰徽", f:()=>{} },   // 被动: 经验 ×1.2
-  { id:"ankh",   civ:"egypt",  n:"☥ 埃及生命之符 · 安卡", f:()=>{} },   // 被动: 免疫法老诅咒灼蚀
-  { id:"farr",   civ:"persia", n:"🔥 波斯王者荣光 · 法尔", f:()=>{ if(armor<5){ armor++; updateHearts(); } else giveBlock(GEM_ORE,4); } },
-  { id:"lamp",   civ:"arabia", n:"🪔 阿拉伯不灭神灯",     f:()=>{ giveBlock(GEM_ORE,6); } },
-  { id:"fleece", civ:"medit",  n:"🌊 地中海黄金羊毛圣物", f:()=>{ giveBlock(GOLD_ORE,20); addXP(60); } },
+  { id:"aegis",  civ:"greece", n:"🏛 雅典娜的埃癸斯神盾", d:"受伤减轻一成 · 拼合时生命上限 +2", f:()=>{ maxHp=Math.min(40,maxHp+2); updateHearts(); } },
+  { id:"aquila", civ:"rome",   n:"🦅 罗马军团的黄金鹰徽", d:"经验 ×1.2", f:()=>{} },
+  { id:"ankh",   civ:"egypt",  n:"☥ 埃及生命之符 · 安卡", d:"免疫法老诅咒灼蚀", f:()=>{} },
+  { id:"farr",   civ:"persia", n:"🔥 波斯王者荣光 · 法尔", d:"波斯集市货价再减 1 文物", f:()=>{ if(armor<5){ armor++; updateHearts(); } else giveBlock(GEM_ORE,4); } },
+  { id:"lamp",   civ:"arabia", n:"🪔 阿拉伯不灭神灯",     d:"按 L 擦灯许愿 · 冷却加倍快", f:()=>{ giveBlock(GEM_ORE,6); } },
+  { id:"fleece", civ:"medit",  n:"🌊 地中海黄金羊毛圣物", d:"免疫摔落 · 再寻金羊毛赏赐更丰", f:()=>{ giveBlock(GOLD_ORE,20); addXP(60); } },
 ];
 const MYTHIC_NEED=3;
 const mythicState={ frags:{greece:0,rome:0,egypt:0,persia:0,arabia:0,medit:0}, done:[] };
 function mythicDone(civ){ return mythicState.done.indexOf(civ)>=0; }
 function mythicXpMul(){ return mythicDone('rome')?1.2:1; }
 function mythicCurseImmune(){ return mythicDone('egypt'); }
+function mythicAegisMul(){ return mythicDone('greece')?0.9:1; }
+function mythicFallImmune(){ return mythicDone('medit'); }
+function mythicDjinnCdMul(){ return mythicDone('arabia')?2:1; }
+function mythicBazaarOff(){ return mythicDone('persia')?1:0; }
 function randomCiv(){ const cs=Object.keys(mythicState.frags); return cs[Math.floor(Math.random()*cs.length)]; }
 function addFragment(civ,n){
   if(!(civ in mythicState.frags) || mythicDone(civ)) return false;
   mythicState.frags[civ]=Math.min(MYTHIC_NEED, mythicState.frags[civ]+(n||1));
   const rel=MYTHIC.find(r=>r.civ===civ);
   if(mythicState.frags[civ]>=MYTHIC_NEED){ mythicState.done.push(civ);
-    showName("✨ 神话遗物拼合成功：「"+rel.n+"」！"); try{ rel.f(); }catch(e){}
+    showName("✨ 神话遗物拼合成功：「"+rel.n+"」！"+(rel.d?" "+rel.d:"")+" · 按 K 翻看"); try{ rel.f(); }catch(e){}
+    if(civ==="arabia") updateBuffHUD();
+    if(document.getElementById("mythic-panel") && document.getElementById("mythic-panel").classList.contains("on")) renderMythic();
     if(mythicState.done.length===MYTHIC.length){ showName("🌟 六大文明神器俱全 · 你已成为沙海的传说！(+300经验)"); addXP(300); }
-  } else showName("🧩 拾得 "+rel.n+" 碎片（"+mythicState.frags[civ]+"/"+MYTHIC_NEED+"）");
+  } else showName("🧩 拾得 "+rel.n+" 碎片（"+mythicState.frags[civ]+"/"+MYTHIC_NEED+"）— 按 K 翻看");
+  if(document.getElementById("mythic-panel") && document.getElementById("mythic-panel").classList.contains("on")) renderMythic();
   return true;
 }
+function rubLamp(){
+  if(!mythicDone("arabia")){ showName("🪔 尚未拼合「阿拉伯不灭神灯」— 集齐 3 枚碎片后可按 L 许愿"); return false; }
+  return summonDjinn();
+}
+function renderMythic(){
+  const card=document.querySelector("#mythic-panel .pt-card"); if(!card) return;
+  const n=mythicState.done.length;
+  let h='<h2>✨ 六文明神话遗物</h2><div style="color:#c9b98a;margin-bottom:10px">已拼合 <b style="color:#ffd23f">'+n+' / '+MYTHIC.length+'</b> · 每文明集齐 '+MYTHIC_NEED+' 枚碎片</div>';
+  MYTHIC.forEach(t=>{
+    const have=mythicDone(t.civ), got=mythicState.frags[t.civ]|0;
+    const name=have?t.n:"？？？";
+    const desc=have?t.d:(got>0?("碎片 "+got+"/"+MYTHIC_NEED+" · 继续收集即可拼合"):"尚未发现此文明的碎片");
+    h+='<div class="pt-row'+(have?'':' locked')+'"><div><div class="pt-n">'+name+'</div><div class="pt-d">'+desc+'</div></div><div>'+(have?'✓':(got+"/"+MYTHIC_NEED))+'</div></div>';
+  });
+  h+='<div style="margin-top:12px;color:#c9b98a;font-size:12px">按 <b style="color:#ffd23f">K</b> 或点空白关闭'+(mythicDone("arabia")?' · 拼合神灯后按 <b style="color:#ffd23f">L</b> 擦灯':'')+'</div>';
+  card.innerHTML=h;
+}
+function openMythicPanel(){ const el=document.getElementById("mythic-panel"); if(!el) return; renderMythic(); el.classList.add("on"); if(document.pointerLockElement) document.exitPointerLock(); }
+function closeMythicPanel(){ const el=document.getElementById("mythic-panel"); if(el) el.classList.remove("on"); }
+function toggleMythicPanel(){ const el=document.getElementById("mythic-panel"); if(!el) return; if(el.classList.contains("on")) closeMythicPanel(); else openMythicPanel(); }
 
 /* ---- 🏅 称号: 由所有系统的累计成就推算, 晋升时通报, 编年史面板置顶显示 ---- */
 function titleScore(){ return mythicState.done.length*8 + curseState.pharaohSlain*5 + expeditionState.fleeces*4 + undeadNight.survived*4 + arenaState.bestWave*2 + bioSeen.size*2 + facTier(faction.rome).idx*3 + facTier(faction.egypt).idx*3 + djinnState.rubs; }
@@ -7574,12 +7623,15 @@ window.__game = {
   openBazaar:()=>openBazaar(), buyWare:(i)=>buyWare(i),
   get expedition(){ return { active:expeditionState.active, dist:expeditionState.active?+expeditionDist().toFixed(0):-1, t:+expeditionState.t.toFixed(1), fleeces:expeditionState.fleeces }; },
   startExpedition:()=>startExpedition(), claimExpedition:(f)=>claimExpedition(f),
-  get chains(){ return { aresRaid:omenActive('ares'), aresSpawnMul:omenActive('ares')?0.55:1, hermesDig:omenActive('hermes'), demeterRegen:omenActive('demeter'), poseidonStorm:omenActive('poseidon'), marsMelee:omenActive('mars'), raSandImmune:omenActive('ra'), mithraBazaar:omenActive('mithra'), siroccoMove:omenActive('sirocco'), argosExpedition:omenActive('argos'), romeBazaarDiscount:facTier(faction.rome).idx>=2?1:0, romeWanted:romeWanted(), romeWantedT:+romeWantedT.toFixed(1) }; },
+  get chains(){ return { aresRaid:omenActive('ares'), aresSpawnMul:omenActive('ares')?0.55:1, hermesDig:omenActive('hermes'), demeterRegen:omenActive('demeter'), poseidonStorm:omenActive('poseidon'), marsMelee:omenActive('mars'), raSandImmune:omenActive('ra'), mithraBazaar:omenActive('mithra'), siroccoMove:omenActive('sirocco'), argosExpedition:omenActive('argos'), romeBazaarDiscount:facTier(faction.rome).idx>=2?1:0, farrBazaar:mythicBazaarOff(), lampCd:mythicDjinnCdMul(), fleeceFall:mythicFallImmune(), aegisDr:mythicAegisMul(), romeWanted:romeWanted(), romeWantedT:+romeWantedT.toFixed(1) }; },
   get undeadNight(){ return { active:undeadNight.active, t:+undeadNight.t.toFixed(1), spawnMul:undeadSpawnMul(), survived:undeadNight.survived }; },
   startUndeadNight:()=>startUndeadNight(), spawnUndeadPharaoh:()=>spawnUndeadPharaoh(),
-  get mythic(){ return { frags:Object.assign({},mythicState.frags), done:mythicState.done.slice(), total:MYTHIC.length, need:MYTHIC_NEED, xpMul:mythicXpMul(), curseImmune:mythicCurseImmune() }; },
+  get mythic(){ return { frags:Object.assign({},mythicState.frags), done:mythicState.done.slice(), total:MYTHIC.length, need:MYTHIC_NEED, xpMul:mythicXpMul(), curseImmune:mythicCurseImmune(),
+                      aegisMul:mythicAegisMul(), fallImmune:mythicFallImmune(), djinnCdMul:mythicDjinnCdMul(), bazaarOff:mythicBazaarOff(),
+                      passives:MYTHIC.map(t=>({civ:t.civ, n:t.n, d:t.d, have:mythicDone(t.civ)})) }; },
   get title(){ return { name:currentTitle(), score:titleScore(), tiers:TITLES.map(t=>t[1]) }; },
   addFragment:(civ,n)=>addFragment(civ,n),
+  openMythic:()=>openMythicPanel(), closeMythic:()=>closeMythicPanel(), rubLamp:()=>rubLamp(),
   provokeRome:()=>{ romeWantedT=Math.min(90, romeWantedT+35); addFaction('rome',-5); return { wanted:romeWanted(), t:+romeWantedT.toFixed(1) }; },   // 等效于斩杀军团兵(调试/程序触发)
   get payoff(){ return { landmarks:[...landSeen], types:[...landTypesSeen()], total:PAYOFF_N, weather, underCover:underCover(), yield:BIOME_YIELD }; },
   get npc(){ return { relics:npcState.relics, traderMet:npcState.traderMet, oracleMet:npcState.oracleMet, trades:npcState.trades, blessings:npcState.blessings,
@@ -8234,6 +8286,54 @@ function selftest(){
       bag.clear(); for(const [k,v] of bagSnapS) bag.set(k,v); xp=xpS; lvl=lvlS; dmgMul=dmgS; maxHp=maxS; hp=hpS; armor=armorS;
       mobs.length=0; for(const m of mobsSnapS) mobs.push(m);
       updateHearts(); updateXPHUD(); updateSphinxPrompt();
+    }
+
+    // 8r. 神话遗物被动: 灯/羊毛/法尔不再只是一次性掉落; 图鉴可翻; 神灯可按 L
+    {
+      const mythSnapR={frags:Object.assign({},mythicState.frags), done:mythicState.done.slice()};
+      const bagSnapR=new Map(bag), xpR=xp, lvlR=lvl, dmgR=dmgMul, maxR=maxHp, hpR=hp, armorR=armor;
+      const djinnR={rubs:djinnState.rubs, cd:djinnState.cd};
+      const facR={rome:faction.rome, egypt:faction.egypt};
+      const blessR={t:blessT, k:blessKind};
+      mythicState.frags={greece:0,rome:0,egypt:0,persia:0,arabia:0,medit:0}; mythicState.done=[];
+      ok("未拼合时无灯/羊毛/法尔被动", mythicDjinnCdMul()===1 && !mythicFallImmune() && mythicBazaarOff()===0 && mythicAegisMul()===1, "lamp="+mythicDjinnCdMul()+" fall="+mythicFallImmune()+" farr="+mythicBazaarOff());
+      ok("未拼合神灯时擦灯被拒", rubLamp()===false, "");
+      for(let i=0;i<MYTHIC_NEED;i++) addFragment("arabia");
+      ok("拼合不灭神灯后冷却加倍快", mythicDone("arabia") && mythicDjinnCdMul()===2, "done="+mythicState.done.join(","));
+      djinnState.cd=0;
+      const wish=rubLamp();
+      ok("拼合后可擦灯许愿", wish!==false && djinnState.cd>0 && djinnState.rubs===djinnR.rubs+1, "wish="+wish+" cd="+djinnState.cd);
+      mythicState.frags.persia=0; if(mythicDone("persia")) mythicState.done=mythicState.done.filter(c=>c!=="persia");
+      faction.rome=0;
+      const ware=BAZAAR_WARES[0];
+      const baseCost=ware.cost;
+      ok("无法尔时集市原价", bazaarCost(ware)===baseCost, "cost="+bazaarCost(ware));
+      for(let i=0;i<MYTHIC_NEED;i++) addFragment("persia");
+      ok("法尔使波斯集市减 1 文物", mythicDone("persia") && bazaarCost(ware)===baseCost-1 && mythicBazaarOff()===1, "cost="+bazaarCost(ware));
+      for(let i=0;i<MYTHIC_NEED;i++) addFragment("medit");
+      ok("黄金羊毛免疫摔落", mythicDone("medit") && mythicFallImmune()===true, "");
+      blessKind=""; blessT=0; armor=0; dead=false; hp=20; maxHp=20;
+      const h0=hp; damagePlayer(10,0,0);
+      const dropNo=h0-hp;
+      mythicState.frags.greece=0; mythicState.done=mythicState.done.filter(c=>c!=="greece");
+      for(let i=0;i<MYTHIC_NEED;i++) addFragment("greece");
+      hp=20; maxHp=Math.max(20,maxHp); dead=false; armor=0; blessKind=""; blessT=0;
+      const h1=hp; damagePlayer(10,0,0);
+      const dropYes=h1-hp;
+      ok("埃癸斯减轻伤害", mythicAegisMul()===0.9 && dropYes<dropNo, "noShield="+dropNo+" aegis="+dropYes);
+      openMythicPanel();
+      const mp=document.getElementById("mythic-panel");
+      const mcard=mp && mp.querySelector(".pt-card");
+      ok("神话遗物面板能打开并列出神器", mp && mp.classList.contains("on") && mcard && /不灭神灯|埃癸斯/.test(mcard.innerHTML) && /？？？/.test(mcard.innerHTML), "open="+(mp&&mp.classList.contains("on")));
+      closeMythicPanel();
+      ok("编年史提示按 K 翻神话遗物", /神话遗物/.test(chronicleHTML()) && /按 K/.test(chronicleHTML()), "");
+      ok("天象冷却函数仍只看西罗科", omenDjinnCdMul()===(omenActive("sirocco")?2:1), "omenCd="+omenDjinnCdMul());
+      mythicState.frags=mythSnapR.frags; mythicState.done=mythSnapR.done;
+      djinnState.rubs=djinnR.rubs; djinnState.cd=djinnR.cd;
+      faction.rome=facR.rome; faction.egypt=facR.egypt;
+      blessT=blessR.t; blessKind=blessR.k;
+      bag.clear(); for(const [k,v] of bagSnapR) bag.set(k,v); xp=xpR; lvl=lvlR; dmgMul=dmgR; maxHp=maxR; hp=hpR; armor=armorR;
+      updateHearts(); updateXPHUD(); updateBuffHUD(); closeMythicPanel();
     }
 
     // 9. 渲染管线仍然可用
