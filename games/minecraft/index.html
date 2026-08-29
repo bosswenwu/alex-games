@@ -3289,6 +3289,7 @@ function refreshMenu(){
 continuebtn.addEventListener("click",()=>{
   initAudio();
   if(loadGame()){
+    saveDisabled=false;                       // ?selftest=1 会关掉自动存档以免覆盖; 载入真存档后恢复
     showName("📂 已载入存档：第 "+dayCount+" 天 · Lv"+lvl);
     setTitleChrome(false);
     enterPointerLock();
@@ -3297,6 +3298,7 @@ continuebtn.addEventListener("click",()=>{
 newworldbtn.addEventListener("click",()=>{
   initAudio();
   if(!confirm("开启新世界会覆盖当前存档，确定吗？")) return;
+  saveDisabled=false;
   deleteSave();
   SEED=(Date.now()%1000000);
   _hCache.clear(); _bioCache.clear(); blockDiff.clear();
@@ -6628,6 +6630,32 @@ function loadGame(){
   return true;
 }
 function deleteSave(){ try{ localStorage.removeItem(SAVE_KEY); }catch(e){} }
+/* 自测会调用 saveGame, 绝不能把测试世界写进玩家的 sandsea_save_v1。
+   进出 selftest 时快照/还原所有 sandsea* 键; 抛错也要还原。 */
+function sandseaStorageSnapshot(){
+  const o={};
+  try{
+    for(let i=0;i<localStorage.length;i++){
+      const k=localStorage.key(i);
+      if(k && k.indexOf("sandsea")===0) o[k]=localStorage.getItem(k);
+    }
+  }catch(e){}
+  return o;
+}
+function sandseaStorageRestore(snap){
+  try{
+    const cur=[];
+    for(let i=0;i<localStorage.length;i++){
+      const k=localStorage.key(i);
+      if(k && k.indexOf("sandsea")===0) cur.push(k);
+    }
+    for(const k of cur) if(!Object.prototype.hasOwnProperty.call(snap,k)) localStorage.removeItem(k);
+    for(const k in snap){
+      if(snap[k]==null) localStorage.removeItem(k);
+      else localStorage.setItem(k, snap[k]);
+    }
+  }catch(e){}
+}
 // 自动存档: 每 30 秒 + 关闭页面时
 setInterval(()=>{ if(playing() && !dead) saveGame(true); }, 30000);
 addEventListener("beforeunload", ()=>{ if(worldGenReady && !dead) saveGame(true); });
@@ -6999,7 +7027,7 @@ function updateCurse(dt){
 const VAULT_SITES=["pyramid","palace","colosseum"];
 const vaultState={ opened:0 };
 function vaultZone(){ return nearStructure(VAULT_SITES, 28); }
-function vaultCiv(type){ return type==="pyramid"?"egypt":(type==="colosseum"?"rome":"persia"); }
+function vaultCiv(type){ return type==="pyramid"?"egypt":"rome"; }   // 宫殿是凯撒行宫, 与斗兽场同属罗马; 金字塔仍归埃及
 function updateVaultPrompt(){
   const el=document.getElementById("vaultPrompt"); if(!el) return;
   if(!worldGenReady || dead || npcPanelOpen || craftOpen){ el.style.display="none"; return; }
@@ -7565,8 +7593,9 @@ window.__game = {
   armSphinxRiddle, openSphinx:()=>openSphinxPanel(), answerSphinx:(i)=>answerSphinx(i), sphinxEnrage:(m)=>sphinxEnrage(m),
   get arena(){ return { active:arenaState.active, wave:arenaState.wave, cleared:arenaState.cleared, bestWave:arenaState.bestWave, keys:arenaState.keys, alive:aliveArenaMobs(), inZone:!!arenaZone() }; },
   startArena, endArena:(w)=>endArena(!!w), spawnArenaWave:(i)=>{ arenaState.cx=player.x; arenaState.cz=player.z; return spawnArenaWave(i|0); },
-  get vault(){ return { keys:arenaState.keys, opened:vaultState.opened, inZone:!!vaultZone(), sites:VAULT_SITES.slice() }; },
-  openVault:(f)=>openVault(!!f),
+  get vault(){ return { keys:arenaState.keys, opened:vaultState.opened, inZone:!!vaultZone(), sites:VAULT_SITES.slice(),
+                      civ:{pyramid:vaultCiv("pyramid"), palace:vaultCiv("palace"), colosseum:vaultCiv("colosseum")} }; },
+  openVault:(f)=>openVault(!!f), vaultCiv,
   get curse(){ return { active:curseState.active, t:+curseState.t.toFixed(1), pharaohSlain:curseState.pharaohSlain }; },
   applyCurse, slayPharaoh:()=>onPharaohSlain(), awakenPharaoh:()=>{ const p=player; awakenPharaoh(Math.floor(p.x)+2, Math.floor(p.y), Math.floor(p.z)); return curseState.active; },
   // 金字塔实体机关陷阱
@@ -7610,6 +7639,10 @@ function selftest(){
   const ok =(name,cond,detail)=>{ (cond?pass++:fail++); results.push({name, ok:!!cond, detail:detail||""}); };
   const near=(a,b,eps)=>Math.abs(a-b)<=(eps||1e-6);
 
+  // 先快照玩家 localStorage: selftest 里的 saveGame 会写测试世界, 绝不能留下。
+  const liveStore=sandseaStorageSnapshot();
+  const liveSave=(liveStore[SAVE_KEY]!==undefined)?liveStore[SAVE_KEY]:null;
+
   // 保存现场, 测完还原, 不破坏玩家进度
   const snap={x:player.x,y:player.y,z:player.z,hp,dead,softLock,vy:player.vy,wgr:worldGenReady};
   // setBlock 只在 worldGenReady 为真时才记录 blockDiff(避免把地形生成当成玩家改动)。
@@ -7617,6 +7650,17 @@ function selftest(){
   worldGenReady=true;
   const prevDiff=new Map(blockDiff);
   try{
+    // 0. 存档护栏: 用专用哨兵键验证快照/还原, 不把假生产存档留给玩家
+    {
+      const probeKey="sandsea_selftest_guard";
+      try{ localStorage.setItem(probeKey, "probe"); localStorage.setItem(SAVE_KEY, '{"v":1,"seed":-1,"_selftestJunk":1}'); }catch(e){}
+      sandseaStorageRestore(liveStore);
+      let now=null, probe=null;
+      try{ now=localStorage.getItem(SAVE_KEY); probe=localStorage.getItem(probeKey); }catch(e){}
+      ok("自测还原后玩家存档未被动", now===liveSave, "beforeLen="+(liveSave?liveSave.length:0)+" afterLen="+(now?now.length:0));
+      ok("自测哨兵键不会残留", probe==null, "probe="+probe);
+    }
+
     // 1. 世界生成
     ok("世界已生成区块", world.size>0, "chunkCount="+world.size);
     const testChunk=genChunk(12345,6789);
@@ -8052,10 +8096,16 @@ function selftest(){
       ok("无钥匙时拒绝开宝库", openVault(true)===false && arenaState.keys===0 && vaultState.opened===0, "keys="+arenaState.keys+" opened="+vaultState.opened);
       arenaState.keys=2;
       const gold0=bagCount(GOLD_ORE), gem0=bagCount(GEM_ORE);
+      mythicState.frags.rome=0; mythicState.frags.persia=0;
+      mythicState.done=mythicState.done.filter(c=>c!=="rome" && c!=="persia");
       ok("有钥匙时可强制开启封印宝库", openVault(true)===true, "opened="+vaultState.opened);
       ok("开宝库会花掉一把钥匙", arenaState.keys===1, "keys="+arenaState.keys);
       ok("开宝库会计入开启次数", vaultState.opened===1, "opened="+vaultState.opened);
       ok("开宝库会掉金/钻", bagCount(GOLD_ORE)>gold0 && bagCount(GEM_ORE)>gem0, "金="+(bagCount(GOLD_ORE)-gold0)+" 钻="+(bagCount(GEM_ORE)-gem0));
+      ok("强制开宫殿宝库发罗马碎片而非波斯", vaultCiv("palace")==="rome" && mythicState.frags.rome===1 && mythicState.frags.persia===0,
+         "rome="+mythicState.frags.rome+" persia="+mythicState.frags.persia+" civ="+vaultCiv("palace"));
+      ok("金字塔宝库给埃及碎片", vaultCiv("pyramid")==="egypt", "civ="+vaultCiv("pyramid"));
+      ok("斗兽场宝库给罗马碎片", vaultCiv("colosseum")==="rome", "civ="+vaultCiv("colosseum"));
       vaultState.opened=7;
       const wroteV=collectSave();
       ok("宝库开启次数写入存档(feats)", wroteV.feats && wroteV.feats.vaultsOpened===7, "feats="+JSON.stringify(wroteV.feats));
@@ -8202,12 +8252,20 @@ function selftest(){
     }
     player.x=fx2; player.z=fz2; pcx=1e9; refreshChunks();
     ok("远距离云层UV仍在[0,1)内(防白块)", worstUV<1, "最大|uUVOff|="+worstUV.toFixed(4));
+
+    // 收尾再确认一次: 即使中途 saveGame 写过测试世界, 还原后玩家存档仍在
+    sandseaStorageRestore(liveStore);
+    let endSave=null; try{ endSave=localStorage.getItem(SAVE_KEY); }catch(e){}
+    ok("自测结束时玩家存档仍未被测试世界覆盖", endSave===liveSave, "match="+(endSave===liveSave));
   } finally {
-    // 还原现场
-    player.x=snap.x; player.y=snap.y; player.z=snap.z; player.vy=snap.vy;
-    hp=snap.hp; dead=snap.dead; softLock=snap.softLock; worldGenReady=snap.wgr;
-    blockDiff.clear(); for(const [k,v] of prevDiff) blockDiff.set(k,v);
-    pcx=1e9; refreshChunks();
+    // 先还 localStorage(抛错也要还), 再还原内存现场
+    try{ sandseaStorageRestore(liveStore); }catch(e){}
+    try{
+      player.x=snap.x; player.y=snap.y; player.z=snap.z; player.vy=snap.vy;
+      hp=snap.hp; dead=snap.dead; softLock=snap.softLock; worldGenReady=snap.wgr;
+      blockDiff.clear(); for(const [k,v] of prevDiff) blockDiff.set(k,v);
+      pcx=1e9; refreshChunks();
+    }catch(e){}
   }
 
   const line="=".repeat(52);
@@ -8223,6 +8281,8 @@ if(/[?&]selftest=1/.test(location.search||"")){
   (function waitSelftest(){
     if(typeof worldGenReady!=="undefined" && worldGenReady && typeof selftest==="function"){
       const r=selftest();
+      saveDisabled=true;                      // 自测世界不得在关页/切后台时写回; 点「继续上次」会重新打开存档
+      try{ refreshMenu(); }catch(e){}
       const pre=document.createElement("pre");
       pre.id="selftest-out";
       pre.style.cssText="position:fixed;inset:8px;overflow:auto;z-index:999;background:#111;color:#eee;padding:12px;font:12px/1.4 monospace";

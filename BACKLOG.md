@@ -99,3 +99,8 @@
 - **陶片图鉴可翻**：出土鉴定 12 种器型，按 **P** 打开面板（已鉴定显示名+说明，未鉴定锁着）。编年史新增一行。`arch.shards` / `setComplete` 写入 `sandsea_save_v1`，老存档缺字段 → 图鉴 0 种（出土计数仍按原 `pottery` 恢复）。集齐 12 种 +80 经验一次。`__game.arch` / `grantPottery` / `openPottery`。
 - **斯芬克斯先问后打**：金字塔看守者不再一刷就砍。靠近按 **R** 答中文谜题；答对有赏并让路，答错或动手则开战。`sphinx.solved/failed` 存档，老存档归零。`__game.sphinx` / `answerSphinx` / `sphinxEnrage`。
 - **仍留给真机**：谜题手感/斯芬克斯模型观感；神话灯/羊毛/法尔被动。
+
+## Cursor 进度（2026-08-29 续：PR#4 评审修补，追加）
+
+- **P1 自测不再碾存档**：`?selftest=1` 进 `selftest()` 前快照所有 `sandsea*` localStorage 键，`finally`（含抛错）还原。用专用哨兵键 `sandsea_selftest_guard` 断言还原，不把假生产存档留给玩家。跑完后 `saveDisabled=true`，关页/切后台不会把测试世界写回；点「继续上次的世界」或「开启新世界」才重新允许存档。
+- **P2 行宫宝库归罗马**：`vaultCiv("palace")` 从 persia 改为 rome（宫殿是凯撒行宫）。金字塔仍 egypt，斗兽场仍 rome。
