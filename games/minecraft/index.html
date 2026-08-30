@@ -6114,7 +6114,7 @@ function updateWeather(dt){
     const r=Math.random();
     const bio=biomeAt(Math.floor(player.x),Math.floor(player.z));
     if(weather==="clear"){
-      if(aridBiome(bio) && r<0.48){ weather="sand"; weatherT=28+Math.random()*22; showName("🌪 沙暴来袭！能见度骤降 — 躲进掩体或建筑"); }
+      if(aridBiome(bio) && r<0.48){ weather="sand"; weatherT=8+Math.random()*6; showName("🌪 沙暴来袭！能见度骤降 — 躲进掩体或建筑"); }   // 沙暴短(8~14秒)
       else { weather = r<0.25?"storm":"rain"; weatherT=25+Math.random()*35; showName(weather==="storm"?"⛈ 雷暴来袭！":"🌧 下雨了"); }
     }
     else { weather="clear"; weatherT=240+Math.random()*260; showName("☀ 天放晴了"); }
@@ -6912,7 +6912,7 @@ function omenActive(k){ return omenState.kind===k && omenState.t>0; }
 function proclaimOmen(force){
   const o = force ? (OMENS.find(x=>x.k===force)||OMENS[0]) : OMENS[Math.floor(Math.random()*OMENS.length)];
   omenState.kind=o.k; omenState.t=120;
-  if(o.k==='poseidon'){ weather="sand"; weatherT=Math.max(weatherT,70); }   // 连锁: 波塞冬天象 → 立即卷起沙暴
+  if(o.k==='poseidon'){ weather="sand"; weatherT=Math.max(weatherT,15); }   // 连锁: 波塞冬天象 → 立即卷起一场短沙暴(15s)
   showName("🔮 神谕宣示："+o.n+"（"+Math.round(omenState.t)+" 秒）");
   return o.k;
 }
@@ -7203,7 +7203,7 @@ const MIRAGE_CAP=6;
 let mirageT=0, mirageSpawnT=2;
 function biomeDryHere(){
   const b=biomeAt(Math.floor(player.x),Math.floor(player.z));
-  return b===BIO_DESERT||b===BIO_MESA||b===BIO_SAVANNA;
+  return b===BIO_DESERT;   // 海市蜃楼只在真沙漠出现(红土台地/草原不再冒绿洲幻影, 避免"绿像素"观感)
 }
 function spawnMirage(){
   if(mirages.length>=MIRAGE_CAP) return false;
@@ -7218,8 +7218,8 @@ function updateMirage(dt){
   const dry=biomeDryHere();
   mirageSpawnT-=dt;
   if(dry && mirageSpawnT<=0){
-    mirageSpawnT=4+Math.random()*4;
-    if(mirages.length<MIRAGE_CAP && Math.random()<0.7) spawnMirage();
+    mirageSpawnT=9+Math.random()*7;
+    if(mirages.length<MIRAGE_CAP && Math.random()<0.45) spawnMirage();
   }
   const fadeNear=26, fadeFar=48;
   for(let i=mirages.length-1;i>=0;i--){
