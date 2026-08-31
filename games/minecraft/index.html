@@ -8070,12 +8070,12 @@ function selftest(){
     {
       const mSnap=mirages.slice(), spawnSnap=mirageSpawnT; mirages.length=0; mirageSpawnT=999;
       const fx=player.x, fz=player.z; let moved=false;
-      // 找一处干旱群系(沙漠/台地/草原)站上去, 让 biomeDryHere() 为真(biomeAt 是纯噪声, 不需加载区块)
+      // 找一处真沙漠站上去, 让 biomeDryHere() 为真(海市蜃楼只在 BIO_DESERT)
       outer: for(let ax=-3000;ax<=3000;ax+=96) for(let az=-3000;az<=3000;az+=96){
         const b=biomeAt(Math.floor(fx+ax),Math.floor(fz+az));
-        if(b===BIO_DESERT||b===BIO_MESA||b===BIO_SAVANNA){ player.x=fx+ax; player.z=fz+az; moved=true; break outer; }
+        if(b===BIO_DESERT){ player.x=fx+ax; player.z=fz+az; moved=true; break outer; }
       }
-      ok("能定位到干旱群系(海市蜃楼场景)", moved && biomeDryHere(), "dry="+biomeDryHere());
+      ok("能定位到沙漠群系(海市蜃楼场景)", moved && biomeDryHere(), "dry="+biomeDryHere());
       ok("海市蜃楼可生成幻影绿洲", spawnMirage()===true && mirages.length===1, "count="+mirages.length);
       for(let i=0;i<20;i++) spawnMirage();
       ok("幻影数量有 draw 上限(≤"+MIRAGE_CAP+")", mirages.length<=MIRAGE_CAP, "count="+mirages.length);
