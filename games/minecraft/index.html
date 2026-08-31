@@ -51,8 +51,12 @@
     color:#f0e6d2; font-size:13px; z-index:30; pointer-events:none; white-space:nowrap; }
   #npcPrompt b { color:#ffd98a; }
   #buffHud { position:absolute; left:12px; bottom:118px; display:none; z-index:30;
-    background:rgba(30,20,44,.7); border:1px solid #9a7ad0; border-radius:6px; padding:4px 10px;
-    color:#e6d9ff; font-size:12px; font-weight:bold; pointer-events:none; }
+    background:rgba(30,20,44,.7); border:1px solid #9a7ad0; border-radius:6px; padding:5px 10px;
+    color:#e6d9ff; font-size:12px; font-weight:bold; pointer-events:none; line-height:1.55; max-width:280px; }
+  #vaultPrompt { position:absolute; left:50%; bottom:128px; transform:translateX(-50%); display:none;
+    background:rgba(20,14,26,.82); border:1px solid #c9a24b; border-radius:20px; padding:6px 16px;
+    color:#f0e6d2; font-size:13px; z-index:30; pointer-events:none; white-space:nowrap; }
+  #vaultPrompt b { color:#ffd98a; }
   #hotbar { position:absolute; left:50%; bottom:10px; transform:translateX(-50%); display:flex; background:rgba(0,0,0,.35); border:2px solid rgba(0,0,0,.55); padding:2px; }
   .slot { width:50px; height:50px; border:2px solid #8b8b8b; border-right-color:#555; border-bottom-color:#555; background:rgba(139,139,139,.28); margin:1px; display:flex; align-items:center; justify-content:center; position:relative; }
   .slot.sel { border:3px solid #fff; box-shadow:0 0 0 2px #000 inset; }
@@ -164,6 +168,21 @@
   #bazaar-panel .bz-ware:hover { background:#ffd23f22; border-color:#ffd23f66; }
   #bazaar-panel .bz-poor { opacity:.45; cursor:not-allowed; }
   #bazaar-panel .bz-cost { color:#ffd23f; font-weight:700; white-space:nowrap; }
+  #pottery-panel, #sphinx-panel, #mythic-panel { position:fixed; inset:0; z-index:62; display:none; align-items:center; justify-content:center; padding:20px; background:rgba(8,6,3,.82); cursor:pointer; }
+  #pottery-panel.on, #sphinx-panel.on, #mythic-panel.on { display:flex; }
+  #pottery-panel .pt-card, #sphinx-panel .sx-card, #mythic-panel .pt-card { max-width:520px; width:100%; max-height:86vh; overflow:auto; background:linear-gradient(#1a140c,#120d07); border:2px solid #c9a24b; border-radius:12px; padding:20px 24px; color:#f0e6d0; box-shadow:0 10px 40px #000a; cursor:default; }
+  #pottery-panel h2, #sphinx-panel h2, #mythic-panel h2 { color:#ffd23f; margin:0 0 8px; font-size:19px; }
+  #pottery-panel .pt-row { display:flex; justify-content:space-between; gap:12px; padding:8px 10px; margin:5px 0; border:1px solid #ffffff14; border-radius:8px; background:#ffffff08; }
+  #pottery-panel .pt-row.locked { opacity:.42; }
+  #pottery-panel .pt-n { font-weight:700; color:#ffe9c4; }
+  #pottery-panel .pt-d { color:#c9b98a; font-size:12px; margin-top:2px; }
+  #sphinx-panel .sx-q { color:#ffe9c4; font-size:16px; line-height:1.7; margin:8px 0 14px; }
+  #sphinx-panel .sx-ans { padding:11px 13px; margin:7px 0; border:1px solid #ffffff1e; border-radius:9px; background:#ffffff08; cursor:pointer; transition:.15s; }
+  #sphinx-panel .sx-ans:hover { background:#ffd23f22; border-color:#ffd23f66; }
+  #sphinxPrompt { position:absolute; left:50%; bottom:162px; transform:translateX(-50%); display:none;
+    background:rgba(20,14,26,.82); border:1px solid #c9a24b; border-radius:20px; padding:6px 16px;
+    color:#f0e6d2; font-size:13px; z-index:30; pointer-events:none; white-space:nowrap; }
+  #sphinxPrompt b { color:#ffd98a; }
   #help { margin-top:30px; color:#d8d8d8; font-size:14px; line-height:1.9; text-shadow:1px 1px 0 #000; text-align:center; }
   #help b { color:#ffff88; }
   #toast { position:absolute; left:50%; top:44%; transform:translateX(-50%); display:none;
@@ -191,6 +210,8 @@
 </div>
 <div id="hud">
   <div id="npcPrompt"></div>
+  <div id="vaultPrompt"></div>
+  <div id="sphinxPrompt"></div>
   <div id="buffHud"></div>
   <div id="watertint"></div>
   <div id="lavatint"></div>
@@ -240,12 +261,15 @@
 <div id="fullhelp">
   <div class="fh-card">
     <div class="fh-title">完整帮助 · 按 <b>H</b> 或点此关闭</div>
-    <b>F5</b> 第三人称　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成　<b>Esc</b> 暂停　<b>T</b> 编年史<br>
+    <b>F5</b> 第三人称　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成　<b>Esc</b> 暂停　<b>T</b> 编年史　<b>P</b> 陶片图鉴　<b>K</b> 神话遗物　<b>U</b> 开宝库　<b>R</b> 答斯芬克斯　<b>L</b> 擦神灯<br>
     <b>物品栏</b>：1烟花 2钩爪 3可乐 4铁剑 5机关枪 6火箭筒 7弓 8=TNT(右键放·左键点燃) 9弹跳板<br>
     <b>2 钩爪</b>甩向准星把你拉过去；<b>3 可乐</b>回血+加速；<b>9 弹跳板</b>踩上去高高弹飞不摔伤<br>
     击杀获得<b>经验</b>升级(提升生命与伤害)。白天长、夜晚短而亮，敌人只是点缀<br>
-    <b>🏛 古文明玩法</b>(按 <b style="color:#ffd23f">T</b> 看编年史)：<b>考古</b>用镐刨可疑沙砾出文物/神灯　<b>斗兽场</b>站场地按 <b>G</b> 打五波夺宝　<b>金字塔石棺</b>唤法老王(诅咒缠身，斩杀解咒)<br>
-    　<b>阵营声望</b>：助罗马/敬埃及各有回报，袭击军团会被<b>通缉</b>　<b>🔮天象·🐫波斯集市·🌊金羊毛远征·🌑亡者之夜</b>会不时自行降临，留意顶部提示<br>
+    <b>🏛 古文明玩法</b>(按 <b style="color:#ffd23f">T</b> 看编年史)：<b>考古</b>用镐刨可疑沙砾出文物/神灯/陶片　按 <b>P</b> 翻陶片图鉴　<b>斗兽场</b>站场地按 <b>G</b> 打五波夺宝　<b>金字塔石棺</b>唤法老王(诅咒缠身，斩杀解咒)<br>
+    　<b>斯芬克斯</b>守在金字塔外：靠近按 <b>R</b> 回答谜题，答对有赏；答错或动手则开战<br>
+    　<b>阵营声望</b>：助罗马/敬埃及各有回报，袭击军团会被<b>通缉</b>　<b>🔮天象</b>（希腊+罗马/埃及/波斯/阿拉伯/地中海）·<b>🐫波斯集市·🌊金羊毛远征·🌑亡者之夜</b>会不时自行降临，左下状态栏会挂着倒计时<br>
+    　<b>宝库钥匙</b>：通关斗兽场或斩杀法老获得，站在金字塔/宫殿/斗兽场按 <b>U</b> 开启封印宝库（钥匙会真正被花掉）<br>
+    　<b>神话遗物</b>：六文明碎片拼合后有被动神力（按 <b>K</b> 翻看）。拼合不灭神灯后按 <b>L</b> 可随时擦灯许愿<br>
     <b>群系</b>：沙海·红土台地·干草原为主，另有盐湖·峡谷·火山·<b>晶洞高地·古代遗迹带</b><br>
     　💎 晶洞高地：地表紫晶标出入口，地下方解石洞可采　⛵ 遗迹带：沉船/商队残骸藏金<br>
     <b>地标</b>：金字塔(墓室石棺唤醒法老王Boss)·斗兽场·宫殿·绿洲·彩虹桥·机场·赛车场·陨石坑·游乐场<br>
@@ -256,6 +280,9 @@
 
 <div id="chronicle" onclick="toggleChronicle()"><div class="cr-card"></div></div>
 <div id="bazaar-panel" onclick="closeBazaarPanel()"><div class="bz-card" onclick="event.stopPropagation()"></div></div>
+<div id="pottery-panel" onclick="closePotteryPanel()"><div class="pt-card" onclick="event.stopPropagation()"></div></div>
+<div id="mythic-panel" onclick="closeMythicPanel()"><div class="pt-card" onclick="event.stopPropagation()"></div></div>
+<div id="sphinx-panel" onclick="closeSphinxPanel()"><div class="sx-card" onclick="event.stopPropagation()"></div></div>
 
 <div id="overlay">
   <canvas id="brandmark" width="120" height="120"></canvas>
@@ -2684,11 +2711,30 @@ const BLESS_INFO={ regen:{n:"丰饶祝福",tag:"❤",d:"生命快速回复"},
 function applyBless(kind,secs){ blessKind=kind; blessT=Math.max(blessT,secs); npcState.blessings++; updateBuffHUD(); }
 function updateBuffHUD(){
   const el=document.getElementById("buffHud"); if(!el) return;
+  const bits=[];
   if(blessT>0 && BLESS_INFO[blessKind]){
     const b=BLESS_INFO[blessKind];
-    el.style.display="block";
-    el.textContent=b.tag+" "+b.n+" "+Math.ceil(blessT)+"s";
-  } else el.style.display="none";
+    bits.push(b.tag+" "+b.n+" "+Math.ceil(blessT)+"s");
+  }
+  if(typeof omenState!=="undefined" && omenState.kind && omenState.t>0){
+    const o=OMENS.find(x=>x.k===omenState.kind);
+    bits.push((o?o.n:omenState.kind)+" · "+Math.ceil(omenState.t)+"s");
+  }
+  if(typeof bazaarState!=="undefined" && bazaarState.active){
+    bits.push("🐫 波斯集市 "+Math.ceil(bazaarState.t)+"s · 按 Y");
+  }
+  if(typeof undeadNight!=="undefined" && undeadNight.active){
+    bits.push("🌑 亡者之夜 "+Math.ceil(undeadNight.t)+"s");
+  }
+  if(typeof expeditionState!=="undefined" && expeditionState.active){
+    bits.push("🌊 金羊毛 "+Math.ceil(expeditionState.t)+"s");
+  }
+  if(typeof mythicDone==="function" && mythicDone("arabia")){
+    if(djinnState.cd>0) bits.push("🪔 神灯冷却 "+Math.ceil(djinnState.cd)+"s · 按 L");
+    else bits.push("🪔 神灯就绪 · 按 L");
+  }
+  if(bits.length){ el.style.display="block"; el.innerHTML=bits.join("<br>"); }
+  else el.style.display="none";
 }
 const NPC_ROLES={
   trader:{ name:"商队商人", tag:"🐫", greet:"沙海无垠，旅人。可有货物交换？" },
@@ -2880,6 +2926,7 @@ let hurtTintTimer=null;
 function damagePlayer(d,kx,kz){
   if(dead||d<=0) return;
   if(blessKind==="ward"&&blessT>0) d=d*0.5;        // 庇护祝福: 受伤减半
+  if(typeof mythicAegisMul==="function") d=d*mythicAegisMul();  // 埃癸斯神盾: 受伤减轻一成
   d=Math.max(1, Math.round(d*(1-armor*0.06)));   // 护甲减伤(每层 6%, 最多 5 层=30%)
   hp=Math.max(0,hp-d); lastDmg=performance.now(); regenAcc=0;
   updateHearts(); sfxHurt();
@@ -3110,7 +3157,9 @@ function chronicleHTML(){
     + row('☥ 埃及祭司', et.name+' ('+faction.egypt+'/100)')
     + row('🗺 群系图鉴', bioSeen.size+' / '+CODEX_TOTAL)
     + row('🏺 文物碎片', npcState.relics)
-    + row('🏛 斗兽场最高', '第 '+arenaState.bestWave+' 波 · 宝库钥匙 '+arenaState.keys)
+    + row('🏺 陶片图鉴', potterySeenCount()+' / '+POTTERY_TYPES.length+'（出土 '+archState.pottery+' 片）· 按 P')
+    + row('🦁 斯芬克斯', sphinxState.solved+' 题解开 · 错答 '+sphinxState.failed+' · 近旁按 R')
+    + row('🏛 斗兽场最高', '第 '+arenaState.bestWave+' 波 · 宝库钥匙 '+arenaState.keys+' · 已开宝库 '+vaultState.opened)
     + row('☠ 法老伏诛', curseState.pharaohSlain+' 尊')
     + row('🪔 神灯许愿', djinnState.rubs+' 次')
     + row('🌊 金羊毛', expeditionState.fleeces+' 束')
@@ -3119,8 +3168,8 @@ function chronicleHTML(){
     + row('🐫 波斯集市', bz)
     + row('🌊 金羊毛远征', ex)
     + row('🌑 亡者之夜', (undeadNight.active?('围城中 · 剩'+Math.ceil(undeadNight.t)+'s'):'平静')+' · 幸存 '+undeadNight.survived+' 夜')
-    + row('✨ 神话遗物', mythicState.done.length+' / '+MYTHIC.length+'（碎片 '+Object.values(mythicState.frags).reduce((a,b)=>a+b,0)+'）')
-    + '<div style="margin-top:12px;color:#c9b98a;font-size:12px">按 <b style="color:#ffd23f">T</b> 或点此关闭 · 声望随行为涨落，天象/集市/远征会自行降临</div>';
+    + row('✨ 神话遗物', mythicState.done.length+' / '+MYTHIC.length+'（碎片 '+Object.values(mythicState.frags).reduce((a,b)=>a+b,0)+'）· 按 K')
+    + '<div style="margin-top:12px;color:#c9b98a;font-size:12px">按 <b style="color:#ffd23f">T</b> 关闭 · <b>P</b> 陶片图鉴 · <b>K</b> 神话遗物 · 声望随行为涨落，天象/集市/远征会自行降临</div>';
 }
 function toggleChronicle(){
   const el=document.getElementById("chronicle"); if(!el) return;
@@ -3172,8 +3221,14 @@ document.addEventListener("keydown",e=>{
   if(e.code==="KeyH" && !e.repeat){ e.preventDefault(); toggleFullHelp(); return; }
   if(e.code==="KeyT" && !e.repeat){ e.preventDefault(); toggleChronicle(); return; }
   if(e.code==="KeyY" && !e.repeat){ e.preventDefault(); toggleBazaarPanel(); return; }
+  if(e.code==="KeyP" && !e.repeat){ e.preventDefault(); togglePotteryPanel(); return; }
+  if(e.code==="KeyK" && !e.repeat){ e.preventDefault(); toggleMythicPanel(); return; }
   if(e.code==="Escape" && npcPanelOpen){ closeNPCPanel(); return; }
   if(e.code==="Escape" && craftOpen){ toggleCraft(); return; }
+  const potEl=document.getElementById("pottery-panel"), sxEl=document.getElementById("sphinx-panel"), myEl=document.getElementById("mythic-panel");
+  if(e.code==="Escape" && potEl && potEl.classList.contains("on")){ closePotteryPanel(); return; }
+  if(e.code==="Escape" && myEl && myEl.classList.contains("on")){ closeMythicPanel(); return; }
+  if(e.code==="Escape" && sxEl && sxEl.classList.contains("on")){ closeSphinxPanel(); return; }
   if(e.code==="Escape" && softLock){ pauseGame(); return; }
   if(!playing()) return;
   if(e.code==="KeyM" && !e.repeat){ musicOn=!musicOn; showName("音乐: "+(musicOn?"开":"关")); }
@@ -3190,6 +3245,9 @@ document.addEventListener("keydown",e=>{
     if(e.code==="KeyF"){ e.preventDefault(); if(npcPanelOpen) closeNPCPanel(); else if(talkNpc) openNPCPanel(); }
     if(e.code==="KeyB"){ e.preventDefault(); toggleCraft(); }
     if(e.code==="KeyG" && !e.repeat){ e.preventDefault(); startArena(); }   // 斗兽场开战
+    if(e.code==="KeyU" && !e.repeat){ e.preventDefault(); openVault(); }     // 封印宝库(花钥匙)
+    if(e.code==="KeyR" && !e.repeat){ e.preventDefault(); openSphinxPanel(); } // 斯芬克斯答谜
+    if(e.code==="KeyL" && !e.repeat){ e.preventDefault(); rubLamp(); }         // 不灭神灯许愿
   }
   keys[e.code]=true;
 });
@@ -3241,6 +3299,7 @@ function refreshMenu(){
 continuebtn.addEventListener("click",()=>{
   initAudio();
   if(loadGame()){
+    saveDisabled=false;                       // ?selftest=1 会关掉自动存档以免覆盖; 载入真存档后恢复
     showName("📂 已载入存档：第 "+dayCount+" 天 · Lv"+lvl);
     setTitleChrome(false);
     enterPointerLock();
@@ -3249,6 +3308,7 @@ continuebtn.addEventListener("click",()=>{
 newworldbtn.addEventListener("click",()=>{
   initAudio();
   if(!confirm("开启新世界会覆盖当前存档，确定吗？")) return;
+  saveDisabled=false;
   deleteSave();
   SEED=(Date.now()%1000000);
   _hCache.clear(); _bioCache.clear(); blockDiff.clear();
@@ -3346,8 +3406,9 @@ function doBreak(){
   const rm=raycastMob(isSword?4.5:3.8, dir);
   if(rm){
     const mightMul=(blessKind==="might"&&blessT>0)?1.35:1;   // 战意祝福: 近战增伤
+    const omenMul=(typeof omenMeleeMul==="function")?omenMeleeMul():1;   // 连锁: 马尔斯天象 → 近战更狠
     const d=Math.hypot(rm.m.x-player.x, rm.m.z-player.z)||1e-6;
-    hurtMob(rm.m, Math.round((isSword?12:5)*dmgMul*mightMul), (rm.m.x-player.x)/d*(isSword?10:8), (rm.m.z-player.z)/d*(isSword?10:8));
+    hurtMob(rm.m, Math.round((isSword?12:5)*dmgMul*mightMul*omenMul), (rm.m.x-player.x)/d*(isSword?10:8), (rm.m.z-player.z)/d*(isSword?10:8));
     return;
   }
   const hit=raycast(5.5, dir);
@@ -4227,6 +4288,7 @@ function hurtMob(m,dmg,kx,kz,silent){
   m.kbx+=kx; m.kbz+=kz;
   if(kx||kz) m.vy=Math.max(m.vy,4.2);
   if(!m.def.hostile){ m.fleeT=5; m.tgtYaw=Math.atan2(m.x-player.x,-(m.z-player.z)); }
+  if(m.type==="sphinx" && m.riddleReady && !m.riddleAngry) sphinxEnrage(m);   // 动手打断谜题 → 开战
   if(!silent) sfxHit();
   if(m.hp<=0){
     deathPoof(m);
@@ -4507,6 +4569,17 @@ function updateMobs(dt){
     }
     let speed=0;
     if(D.hostile){
+      if(m.type==="sphinx" && m.riddleReady && !m.riddleAngry){   // 答谜阶段: 坐镇不追击, 打了才开战
+        m.burning=false;
+        if(dist<14) m.tgtYaw=Math.atan2(dx,-dz);
+        let dy=m.tgtYaw-m.yaw; while(dy>Math.PI)dy-=6.283; while(dy<-Math.PI)dy+=6.283;
+        m.yaw+=clamp(dy,-2.2*dt,2.2*dt);
+        const kdS=Math.pow(0.01,dt); m.kbx*=kdS; m.kbz*=kdS;
+        m.vx=m.kbx; m.vz=m.kbz; m.vy-=28*dt; if(m.vy<-50)m.vy=-50;
+        entMove(m,dt,D.w,D.h);
+        m.animT+=dt*0.35;
+        continue;
+      }
       if(m.alertT>0) m.alertT-=dt;
       // 巡逻兵被警戒(自身发现或被同袍呼叫)后, 侦测范围临时扩大, 更难甩脱
       const aggro=(D.aggroRange||28)+(m.patrol&&m.alertT>0?16:0)+((m.patrol&&romeWanted())?45:0);   // 通缉期间: 罗马巡逻兵警戒范围暴涨, 主动来袭
@@ -4853,7 +4926,10 @@ function trySpawns(dt){
   if(pyr){
     let spx=0; for(const m of mobs) if(m.type==="sphinx") spx++;
     if(spx===0 && !hasBoss && Math.random()<0.22){
-      if(spawnMob("sphinx",14,30)) showName("🦁 斯芬克斯睁开了眼睛……回答，或者死。🦁");
+      if(spawnMob("sphinx",14,30)){
+        armSphinxRiddle(mobs[mobs.length-1]);
+        showName("🦁 斯芬克斯睁开了眼睛……回答，或者死。靠近按 R 应谜。🦁");
+      }
     }
   }
   // 巨蝎 / 沙虫: 沙漠与红土地的地表野兽
@@ -6265,6 +6341,7 @@ function frame(now){
     if(water && !player.flying) spd*=0.55;
     if(lava && !player.flying) spd*=0.32;              // 岩浆里寸步难行
     if(colaBuffT>0) spd*=1.35;                          // 可乐: 移动速度提升
+    if(typeof omenMoveMul==="function") spd*=omenMoveMul();   // 连锁: 西罗科热风天象 → 步履如飞
     const cy=Math.cos(player.yaw), sy=Math.sin(player.yaw);
     player.vx = (f*sy + s*cy)*spd + player.kbx;
     player.vz = (-f*cy + s*sy)*spd + player.kbz;
@@ -6296,7 +6373,7 @@ function frame(now){
     else if(!player.onGround) fallStart = fallStart===null ? player.y : Math.max(fallStart,player.y);
     else if(fallStart!==null){
       const drop=fallStart-player.y;
-      if(drop>3.5) damagePlayer(Math.min(15,Math.floor(drop-3)),0,0);
+      if(drop>3.5 && !(typeof mythicFallImmune==="function" && mythicFallImmune())) damagePlayer(Math.min(15,Math.floor(drop-3)),0,0);
       fallStart=null;
     }
     if(player.flying && player.onGround) player.flying=false;
@@ -6381,12 +6458,16 @@ function frame(now){
         if(underCover() || water) sandDmgT=0;
         else {
           sandDmgT-=dt;
-          if(sandDmgT<=0){ sandDmgT=2.8; damagePlayer(1,0,0); showName("🌪 沙暴刮伤 — 找掩体或建筑躲进去"); }
+          if(sandDmgT<=0){ sandDmgT=2.8;
+            if(!(typeof omenSandImmune==="function" && omenSandImmune())){
+              damagePlayer(1,0,0); showName("🌪 沙暴刮伤 — 找掩体或建筑躲进去");
+            }
+          }
         }
       } else sandDmgT=0;
     }
     eatCd=Math.max(0,eatCd-dt);
-    djinnState.cd=Math.max(0,djinnState.cd-dt);
+    djinnState.cd=Math.max(0,djinnState.cd-dt*((typeof omenDjinnCdMul==="function")?omenDjinnCdMul():1)*((typeof mythicDjinnCdMul==="function")?mythicDjinnCdMul():1));   // 西罗科天象 / 不灭神灯 → 冷却加快
     romeWantedT=Math.max(0,romeWantedT-dt);
     tickOmen(dt);
     tickBazaar(dt);
@@ -6411,6 +6492,9 @@ function frame(now){
     updatePatrols(dt);
     updateMirage(dt);
     updateStatsHUD();
+    updateBuffHUD();
+    updateVaultPrompt();
+    updateSphinxPrompt();
     playerEnt.animT += dt*Math.hypot(player.vx,player.vz);
     playerEnt.hurtT = Math.max(0,playerEnt.hurtT-dt);
     swingT = Math.max(0,swingT-dt);
@@ -6445,13 +6529,14 @@ function collectSave(){
     yaw:+player.yaw.toFixed(3), pitch:+player.pitch.toFixed(3),
     hp, maxHp, lvl, xp, armor, kills, dayCount, bioSeen:[...bioSeen], landSeen:[...landSeen], weather,
     npc:{ relics:npcState.relics, traderMet:npcState.traderMet, oracleMet:npcState.oracleMet, trades:npcState.trades, blessings:npcState.blessings },
-    arch:{ pottery:archState.pottery, pages:archState.pages, digs:archState.digs },
+    arch:{ pottery:archState.pottery, pages:archState.pages, digs:archState.digs, shards:archState.shards.slice(), setComplete:!!archState.setComplete },
     arena:{ bestWave:arenaState.bestWave, cleared:arenaState.cleared, keys:arenaState.keys },
     curse:{ pharaohSlain:curseState.pharaohSlain },
     // 尾巴系统累计战绩(机关触发/踩塌/砸中 + 战车碾压); 老存档无 feats → 全归零
-    feats:{ trapsTriggered:trapState.triggered, trapsSprung:trapState.sprung, trapHits:trapState.hits, chariotRams:chariotState.rams },
+    feats:{ trapsTriggered:trapState.triggered, trapsSprung:trapState.sprung, trapHits:trapState.hits, chariotRams:chariotState.rams, vaultsOpened:vaultState.opened },
     faction:{ rome:faction.rome, egypt:faction.egypt },
     djinn:{ rubs:djinnState.rubs },
+    sphinx:{ solved:sphinxState.solved, failed:sphinxState.failed },
     expedition:{ fleeces:expeditionState.fleeces },
     undead:{ survived:undeadNight.survived },
     mythic:{ frags:mythicState.frags, done:mythicState.done },
@@ -6510,6 +6595,8 @@ function loadGame(){
   npcState.traderMet=!!N.traderMet; npcState.oracleMet=!!N.oracleMet;
   // 考古进度: 老存档无 arch 字段 → 全部归零, 自然向后兼容
   const A=s.arch||{}; archState.pottery=A.pottery|0; archState.pages=A.pages|0; archState.digs=A.digs|0;
+  archState.shards=Array.isArray(A.shards)?A.shards.filter(id=>POTTERY_TYPES.some(t=>t.id===id)):[];   // 陶片图鉴器型(老存档无→空)
+  archState.setComplete=!!A.setComplete;
   digSites.length=0; digSpawnT=3;
   // 斗兽场进度: 老存档无 arena 字段 → 归零, 自然兼容; 进行中的挑战不跨存档保留
   const AR=s.arena||{}; arenaState.bestWave=AR.bestWave|0; arenaState.cleared=!!AR.cleared; arenaState.keys=AR.keys|0;
@@ -6520,6 +6607,8 @@ function loadGame(){
   const FT=s.feats||{};
   trapState.triggered=FT.trapsTriggered|0; trapState.sprung=FT.trapsSprung|0; trapState.hits=FT.trapHits|0;
   chariotState.rams=FT.chariotRams|0;
+  if(typeof vaultState!=="undefined") vaultState.opened=FT.vaultsOpened|0;   // 封印宝库开启次数(老存档无→0)
+  sphinxState.solved=(s.sphinx&&s.sphinx.solved)|0; sphinxState.failed=(s.sphinx&&s.sphinx.failed)|0;   // 斯芬克斯答谜战绩(老存档无→0)
   const FC=s.faction||{}; faction.rome=Math.max(0,Math.min(FAC_MAX,FC.rome|0)); faction.egypt=Math.max(0,Math.min(FAC_MAX,FC.egypt|0));   // 阵营声望(老存档无→归零)
   djinnState.rubs=(s.djinn&&s.djinn.rubs)|0; djinnState.cd=0;   // 神灯许愿次数(老存档无→0)
   expeditionState.fleeces=(s.expedition&&s.expedition.fleeces)|0; expeditionState.active=false; expeditionState.cd=200;   // 金羊毛战利品(老存档无→0)
@@ -6551,6 +6640,32 @@ function loadGame(){
   return true;
 }
 function deleteSave(){ try{ localStorage.removeItem(SAVE_KEY); }catch(e){} }
+/* 自测会调用 saveGame, 绝不能把测试世界写进玩家的 sandsea_save_v1。
+   进出 selftest 时快照/还原所有 sandsea* 键; 抛错也要还原。 */
+function sandseaStorageSnapshot(){
+  const o={};
+  try{
+    for(let i=0;i<localStorage.length;i++){
+      const k=localStorage.key(i);
+      if(k && k.indexOf("sandsea")===0) o[k]=localStorage.getItem(k);
+    }
+  }catch(e){}
+  return o;
+}
+function sandseaStorageRestore(snap){
+  try{
+    const cur=[];
+    for(let i=0;i<localStorage.length;i++){
+      const k=localStorage.key(i);
+      if(k && k.indexOf("sandsea")===0) cur.push(k);
+    }
+    for(const k of cur) if(!Object.prototype.hasOwnProperty.call(snap,k)) localStorage.removeItem(k);
+    for(const k in snap){
+      if(snap[k]==null) localStorage.removeItem(k);
+      else localStorage.setItem(k, snap[k]);
+    }
+  }catch(e){}
+}
 // 自动存档: 每 30 秒 + 关闭页面时
 setInterval(()=>{ if(playing() && !dead) saveGame(true); }, 30000);
 addEventListener("beforeunload", ()=>{ if(worldGenReady && !dead) saveGame(true); });
@@ -6697,7 +6812,7 @@ drawViewmodel();
    B. 罗马斗兽场波次: 站上竞技场沙地开战, 五波角斗 → 通关掉宝库钥匙+主题装备
    C. 法老诅咒 + 宝库钥匙: 挖开石棺唤醒法老 → 诅咒 debuff, 斩杀法老解咒并落钥匙
    ========================================================= */
-const archState={ pottery:0, pages:0, digs:0 };       // 陶片(图鉴) / 图纸残页(集5复原) / 已发掘刷点数
+const archState={ pottery:0, pages:0, digs:0, shards:[], setComplete:false };       // 陶片出土次数 / 图纸残页 / 发掘次数 / 已鉴定器型 / 集齐奖励
 const digSites=[]; let digSpawnT=3, digSparkT=0;
 const DIG_CAP=6;                                       // 同时存在的可疑沙砾上限(防刷屏)
 /* 在沙漠/台地地表撒下"可疑沙砾"刷点 */
@@ -6753,15 +6868,70 @@ function archaeologyDig(x,y,z){
   } else if(r<0.45){                                    // 文物碎片(供 NPC 交易)
     npcState.relics++; addXP(8); if(omenActive('hermes')){ npcState.relics++; }   // 连锁: 赫尔墨斯天象 → 考古掘宝翻倍
     showName("🏺 出土 文物碎片！(文物 x"+npcState.relics+"，+8 经验) — 交给商队商人或神谕祭司");
-  } else {                                              // 陶片(收藏图鉴)
-    archState.pottery++; addXP(5);
-    const milestone=[10,25,50,100].includes(archState.pottery);
-    if(milestone){ addXP(30); showName("🏺 陶片图鉴 "+archState.pottery+" 片 · 考古学有所成！(+30 经验)"); }
-    else showName("🏺 出土 陶片（图鉴 "+archState.pottery+" 片，+5 经验）");
+  } else {                                              // 陶片(收藏图鉴: 鉴定器型, 可按 P 翻看)
+    grantPotteryShard();
   }
   sfxLevel && sfxLevel();
 }
 function updateArch(dt){ maintainDigSites(dt); tickDigSparkle(dt); }
+
+/* ---- 陶片图鉴: 出土不再只是一个数字, 按 P 可翻已鉴定的器型; 老存档缺 shards → 空图鉴 ---- */
+const POTTERY_TYPES=[
+  {id:"blacktop", n:"黑顶红陶", d:"上埃及黎明时期的酒罐口沿"},
+  {id:"faience",  n:"釉砂残片", d:"尼罗蓝的小护身符碎屑"},
+  {id:"ostracon", n:"陶片文书", d:"墨书未写完的商队账目"},
+  {id:"canopic",  n:"卡诺匹斯盖", d:"内脏罐上裂开的胡狼头"},
+  {id:"amphora",  n:"酒罐把手", d:"双耳瓶残留的一只耳"},
+  {id:"scarab",   n:"圣甲虫印", d:"湿陶上压出的甲虫纹"},
+  {id:"lotus",    n:"莲纹陶盘", d:"碗心一朵褪色莲花"},
+  {id:"ushabti",  n:"沙弗提残足", d:"陪葬俑裂开的一只脚"},
+  {id:"sistrum",  n:"叉铃陶模", d:"祭祀乐器的模具碎片"},
+  {id:"cartouche",n:"王名圈陶印", d:"烧裂的王名框印记"},
+  {id:"nile",     n:"河泥灰陶", d:"尼罗泛滥层里的粗陶"},
+  {id:"predyn",   n:"前王朝彩陶", d:"几何纹红白双色陶片"},
+];
+function potterySeenCount(){ return archState.shards.filter(id=>POTTERY_TYPES.some(t=>t.id===id)).length; }
+function potteryHave(id){ return archState.shards.indexOf(id)>=0; }
+function pickPotteryId(){
+  const missing=POTTERY_TYPES.filter(t=>!potteryHave(t.id));
+  if(missing.length && Math.random()<0.72) return missing[(Math.random()*missing.length)|0].id;
+  return POTTERY_TYPES[(Math.random()*POTTERY_TYPES.length)|0].id;
+}
+function grantPotteryShard(forceId){
+  archState.pottery++;
+  const id=forceId && POTTERY_TYPES.some(t=>t.id===forceId) ? forceId : pickPotteryId();
+  const neu=!potteryHave(id);
+  if(neu) archState.shards.push(id);
+  addXP(neu?12:5);
+  const t=POTTERY_TYPES.find(x=>x.id===id);
+  const seen=potterySeenCount();
+  if(neu && seen===POTTERY_TYPES.length && !archState.setComplete){
+    archState.setComplete=true; addXP(80);
+    showName("🏺 陶片图鉴集齐 "+POTTERY_TYPES.length+" 种！「"+t.n+"」入册 · +80 经验 · 按 P 翻看");
+  } else if(neu){
+    showName("🏺 鉴定新器型：「"+t.n+"」（"+seen+"/"+POTTERY_TYPES.length+"）— 按 P 打开图鉴");
+  } else {
+    const milestone=[10,25,50,100].includes(archState.pottery);
+    if(milestone){ addXP(30); showName("🏺 又见「"+t.n+"」· 出土 "+archState.pottery+" 片 · 图鉴 "+seen+"/"+POTTERY_TYPES.length+" (+30 经验)"); }
+    else showName("🏺 又见「"+t.n+"」（图鉴已有 · 出土 "+archState.pottery+" 片）");
+  }
+  if(document.getElementById("pottery-panel") && document.getElementById("pottery-panel").classList.contains("on")) renderPottery();
+  return {id, neu, seen};
+}
+function renderPottery(){
+  const card=document.querySelector("#pottery-panel .pt-card"); if(!card) return;
+  const seen=potterySeenCount();
+  let h='<h2>🏺 沙海陶片图鉴</h2><div style="color:#c9b98a;margin-bottom:10px">已鉴定 <b style="color:#ffd23f">'+seen+' / '+POTTERY_TYPES.length+'</b> 种 · 出土 '+archState.pottery+' 片'+(archState.setComplete?' · 已集齐':'')+'</div>';
+  POTTERY_TYPES.forEach(t=>{
+    const have=potteryHave(t.id);
+    h+='<div class="pt-row'+(have?'':' locked')+'"><div><div class="pt-n">'+(have?t.n:'？？？')+'</div><div class="pt-d">'+(have?t.d:'继续发掘可疑沙砾以鉴定此器型')+'</div></div><div>'+(have?'✓':'🔒')+'</div></div>';
+  });
+  h+='<div style="margin-top:12px;color:#c9b98a;font-size:12px">按 <b style="color:#ffd23f">P</b> 或点空白关闭 · 新器型会写入编年史</div>';
+  card.innerHTML=h;
+}
+function openPotteryPanel(){ const el=document.getElementById("pottery-panel"); if(!el) return; renderPottery(); el.classList.add("on"); if(document.pointerLockElement) document.exitPointerLock(); }
+function closePotteryPanel(){ const el=document.getElementById("pottery-panel"); if(el) el.classList.remove("on"); }
+function togglePotteryPanel(){ const el=document.getElementById("pottery-panel"); if(!el) return; if(el.classList.contains("on")) closePotteryPanel(); else openPotteryPanel(); }
 
 /* ---- B. 罗马斗兽场波次挑战: 站上竞技场沙地按 G 开战, 五波角斗 → 通关落宝库钥匙+罗马主题赏赐 ---- */
 const ARENA_WAVES=[
@@ -6805,8 +6975,8 @@ function endArena(win){
   if(win){
     arenaState.cleared=true; arenaState.bestWave=ARENA_WAVES.length; arenaState.keys++;
     giveBlock(GOLD_ORE,10); giveBlock(GEM_ORE,4); giveBlock(MARBLE,16); addXP(150);
-    if(armor<5){ armor++; updateHearts(); showName("🏆 角斗通关！开启宝库 → 宝库钥匙 x1 + 罗马板甲(护甲 "+armor+"/5) + 金x10 钻x4 大理石x16 + 150经验"); }
-    else showName("🏆 角斗通关！开启宝库 → 宝库钥匙 x1 + 罗马赏赐(金x10 钻x4 大理石x16) + 150经验");
+    if(armor<5){ armor++; updateHearts(); showName("🏆 角斗通关！宝库钥匙 x1（现有 "+arenaState.keys+"）— 到金字塔/宫殿/斗兽场按 U 开启封印宝库 + 罗马板甲(护甲 "+armor+"/5) + 金x10 钻x4 大理石x16 + 150经验"); }
+    else showName("🏆 角斗通关！宝库钥匙 x1（现有 "+arenaState.keys+"）— 到金字塔/宫殿/斗兽场按 U 开启封印宝库 + 罗马赏赐(金x10 钻x4 大理石x16) + 150经验");
     addFaction('rome',12); addFragment('rome');
     { const rt=facTier(faction.rome).idx; if(rt>=2){ giveBlock(GOLD_ORE,rt*4); showName("🦅 罗马"+facTier(faction.rome).name+"额外赏赐 金x"+(rt*4)); } }
   }
@@ -6848,7 +7018,7 @@ function liftCurse(){ curseState.active=false; curseState.t=0; }
 function onPharaohSlain(){
   curseState.pharaohSlain++; liftCurse(); arenaState.keys++;
   giveBlock(GOLD_ORE,12); giveBlock(GEM_ORE,5); addXP(120); addFaction('rome',10); addFragment('egypt');
-  showName("☥ 法老伏诛 · 诅咒解除！开启法老宝库 → 宝库钥匙 x1 + 法老宝藏(金x12 钻x5) + 120经验");
+  showName("☥ 法老伏诛 · 诅咒解除！宝库钥匙 x1（现有 "+arenaState.keys+"）— 到金字塔/宫殿/斗兽场按 U 开启封印宝库 + 法老宝藏(金x12 钻x5) + 120经验");
 }
 function updateCurse(dt){
   if(!curseState.active) return;
@@ -6861,6 +7031,134 @@ function updateCurse(dt){
     for(let i=0;i<8;i++) particles.push({x:player.x+(Math.random()-.5)*1.2, y:player.y+0.5+Math.random()*1.4, z:player.z+(Math.random()-.5)*1.2,
       vx:0, vy:0.6+Math.random(), vz:0, life:.6, size:.09, u:15*TS, v:0, l:1.5});
   }
+}
+
+/* ---- 封印宝库: 钥匙曾经只是计数器(toast 写"开启宝库"却没有门可开)。现在站在金字塔/宫殿/斗兽场按 U 花掉一把钥匙, 真正开仓。 ---- */
+const VAULT_SITES=["pyramid","palace","colosseum"];
+const vaultState={ opened:0 };
+function vaultZone(){ return nearStructure(VAULT_SITES, 28); }
+function vaultCiv(type){ return type==="pyramid"?"egypt":"rome"; }   // 宫殿是凯撒行宫, 与斗兽场同属罗马; 金字塔仍归埃及
+function updateVaultPrompt(){
+  const el=document.getElementById("vaultPrompt"); if(!el) return;
+  if(!worldGenReady || dead || npcPanelOpen || craftOpen){ el.style.display="none"; return; }
+  const s=vaultZone();
+  if(!s){ el.style.display="none"; return; }
+  const land=LANDMARKS[s.type]||"地标";
+  el.style.display="block";
+  if(arenaState.keys>0) el.innerHTML="🔑 "+land+" 封印宝库　按 <b>U</b> 开启（钥匙 x"+arenaState.keys+"）";
+  else el.innerHTML="🔒 "+land+" 封印宝库　需要钥匙（通关斗兽场或斩杀法老）";
+}
+function openVault(force){
+  const s=force ? (vaultZone()||{type:"palace"}) : vaultZone();
+  if(!s){ showName("🔑 需站在金字塔、宫殿或斗兽场附近才能开启封印宝库"); return false; }
+  if(arenaState.keys<=0){ showName("🔑 没有宝库钥匙 — 通关斗兽场或斩杀法老可得"); return false; }
+  arenaState.keys--; vaultState.opened++;
+  const n=vaultState.opened;
+  giveBlock(GOLD_ORE, 8+n*2); giveBlock(GEM_ORE, 3+n); addXP(70+n*10);
+  if(s.type==="pyramid") giveBlock(GOLD_ORE, 6);
+  else if(s.type==="colosseum") giveBlock(MARBLE, 12);
+  else giveBlock(MARBLE, 8);
+  addFragment(vaultCiv(s.type));
+  showName("🔓 "+(LANDMARKS[s.type]||"地标")+" 封印宝库开启！钥匙 -1（剩 "+arenaState.keys+"）· 第 "+n+" 座");
+  sfxLevel && sfxLevel();
+  updateVaultPrompt();
+  return true;
+}
+
+/* ---- 斯芬克斯谜题: 金字塔看守者先问后打。按 R 答题, 答错或动手则开战。 ---- */
+const SPHINX_RIDDLES=[
+  { q:"何物早晨四足、正午两足、黄昏三足？", a:["人","骆驼","法老","斯芬克斯"], ok:0 },
+  { q:"我有城墙却无门窗，越走越矮把人埋。我是什么？", a:["沙丘","金字塔","绿洲","渡槽"], ok:0 },
+  { q:"白天跟着你，夜里躲进沙。踩不死、抓不着。", a:["影子","热风","海市蜃楼","蝎子"], ok:0 },
+  { q:"金子做的船，不走尼罗河，只走天河。那是？", a:["太阳","月亮","战车","神灯"], ok:0 },
+  { q:"无腿能吞绿洲，无嘴能打沙海。白昼里最凶。", a:["沙暴","商队","河马","狮鹫"], ok:0 },
+  { q:"金字塔连底一共有几面？", a:["五面","四面","三面","六面"], ok:0 },
+];
+const sphinxState={ solved:0, failed:0 };
+let sphinxTalk=null;
+function armSphinxRiddle(m){
+  if(!m || m.type!=="sphinx") return false;
+  m.riddleReady=true; m.riddleAngry=false; m.riddleSolved=false;
+  m.riddleIdx=(Math.random()*SPHINX_RIDDLES.length)|0;
+  return true;
+}
+function nearSphinx(){
+  let best=null, bd=8;
+  for(const m of mobs){
+    if(m.type!=="sphinx") continue;
+    const d=Math.hypot(m.x-player.x, m.y-player.y, m.z-player.z);
+    if(d<bd){ bd=d; best=m; }
+  }
+  return best;
+}
+function sphinxEnrage(m){
+  if(!m) m=sphinxTalk || nearSphinx();
+  if(!m) return false;
+  const wasReady=!!m.riddleReady;
+  m.riddleReady=false; m.riddleAngry=true;
+  if(wasReady){ sphinxState.failed++; showName("🦁 斯芬克斯怒了！谜题作废——只有死战！"); }
+  closeSphinxPanel();
+  updateSphinxPrompt();
+  return true;
+}
+function updateSphinxPrompt(){
+  const el=document.getElementById("sphinxPrompt"); if(!el) return;
+  if(!worldGenReady || dead){ el.style.display="none"; return; }
+  const m=nearSphinx();
+  if(!m || !m.riddleReady || m.riddleAngry){ el.style.display="none"; return; }
+  el.style.display="block";
+  el.innerHTML="🦁 斯芬克斯出谜　按 <b>R</b> 回答（动手则开战）";
+}
+function renderSphinx(){
+  const card=document.querySelector("#sphinx-panel .sx-card"); if(!card) return;
+  const m=sphinxTalk;
+  const r=m && SPHINX_RIDDLES[m.riddleIdx|0] || SPHINX_RIDDLES[0];
+  let h='<h2>🦁 斯芬克斯的谜题</h2><div class="sx-q">'+r.q+'</div>';
+  r.a.forEach((t,i)=>{ h+='<div class="sx-ans" data-i="'+i+'">'+t+'</div>'; });
+  h+='<div style="margin-top:12px;color:#c9b98a;font-size:12px">点选一项作答 · 答错或逃开会激怒祂 · 按 <b style="color:#ffd23f">Esc</b> 关闭（视为拒答）</div>';
+  card.innerHTML=h;
+  card.querySelectorAll(".sx-ans").forEach(el=>el.onclick=()=>{ answerSphinx(+el.dataset.i); });
+}
+function openSphinxPanel(){
+  const m=nearSphinx();
+  if(!m){ showName("🦁 附近没有斯芬克斯 — 去金字塔外寻找看守者"); return false; }
+  if(m.riddleAngry){ showName("🦁 斯芬克斯已经动怒，只能刀剑相见"); return false; }
+  if(!m.riddleReady){ showName("🦁 这位看守者已经点过头，不再出谜"); return false; }
+  sphinxTalk=m;
+  if(m.riddleIdx==null) m.riddleIdx=(Math.random()*SPHINX_RIDDLES.length)|0;
+  const el=document.getElementById("sphinx-panel"); if(!el) return false;
+  renderSphinx(); el.classList.add("on");
+  if(document.pointerLockElement) document.exitPointerLock();
+  return true;
+}
+function closeSphinxPanel(){
+  const el=document.getElementById("sphinx-panel");
+  const wasOpen=el && el.classList.contains("on");
+  if(el) el.classList.remove("on");
+  // 打开着却不答就走: 视为拒答 → 开战 (自测/调试用 force 路径不走这里)
+  if(wasOpen && sphinxTalk && sphinxTalk.riddleReady && !sphinxTalk.riddleAngry){
+    sphinxEnrage(sphinxTalk);
+  }
+  sphinxTalk=null;
+}
+function answerSphinx(i){
+  const m=sphinxTalk || nearSphinx();
+  if(!m || !m.riddleReady){ showName("🦁 没有可答的谜题"); return false; }
+  const r=SPHINX_RIDDLES[m.riddleIdx|0] || SPHINX_RIDDLES[0];
+  if((i|0)===r.ok){
+    m.riddleReady=false; m.riddleSolved=true; m.riddleAngry=false;
+    sphinxState.solved++;
+    giveBlock(GOLD_ORE,8); giveBlock(GEM_ORE,3); addXP(90); addFaction("egypt",8); addFragment("egypt");
+    showName("🦁 「……通过。」斯芬克斯让开道路！(金x8 钻x3 +90经验) · 累计解开 "+sphinxState.solved+" 题");
+    const el=document.getElementById("sphinx-panel"); if(el) el.classList.remove("on");
+    sphinxTalk=null;
+    const ix=mobs.indexOf(m); if(ix>=0) mobs.splice(ix,1);   // 点头离去, 不占 Boss 位
+    sfxLevel && sfxLevel();
+    updateSphinxPrompt();
+    return true;
+  }
+  sphinxEnrage(m);
+  return false;
 }
 
 /* ---- 阵营声望: 罗马军团 🦅 vs 埃及祭司 ☥ — 战斗亲罗马 / 敬重古物亲埃及, 盗墓触怒祭司 ---- */
@@ -6897,27 +7195,41 @@ function summonDjinn(){
   return w.n;
 }
 
-/* ---- 🏛 希腊神谕 · 天象预言: 定期宣告随机天象, 给世界加"限时修正", 每局节奏不同 ---- */
+/* ---- 🏛 六文明天象: 定期宣告随机天象(希腊+罗马/埃及/波斯/阿拉伯/地中海), 给世界加"限时修正" ---- */
 const omenState={ kind:"", t:0 };
-let omenTimer=140;                                 // 首次约 2 分钟后, 之后每 ~180s 一则
+let omenTimer=140;                                 // 首次约 2 分钟后, 之后每 ~240s 一则
 const OMENS=[
   { k:"apollo",  n:"☀️ 阿波罗的恩泽 · 经验 ×1.5" },
   { k:"hermes",  n:"🪙 赫尔墨斯的慷慨 · 考古掘宝更丰" },
   { k:"ares",    n:"⚔️ 阿瑞斯的躁动 · 战意高涨，夜色不宁" },
   { k:"demeter", n:"🌾 得墨忒耳的丰饶 · 万物生息，生命回复加快" },
   { k:"poseidon",n:"🌊 波塞冬的怒涛 · 卷起漫天沙暴" },
+  { k:"mars",    n:"🦅 马尔斯的号角 · 近战更狠" },
+  { k:"ra",      n:"☀️ 拉神的烈日 · 沙暴无法灼伤" },
+  { k:"mithra",  n:"🔥 密特拉的契约 · 集市驻留更久" },
+  { k:"sirocco", n:"🌪 热风西罗科 · 步履如飞，神灯易醒" },
+  { k:"argos",   n:"🛡 阿尔戈的航程 · 金羊毛时限加倍" },
 ];
 function omenXpMul(){ return omenState.kind==="apollo" ? 1.5 : 1; }
 function omenActive(k){ return omenState.kind===k && omenState.t>0; }
+function omenMeleeMul(){ return omenActive("mars") ? 1.25 : 1; }
+function omenMoveMul(){ return omenActive("sirocco") ? 1.22 : 1; }
+function omenSandImmune(){ return omenActive("ra"); }
+function omenDjinnCdMul(){ return omenActive("sirocco") ? 2 : 1; }
+function omenBazaarDtMul(){ return omenActive("mithra") ? 0.5 : 1; }
+function omenExpeditionDtMul(){ return omenActive("argos") ? 0.5 : 1; }
 function proclaimOmen(force){
   const o = force ? (OMENS.find(x=>x.k===force)||OMENS[0]) : OMENS[Math.floor(Math.random()*OMENS.length)];
   omenState.kind=o.k; omenState.t=120;
   if(o.k==='poseidon'){ weather="sand"; weatherT=Math.max(weatherT,15); }   // 连锁: 波塞冬天象 → 立即卷起一场短沙暴(15s)
+  if(o.k==='mithra' && !bazaarState.active) openBazaar();                   // 连锁: 密特拉天象 → 集市开张
+  if(o.k==='argos' && !expeditionState.active) startExpedition();           // 连锁: 阿尔戈天象 → 金羊毛远征启程
   showName("🔮 神谕宣示："+o.n+"（"+Math.round(omenState.t)+" 秒）");
+  updateBuffHUD();
   return o.k;
 }
 function tickOmen(dt){
-  if(omenState.t>0){ omenState.t-=dt; if(omenState.t<=0){ omenState.kind=""; showName("🔮 天象消退，神谕归于沉寂。"); } }
+  if(omenState.t>0){ omenState.t-=dt; if(omenState.t<=0){ omenState.kind=""; showName("🔮 天象消退，神谕归于沉寂。"); updateBuffHUD(); } }
   else { omenTimer-=dt; if(omenTimer<=0){ omenTimer=240; proclaimOmen(); } }   // 天象更稀更特殊: 活跃120s + 间隔240s(约33%常驻)
 }
 
@@ -6932,7 +7244,7 @@ const BAZAAR_WARES=[
 function renderBazaar(){
   const card=document.querySelector('#bazaar-panel .bz-card'); if(!card) return;
   let h='<h2>🐫 波斯行商 · 珍宝集市</h2><div style="color:#c9b98a;margin-bottom:10px">🏺 文物碎片交易 · 现有 <b style="color:#ffd23f">'+npcState.relics+'</b> · 剩 '+Math.ceil(bazaarState.t)+'s</div>';
-  BAZAAR_WARES.forEach((w,i)=>{ const cost=Math.max(1,w.cost-(facTier(faction.rome).idx>=2?1:0)); const afford=npcState.relics>=cost;
+  BAZAAR_WARES.forEach((w,i)=>{ const cost=bazaarCost(w); const afford=npcState.relics>=cost;
     h+='<div class="bz-ware'+(afford?'':' bz-poor')+'" data-i="'+i+'"><span>'+w.n+'</span><span class="bz-cost">'+cost+' 🏺'+(cost<w.cost?' 折':'')+'</span></div>'; });
   h+='<div style="margin-top:12px;color:#c9b98a;font-size:12px">点击货品购买 · 按 <b style="color:#ffd23f">Y</b> 或点空白关闭</div>';
   card.innerHTML=h;
@@ -6940,20 +7252,36 @@ function renderBazaar(){
 }
 function openBazaarPanel(){ const el=document.getElementById('bazaar-panel'); if(!el||!bazaarState.active) return; renderBazaar(); el.classList.add('on'); }
 function closeBazaarPanel(){ const el=document.getElementById('bazaar-panel'); if(el) el.classList.remove('on'); }
-function toggleBazaarPanel(){ const el=document.getElementById('bazaar-panel'); if(!el) return; if(el.classList.contains('on')) closeBazaarPanel(); else openBazaarPanel(); }
-function openBazaar(){ bazaarState.active=true; bazaarState.t=90;
+function toggleBazaarPanel(){
+  const el=document.getElementById('bazaar-panel'); if(!el) return;
+  if(el.classList.contains('on')) closeBazaarPanel();
+  else if(bazaarState.active) openBazaarPanel();
+  else showName("🐫 波斯集市尚未到来 — 留意左下状态栏，天象/倒计时会提示开市");
+}
+function openBazaar(){ bazaarState.active=true; bazaarState.t=90; updateBuffHUD();
   showName("🐫 波斯行商的珍宝集市到来！按 Y 交易(90秒) · 现有文物 "+npcState.relics); return true; }
+function bazaarDiscount(){
+  let n=0;
+  if(facTier(faction.rome).idx>=2) n++;            // 罗马声望≥盟友
+  if(typeof mythicDone==="function" && mythicDone("persia")) n++;  // 法尔: 波斯集市再减 1
+  return n;
+}
+function bazaarCost(w){ return Math.max(1, w.cost-bazaarDiscount()); }
 function buyWare(i){
   if(!bazaarState.active){ showName("集市已散去…"); return false; }
   const w=BAZAAR_WARES[i]; if(!w) return false;
-  const cost=Math.max(1, w.cost-(facTier(faction.rome).idx>=2?1:0));   // 连锁: 罗马声望≥盟友 → 集市打折 1 文物
+  const cost=bazaarCost(w);
   if(npcState.relics<cost){ showName("🚫 文物碎片不足（需 "+cost+"，现有 "+npcState.relics+"）— 去考古或斩敌收集"); return false; }
   npcState.relics-=cost; bazaarState.bought++;
-  showName("🤝 成交：「"+w.n+"」（-"+cost+" 文物"+(cost<w.cost?" · 罗马盟友折扣":"")+"）"); try{ w.f(); }catch(e){}
+  const tags=[];
+  if(facTier(faction.rome).idx>=2 && cost<w.cost) tags.push("罗马盟友");
+  if(typeof mythicDone==="function" && mythicDone("persia") && cost<w.cost) tags.push("法尔");
+  showName("🤝 成交：「"+w.n+"」（-"+cost+" 文物"+(tags.length?" · "+tags.join("/")+"折扣":"")+"）"); try{ w.f(); }catch(e){}
   return true;
 }
 function tickBazaar(dt){
-  if(bazaarState.active){ bazaarState.t-=dt; if(bazaarState.t<=0){ bazaarState.active=false; closeBazaarPanel(); showName("🐫 波斯行商收拾行囊，隐入沙海…"); } }
+  if(bazaarState.active){ bazaarState.t-=dt*omenBazaarDtMul();   // 连锁: 密特拉天象 → 集市倒计时减半(驻留更久)
+    if(bazaarState.t<=0){ bazaarState.active=false; closeBazaarPanel(); showName("🐫 波斯行商收拾行囊，隐入沙海…"); updateBuffHUD(); } }
   else { bazaarState.cd-=dt; if(bazaarState.cd<=0){ bazaarState.cd=220; openBazaar(); } }
 }
 
@@ -6964,26 +7292,27 @@ function startExpedition(){
   expeditionState.tx=Math.round(player.x+Math.cos(ang)*dist);
   expeditionState.tz=Math.round(player.z+Math.sin(ang)*dist);
   expeditionState.active=true; expeditionState.t=240;
-  showName("🌊 金羊毛远征启程！远方("+expeditionState.tx+","+expeditionState.tz+")有金羊毛宝藏 — 240 秒内寻得！"); return true;
+  showName("🌊 金羊毛远征启程！远方("+expeditionState.tx+","+expeditionState.tz+")有金羊毛宝藏 — 240 秒内寻得！"); updateBuffHUD(); return true;
 }
 function expeditionDist(){ return Math.hypot(player.x-expeditionState.tx, player.z-expeditionState.tz); }
 function claimExpedition(force){
   if(!expeditionState.active) return false;
   if(!force && expeditionDist()>6) return false;
   expeditionState.active=false; expeditionState.fleeces++;
-  giveBlock(GOLD_ORE,20); giveBlock(GEM_ORE,8); addXP(160); if(armor<5){ armor++; updateHearts(); } addFragment('medit');
-  showName("🏆 寻得金羊毛！(金x20 钻x8 +160经验 护甲+1) · 累计金羊毛 "+expeditionState.fleeces); return true;
+  const bonus=typeof mythicDone==="function" && mythicDone("medit");   // 已有黄金羊毛圣物: 再寻更丰
+  giveBlock(GOLD_ORE, bonus?30:20); giveBlock(GEM_ORE, bonus?12:8); addXP(bonus?220:160); if(armor<5){ armor++; updateHearts(); } addFragment('medit');
+  showName("🏆 寻得金羊毛！"+(bonus?"(金x30 钻x12 +220经验":"(金x20 钻x8 +160经验")+" 护甲+1) · 累计金羊毛 "+expeditionState.fleeces); updateBuffHUD(); return true;
 }
 function tickExpedition(dt){
-  if(expeditionState.active){ expeditionState.t-=dt;
-    if(expeditionDist()<=6){ claimExpedition(true); return; }
-    if(expeditionState.t<=0){ expeditionState.active=false; showName("🌊 金羊毛远征时限已过，宝藏隐没沙海…"); }
+  if(expeditionState.active){ expeditionState.t-=dt*omenExpeditionDtMul();   // 连锁: 阿尔戈天象 → 远征时限加倍
+    if(expeditionDist()<=6){ claimExpedition(true); updateBuffHUD(); return; }
+    if(expeditionState.t<=0){ expeditionState.active=false; showName("🌊 金羊毛远征时限已过，宝藏隐没沙海…"); updateBuffHUD(); }
   } else { expeditionState.cd-=dt; if(expeditionState.cd<=0){ expeditionState.cd=200; startExpedition(); } }
 }
 
 /* ---- 🌑 亡者之夜围城: 定期降临的亡者之潮, 刷怪暴增, 撑到潮落得厚赏; 阿瑞斯天象使其更勤(连锁) ---- */
 const undeadNight={ active:false, t:0, cd:280, survived:0, bossSpawned:false };
-function startUndeadNight(){ undeadNight.active=true; undeadNight.t=100; undeadNight.bossSpawned=false;
+function startUndeadNight(){ undeadNight.active=true; undeadNight.t=100; undeadNight.bossSpawned=false; updateBuffHUD();
   showName("🌑 亡者之夜降临！沙海亡魂倾巢而出 — 撑到潮落(约100秒)必有厚赏！"); return true; }
 function undeadSpawnMul(){ return undeadNight.active ? 0.45 : 1; }   // 亡者之夜 → 刷怪极急
 function spawnUndeadPharaoh(){   // 亡者之夜潮尾: 亡灵法老亲临(复用法老Boss, 斩杀→onPharaohSlain 给宝库钥匙+宝藏)
@@ -7003,36 +7332,64 @@ function tickUndeadNight(dt){
     if(undeadNight.t<=25 && !undeadNight.bossSpawned){ undeadNight.bossSpawned=true; spawnUndeadPharaoh(); }   // 潮尾: 亡灵法老登场
     if(undeadNight.t<=0){ undeadNight.active=false; undeadNight.survived++;
       giveBlock(GOLD_ORE,16); giveBlock(GEM_ORE,6); addXP(140); if(armor<5){ armor++; updateHearts(); }
-      showName("🌅 亡者之潮退去，你挺过了亡者之夜！(金x16 钻x6 +140经验 护甲+1) · 累计幸存 "+undeadNight.survived+" 夜"); }
+      showName("🌅 亡者之潮退去，你挺过了亡者之夜！(金x16 钻x6 +140经验 护甲+1) · 累计幸存 "+undeadNight.survived+" 夜"); updateBuffHUD(); }
   } else { undeadNight.cd -= dt*(omenActive('ares')?2:1);   // 连锁: 阿瑞斯躁动 → 亡者之夜来得更勤
     if(undeadNight.cd<=0 && sunH<0.06){ undeadNight.cd=280; startUndeadNight(); } }   // 修复: 亡者之夜只在夜里降临(刷怪整段受 night 门控, 白天触发则一片空)
 }
 
-/* ---- ✨ 神话遗物收集: 六文明神器, 碎片从考古/斗兽场/法老/远征汇集, 集齐3枚拼合 → 一次性奖励+被动神力 ---- */
+/* ---- ✨ 神话遗物收集: 六文明神器, 碎片从考古/斗兽场/法老/远征汇集, 集齐3枚拼合 → 一次性奖励+被动神力 ----
+   鹰徽/安卡早已有被动; 灯/羊毛/法尔曾只发一次性掉落。现在六件都有可感知的被动, 按 K 可翻图鉴。 */
 const MYTHIC=[
-  { id:"aegis",  civ:"greece", n:"🏛 雅典娜的埃癸斯神盾", f:()=>{ maxHp=Math.min(40,maxHp+2); updateHearts(); } },
-  { id:"aquila", civ:"rome",   n:"🦅 罗马军团的黄金鹰徽", f:()=>{} },   // 被动: 经验 ×1.2
-  { id:"ankh",   civ:"egypt",  n:"☥ 埃及生命之符 · 安卡", f:()=>{} },   // 被动: 免疫法老诅咒灼蚀
-  { id:"farr",   civ:"persia", n:"🔥 波斯王者荣光 · 法尔", f:()=>{ if(armor<5){ armor++; updateHearts(); } else giveBlock(GEM_ORE,4); } },
-  { id:"lamp",   civ:"arabia", n:"🪔 阿拉伯不灭神灯",     f:()=>{ giveBlock(GEM_ORE,6); } },
-  { id:"fleece", civ:"medit",  n:"🌊 地中海黄金羊毛圣物", f:()=>{ giveBlock(GOLD_ORE,20); addXP(60); } },
+  { id:"aegis",  civ:"greece", n:"🏛 雅典娜的埃癸斯神盾", d:"受伤减轻一成 · 拼合时生命上限 +2", f:()=>{ maxHp=Math.min(40,maxHp+2); updateHearts(); } },
+  { id:"aquila", civ:"rome",   n:"🦅 罗马军团的黄金鹰徽", d:"经验 ×1.2", f:()=>{} },
+  { id:"ankh",   civ:"egypt",  n:"☥ 埃及生命之符 · 安卡", d:"免疫法老诅咒灼蚀", f:()=>{} },
+  { id:"farr",   civ:"persia", n:"🔥 波斯王者荣光 · 法尔", d:"波斯集市货价再减 1 文物", f:()=>{ if(armor<5){ armor++; updateHearts(); } else giveBlock(GEM_ORE,4); } },
+  { id:"lamp",   civ:"arabia", n:"🪔 阿拉伯不灭神灯",     d:"按 L 擦灯许愿 · 冷却加倍快", f:()=>{ giveBlock(GEM_ORE,6); } },
+  { id:"fleece", civ:"medit",  n:"🌊 地中海黄金羊毛圣物", d:"免疫摔落 · 再寻金羊毛赏赐更丰", f:()=>{ giveBlock(GOLD_ORE,20); addXP(60); } },
 ];
 const MYTHIC_NEED=3;
 const mythicState={ frags:{greece:0,rome:0,egypt:0,persia:0,arabia:0,medit:0}, done:[] };
 function mythicDone(civ){ return mythicState.done.indexOf(civ)>=0; }
 function mythicXpMul(){ return mythicDone('rome')?1.2:1; }
 function mythicCurseImmune(){ return mythicDone('egypt'); }
+function mythicAegisMul(){ return mythicDone('greece')?0.9:1; }
+function mythicFallImmune(){ return mythicDone('medit'); }
+function mythicDjinnCdMul(){ return mythicDone('arabia')?2:1; }
+function mythicBazaarOff(){ return mythicDone('persia')?1:0; }
 function randomCiv(){ const cs=Object.keys(mythicState.frags); return cs[Math.floor(Math.random()*cs.length)]; }
 function addFragment(civ,n){
   if(!(civ in mythicState.frags) || mythicDone(civ)) return false;
   mythicState.frags[civ]=Math.min(MYTHIC_NEED, mythicState.frags[civ]+(n||1));
   const rel=MYTHIC.find(r=>r.civ===civ);
   if(mythicState.frags[civ]>=MYTHIC_NEED){ mythicState.done.push(civ);
-    showName("✨ 神话遗物拼合成功：「"+rel.n+"」！"); try{ rel.f(); }catch(e){}
+    showName("✨ 神话遗物拼合成功：「"+rel.n+"」！"+(rel.d?" "+rel.d:"")+" · 按 K 翻看"); try{ rel.f(); }catch(e){}
+    if(civ==="arabia") updateBuffHUD();
+    if(document.getElementById("mythic-panel") && document.getElementById("mythic-panel").classList.contains("on")) renderMythic();
     if(mythicState.done.length===MYTHIC.length){ showName("🌟 六大文明神器俱全 · 你已成为沙海的传说！(+300经验)"); addXP(300); }
-  } else showName("🧩 拾得 "+rel.n+" 碎片（"+mythicState.frags[civ]+"/"+MYTHIC_NEED+"）");
+  } else showName("🧩 拾得 "+rel.n+" 碎片（"+mythicState.frags[civ]+"/"+MYTHIC_NEED+"）— 按 K 翻看");
+  if(document.getElementById("mythic-panel") && document.getElementById("mythic-panel").classList.contains("on")) renderMythic();
   return true;
 }
+function rubLamp(){
+  if(!mythicDone("arabia")){ showName("🪔 尚未拼合「阿拉伯不灭神灯」— 集齐 3 枚碎片后可按 L 许愿"); return false; }
+  return summonDjinn();
+}
+function renderMythic(){
+  const card=document.querySelector("#mythic-panel .pt-card"); if(!card) return;
+  const n=mythicState.done.length;
+  let h='<h2>✨ 六文明神话遗物</h2><div style="color:#c9b98a;margin-bottom:10px">已拼合 <b style="color:#ffd23f">'+n+' / '+MYTHIC.length+'</b> · 每文明集齐 '+MYTHIC_NEED+' 枚碎片</div>';
+  MYTHIC.forEach(t=>{
+    const have=mythicDone(t.civ), got=mythicState.frags[t.civ]|0;
+    const name=have?t.n:"？？？";
+    const desc=have?t.d:(got>0?("碎片 "+got+"/"+MYTHIC_NEED+" · 继续收集即可拼合"):"尚未发现此文明的碎片");
+    h+='<div class="pt-row'+(have?'':' locked')+'"><div><div class="pt-n">'+name+'</div><div class="pt-d">'+desc+'</div></div><div>'+(have?'✓':(got+"/"+MYTHIC_NEED))+'</div></div>';
+  });
+  h+='<div style="margin-top:12px;color:#c9b98a;font-size:12px">按 <b style="color:#ffd23f">K</b> 或点空白关闭'+(mythicDone("arabia")?' · 拼合神灯后按 <b style="color:#ffd23f">L</b> 擦灯':'')+'</div>';
+  card.innerHTML=h;
+}
+function openMythicPanel(){ const el=document.getElementById("mythic-panel"); if(!el) return; renderMythic(); el.classList.add("on"); if(document.pointerLockElement) document.exitPointerLock(); }
+function closeMythicPanel(){ const el=document.getElementById("mythic-panel"); if(el) el.classList.remove("on"); }
+function toggleMythicPanel(){ const el=document.getElementById("mythic-panel"); if(!el) return; if(el.classList.contains("on")) closeMythicPanel(); else openMythicPanel(); }
 
 /* ---- 🏅 称号: 由所有系统的累计成就推算, 晋升时通报, 编年史面板置顶显示 ---- */
 function titleScore(){ return mythicState.done.length*8 + curseState.pharaohSlain*5 + expeditionState.fleeces*4 + undeadNight.survived*4 + arenaState.bestWave*2 + bioSeen.size*2 + facTier(faction.rome).idx*3 + facTier(faction.egypt).idx*3 + djinnState.rubs; }
@@ -7260,26 +7617,37 @@ window.__game = {
   addFaction:(side,n)=>addFaction(side,n),
   get djinn(){ return { rubs:djinnState.rubs, cd:+djinnState.cd.toFixed(1), wishes:WISHES.map(w=>w.n) }; },
   summonDjinn:()=>summonDjinn(),
-  get omen(){ return { kind:omenState.kind, t:+omenState.t.toFixed(1), xpMul:omenXpMul(), all:OMENS.map(o=>o.n) }; },
+  get omen(){ return { kind:omenState.kind, t:+omenState.t.toFixed(1), xpMul:omenXpMul(), meleeMul:omenMeleeMul(), moveMul:omenMoveMul(), sandImmune:omenSandImmune(), djinnCdMul:omenDjinnCdMul(), bazaarDtMul:omenBazaarDtMul(), expeditionDtMul:omenExpeditionDtMul(), all:OMENS.map(o=>o.n), civs:OMENS.map(o=>o.k) }; },
   proclaimOmen:(k)=>proclaimOmen(k),
   get bazaar(){ return { active:bazaarState.active, t:+bazaarState.t.toFixed(1), bought:bazaarState.bought, wares:BAZAAR_WARES.map(w=>({n:w.n,cost:w.cost})), relics:npcState.relics }; },
   openBazaar:()=>openBazaar(), buyWare:(i)=>buyWare(i),
   get expedition(){ return { active:expeditionState.active, dist:expeditionState.active?+expeditionDist().toFixed(0):-1, t:+expeditionState.t.toFixed(1), fleeces:expeditionState.fleeces }; },
   startExpedition:()=>startExpedition(), claimExpedition:(f)=>claimExpedition(f),
-  get chains(){ return { aresRaid:omenActive('ares'), aresSpawnMul:omenActive('ares')?0.55:1, hermesDig:omenActive('hermes'), demeterRegen:omenActive('demeter'), poseidonStorm:omenActive('poseidon'), romeBazaarDiscount:facTier(faction.rome).idx>=2?1:0, romeWanted:romeWanted(), romeWantedT:+romeWantedT.toFixed(1) }; },
+  get chains(){ return { aresRaid:omenActive('ares'), aresSpawnMul:omenActive('ares')?0.55:1, hermesDig:omenActive('hermes'), demeterRegen:omenActive('demeter'), poseidonStorm:omenActive('poseidon'), marsMelee:omenActive('mars'), raSandImmune:omenActive('ra'), mithraBazaar:omenActive('mithra'), siroccoMove:omenActive('sirocco'), argosExpedition:omenActive('argos'), romeBazaarDiscount:facTier(faction.rome).idx>=2?1:0, farrBazaar:mythicBazaarOff(), lampCd:mythicDjinnCdMul(), fleeceFall:mythicFallImmune(), aegisDr:mythicAegisMul(), romeWanted:romeWanted(), romeWantedT:+romeWantedT.toFixed(1) }; },
   get undeadNight(){ return { active:undeadNight.active, t:+undeadNight.t.toFixed(1), spawnMul:undeadSpawnMul(), survived:undeadNight.survived }; },
   startUndeadNight:()=>startUndeadNight(), spawnUndeadPharaoh:()=>spawnUndeadPharaoh(),
-  get mythic(){ return { frags:Object.assign({},mythicState.frags), done:mythicState.done.slice(), total:MYTHIC.length, need:MYTHIC_NEED, xpMul:mythicXpMul(), curseImmune:mythicCurseImmune() }; },
+  get mythic(){ return { frags:Object.assign({},mythicState.frags), done:mythicState.done.slice(), total:MYTHIC.length, need:MYTHIC_NEED, xpMul:mythicXpMul(), curseImmune:mythicCurseImmune(),
+                      aegisMul:mythicAegisMul(), fallImmune:mythicFallImmune(), djinnCdMul:mythicDjinnCdMul(), bazaarOff:mythicBazaarOff(),
+                      passives:MYTHIC.map(t=>({civ:t.civ, n:t.n, d:t.d, have:mythicDone(t.civ)})) }; },
   get title(){ return { name:currentTitle(), score:titleScore(), tiers:TITLES.map(t=>t[1]) }; },
   addFragment:(civ,n)=>addFragment(civ,n),
+  openMythic:()=>openMythicPanel(), closeMythic:()=>closeMythicPanel(), rubLamp:()=>rubLamp(),
   provokeRome:()=>{ romeWantedT=Math.min(90, romeWantedT+35); addFaction('rome',-5); return { wanted:romeWanted(), t:+romeWantedT.toFixed(1) }; },   // 等效于斩杀军团兵(调试/程序触发)
   get payoff(){ return { landmarks:[...landSeen], types:[...landTypesSeen()], total:PAYOFF_N, weather, underCover:underCover(), yield:BIOME_YIELD }; },
   get npc(){ return { relics:npcState.relics, traderMet:npcState.traderMet, oracleMet:npcState.oracleMet, trades:npcState.trades, blessings:npcState.blessings,
                       bless:{kind:blessKind, t:+blessT.toFixed(1)}, talk:talkNpc?talkNpc.npcRole:null, panelOpen:npcPanelOpen,
                       count:{trader:countNPC("trader"), oracle:countNPC("oracle")} }; },
-  get arch(){ return { pottery:archState.pottery, pages:archState.pages, digs:archState.digs, sites:digSites.length, cap:DIG_CAP }; },
+  get arch(){ return { pottery:archState.pottery, pages:archState.pages, digs:archState.digs, sites:digSites.length, cap:DIG_CAP,
+                      shards:archState.shards.slice(), seen:potterySeenCount(), total:POTTERY_TYPES.length, setComplete:!!archState.setComplete }; },
+  grantPottery:(id)=>grantPotteryShard(id), openPottery:()=>openPotteryPanel(), closePottery:()=>closePotteryPanel(),
+  get sphinx(){ const m=nearSphinx(); return { solved:sphinxState.solved, failed:sphinxState.failed, riddles:SPHINX_RIDDLES.map(r=>r.q),
+                      near:!!m, ready:!!(m&&m.riddleReady), angry:!!(m&&m.riddleAngry), dist:m?+Math.hypot(m.x-player.x,m.z-player.z).toFixed(1):-1 }; },
+  armSphinxRiddle, openSphinx:()=>openSphinxPanel(), answerSphinx:(i)=>answerSphinx(i), sphinxEnrage:(m)=>sphinxEnrage(m),
   get arena(){ return { active:arenaState.active, wave:arenaState.wave, cleared:arenaState.cleared, bestWave:arenaState.bestWave, keys:arenaState.keys, alive:aliveArenaMobs(), inZone:!!arenaZone() }; },
   startArena, endArena:(w)=>endArena(!!w), spawnArenaWave:(i)=>{ arenaState.cx=player.x; arenaState.cz=player.z; return spawnArenaWave(i|0); },
+  get vault(){ return { keys:arenaState.keys, opened:vaultState.opened, inZone:!!vaultZone(), sites:VAULT_SITES.slice(),
+                      civ:{pyramid:vaultCiv("pyramid"), palace:vaultCiv("palace"), colosseum:vaultCiv("colosseum")} }; },
+  openVault:(f)=>openVault(!!f), vaultCiv,
   get curse(){ return { active:curseState.active, t:+curseState.t.toFixed(1), pharaohSlain:curseState.pharaohSlain }; },
   applyCurse, slayPharaoh:()=>onPharaohSlain(), awakenPharaoh:()=>{ const p=player; awakenPharaoh(Math.floor(p.x)+2, Math.floor(p.y), Math.floor(p.z)); return curseState.active; },
   // 金字塔实体机关陷阱
@@ -7323,6 +7691,10 @@ function selftest(){
   const ok =(name,cond,detail)=>{ (cond?pass++:fail++); results.push({name, ok:!!cond, detail:detail||""}); };
   const near=(a,b,eps)=>Math.abs(a-b)<=(eps||1e-6);
 
+  // 先快照玩家 localStorage: selftest 里的 saveGame 会写测试世界, 绝不能留下。
+  const liveStore=sandseaStorageSnapshot();
+  const liveSave=(liveStore[SAVE_KEY]!==undefined)?liveStore[SAVE_KEY]:null;
+
   // 保存现场, 测完还原, 不破坏玩家进度
   const snap={x:player.x,y:player.y,z:player.z,hp,dead,softLock,vy:player.vy,wgr:worldGenReady};
   // setBlock 只在 worldGenReady 为真时才记录 blockDiff(避免把地形生成当成玩家改动)。
@@ -7330,6 +7702,17 @@ function selftest(){
   worldGenReady=true;
   const prevDiff=new Map(blockDiff);
   try{
+    // 0. 存档护栏: 用专用哨兵键验证快照/还原, 不把假生产存档留给玩家
+    {
+      const probeKey="sandsea_selftest_guard";
+      try{ localStorage.setItem(probeKey, "probe"); localStorage.setItem(SAVE_KEY, '{"v":1,"seed":-1,"_selftestJunk":1}'); }catch(e){}
+      sandseaStorageRestore(liveStore);
+      let now=null, probe=null;
+      try{ now=localStorage.getItem(SAVE_KEY); probe=localStorage.getItem(probeKey); }catch(e){}
+      ok("自测还原后玩家存档未被动", now===liveSave, "beforeLen="+(liveSave?liveSave.length:0)+" afterLen="+(now?now.length:0));
+      ok("自测哨兵键不会残留", probe==null, "probe="+probe);
+    }
+
     // 1. 世界生成
     ok("世界已生成区块", world.size>0, "chunkCount="+world.size);
     const testChunk=genChunk(12345,6789);
@@ -7591,8 +7974,8 @@ function selftest(){
 
     // 8g. 沙漠考古: 可疑沙砾方块存在 / 挖开产出三类文物 / 存档往返 + 老存档兼容
     ok("可疑沙砾方块已定义", !!BLOCKS[SUSGRAVEL] && BLOCKS[SUSGRAVEL].t===83, "SUSGRAVEL="+SUSGRAVEL);
-    const archSnap=Object.assign({},archState), relicSnap2=npcState.relics;
-    archState.pottery=0; archState.pages=0; archState.digs=0; npcState.relics=0;
+    const archSnap=Object.assign({},archState, {shards:(archState.shards||[]).slice()}), relicSnap2=npcState.relics;
+    archState.pottery=0; archState.pages=0; archState.digs=0; archState.shards=[]; archState.setComplete=false; npcState.relics=0;
     let gotPottery=0, gotPages=0, gotRelic=0;
     for(let i=0;i<400;i++){ const b={pottery:archState.pottery,pages:archState.pages,relics:npcState.relics};
       archaeologyDig(0,80,0);
@@ -7609,7 +7992,8 @@ function selftest(){
     ok("老存档(无arch字段)兼容归零", archState.pottery===0 && archState.pages===0, "pottery="+archState.pottery);
     { const A=wroteArch.arch; archState.pottery=A.pottery|0; archState.pages=A.pages|0; archState.digs=A.digs|0; }
     ok("考古进度能从存档还原", archState.pottery===7 && archState.pages===3, "pottery="+archState.pottery);
-    Object.assign(archState,archSnap); npcState.relics=relicSnap2;
+    Object.assign(archState, {pottery:archSnap.pottery, pages:archSnap.pages, digs:archSnap.digs, setComplete:!!archSnap.setComplete});
+    archState.shards=(archSnap.shards||[]).slice(); npcState.relics=relicSnap2;
 
     // 8h. 罗马斗兽场波次: 能刷波 / 清场无残留 / 通关落钥匙 / 存档往返 + 老存档兼容
     const arenaSnap=Object.assign({},arenaState);
@@ -7684,14 +8068,14 @@ function selftest(){
 
     // 8k. 海市蜃楼: 干旱群系生成 / 上限 / 远处淡入 / 走近淡出消散
     {
-      const mSnap=mirages.slice(); mirages.length=0;
+      const mSnap=mirages.slice(), spawnSnap=mirageSpawnT; mirages.length=0; mirageSpawnT=999;
       const fx=player.x, fz=player.z; let moved=false;
-      // 找一处干旱群系(沙漠/台地/草原)站上去, 让 biomeDryHere() 为真(biomeAt 是纯噪声, 不需加载区块)
+      // 找一处真沙漠站上去, 让 biomeDryHere() 为真(海市蜃楼只在 BIO_DESERT)
       outer: for(let ax=-3000;ax<=3000;ax+=96) for(let az=-3000;az<=3000;az+=96){
         const b=biomeAt(Math.floor(fx+ax),Math.floor(fz+az));
-        if(b===BIO_DESERT||b===BIO_MESA||b===BIO_SAVANNA){ player.x=fx+ax; player.z=fz+az; moved=true; break outer; }
+        if(b===BIO_DESERT){ player.x=fx+ax; player.z=fz+az; moved=true; break outer; }
       }
-      ok("能定位到干旱群系(海市蜃楼场景)", moved && biomeDryHere(), "dry="+biomeDryHere());
+      ok("能定位到沙漠群系(海市蜃楼场景)", moved && biomeDryHere(), "dry="+biomeDryHere());
       ok("海市蜃楼可生成幻影绿洲", spawnMirage()===true && mirages.length===1, "count="+mirages.length);
       for(let i=0;i<20;i++) spawnMirage();
       ok("幻影数量有 draw 上限(≤"+MIRAGE_CAP+")", mirages.length<=MIRAGE_CAP, "count="+mirages.length);
@@ -7703,7 +8087,7 @@ function selftest(){
       for(let i=0;i<40;i++) updateMirage(0.1);
       const nearGone = mirages.length===0 || mirages[0].alpha<0.3;
       ok("走近后幻影淡出消散", nearGone, mirages.length?("alpha="+mirages[0].alpha.toFixed(2)):"已移除");
-      mirages.length=0; for(const g of mSnap) mirages.push(g);
+      mirages.length=0; for(const g of mSnap) mirages.push(g); mirageSpawnT=spawnSnap;
       player.x=fx; player.z=fz; pcx=1e9; refreshChunks();
     }
 
@@ -7755,6 +8139,203 @@ function selftest(){
       trapFired.clear(); for(const k of firedSnap) trapFired.add(k); trapEnts.length=entLen; arrows.length=arrLen;
     }
 
+    // 8n. 封印宝库: 钥匙可花掉 / 无钥匙拒绝 / 存档往返 + 老存档兼容
+    {
+      const vSnap=vaultState.opened, kSnap=arenaState.keys;
+      const bagSnapV=new Map(bag), xpV=xp, lvlV=lvl, dmgV=dmgMul, maxV=maxHp, hpV=hp, armorV=armor;
+      const mythSnap={frags:Object.assign({},mythicState.frags), done:mythicState.done.slice()};
+      arenaState.keys=0; vaultState.opened=0;
+      ok("无钥匙时拒绝开宝库", openVault(true)===false && arenaState.keys===0 && vaultState.opened===0, "keys="+arenaState.keys+" opened="+vaultState.opened);
+      arenaState.keys=2;
+      const gold0=bagCount(GOLD_ORE), gem0=bagCount(GEM_ORE);
+      mythicState.frags.rome=0; mythicState.frags.persia=0;
+      mythicState.done=mythicState.done.filter(c=>c!=="rome" && c!=="persia");
+      ok("有钥匙时可强制开启封印宝库", openVault(true)===true, "opened="+vaultState.opened);
+      ok("开宝库会花掉一把钥匙", arenaState.keys===1, "keys="+arenaState.keys);
+      ok("开宝库会计入开启次数", vaultState.opened===1, "opened="+vaultState.opened);
+      ok("开宝库会掉金/钻", bagCount(GOLD_ORE)>gold0 && bagCount(GEM_ORE)>gem0, "金="+(bagCount(GOLD_ORE)-gold0)+" 钻="+(bagCount(GEM_ORE)-gem0));
+      ok("强制开宫殿宝库发罗马碎片而非波斯", vaultCiv("palace")==="rome" && mythicState.frags.rome===1 && mythicState.frags.persia===0,
+         "rome="+mythicState.frags.rome+" persia="+mythicState.frags.persia+" civ="+vaultCiv("palace"));
+      ok("金字塔宝库给埃及碎片", vaultCiv("pyramid")==="egypt", "civ="+vaultCiv("pyramid"));
+      ok("斗兽场宝库给罗马碎片", vaultCiv("colosseum")==="rome", "civ="+vaultCiv("colosseum"));
+      vaultState.opened=7;
+      const wroteV=collectSave();
+      ok("宝库开启次数写入存档(feats)", wroteV.feats && wroteV.feats.vaultsOpened===7, "feats="+JSON.stringify(wroteV.feats));
+      { const legacy=Object.assign({},wroteV); delete legacy.feats;
+        const F=legacy.feats||{}; vaultState.opened=F.vaultsOpened|0; }
+      ok("老存档(无feats.vaultsOpened)兼容归零", vaultState.opened===0, "opened="+vaultState.opened);
+      { const F=wroteV.feats; vaultState.opened=F.vaultsOpened|0; }
+      ok("宝库开启次数能从存档还原", vaultState.opened===7, "opened="+vaultState.opened);
+      ok("编年史提到宝库钥匙/开启", /宝库/.test(chronicleHTML()), "html-len="+chronicleHTML().length);
+      ok("开宝库提示条存在", !!document.getElementById("vaultPrompt"), "");
+      arenaState.keys=kSnap; vaultState.opened=vSnap;
+      mythicState.frags=mythSnap.frags; mythicState.done=mythSnap.done;
+      bag.clear(); for(const [k,v] of bagSnapV) bag.set(k,v); xp=xpV; lvl=lvlV; dmgMul=dmgV; maxHp=maxV; hp=hpV; armor=armorV;
+      updateHearts(); updateXPHUD();
+    }
+
+    // 8o. 六文明天象 + 左下状态栏(不再只靠 toast)
+    {
+      const omSnap={kind:omenState.kind, t:omenState.t, timer:omenTimer};
+      const bzSnap=Object.assign({},bazaarState), exSnap=Object.assign({},expeditionState);
+      const unSnap=Object.assign({},undeadNight), wSnap=weather, wtSnap=weatherT;
+      const civs=OMENS.map(o=>o.k);
+      ok("天象覆盖六文明(希腊+罗马/埃及/波斯/阿拉伯/地中海)", civs.indexOf("mars")>=0 && civs.indexOf("ra")>=0 && civs.indexOf("mithra")>=0 && civs.indexOf("sirocco")>=0 && civs.indexOf("argos")>=0 && OMENS.length>=10, "n="+OMENS.length+" civs="+civs.join(","));
+      bazaarState.active=false; expeditionState.active=false;
+      proclaimOmen("mars");
+      ok("马尔斯天象提升近战伤害", omenState.kind==="mars" && omenMeleeMul()===1.25, "kind="+omenState.kind+" melee="+omenMeleeMul());
+      proclaimOmen("ra");
+      ok("拉神天象免疫沙暴灼伤", omenSandImmune()===true && omenMeleeMul()===1, "sandImmune="+omenSandImmune());
+      proclaimOmen("sirocco");
+      ok("西罗科天象加快移速并加速神灯冷却", omenMoveMul()>1 && omenDjinnCdMul()===2, "move="+omenMoveMul()+" djinnCd="+omenDjinnCdMul());
+      bazaarState.active=false; bazaarState.t=0;
+      proclaimOmen("mithra");
+      ok("密特拉天象会拉开波斯集市", bazaarState.active===true && omenBazaarDtMul()===0.5, "bazaar="+bazaarState.active+" dtMul="+omenBazaarDtMul());
+      expeditionState.active=false; expeditionState.t=0;
+      proclaimOmen("argos");
+      ok("阿尔戈天象会启程金羊毛远征", expeditionState.active===true && omenExpeditionDtMul()===0.5, "expedition="+expeditionState.active+" dtMul="+omenExpeditionDtMul());
+      const hud=document.getElementById("buffHud");
+      updateBuffHUD();
+      ok("进行中的天象会出现在左下状态栏", hud && hud.style.display==="block" && /阿尔戈|金羊毛|密特拉|集市/.test(hud.innerHTML), "hud="+(hud?hud.textContent.slice(0,80):"missing"));
+      bazaarState.active=false;
+      toggleBazaarPanel();
+      ok("集市未开时按 Y 会提示尚未到来", !document.getElementById("bazaar-panel").classList.contains("on"), "panel-on="+document.getElementById("bazaar-panel").classList.contains("on"));
+      omenState.kind=omSnap.kind; omenState.t=omSnap.t; omenTimer=omSnap.timer;
+      Object.assign(bazaarState,bzSnap); Object.assign(expeditionState,exSnap); Object.assign(undeadNight,unSnap);
+      weather=wSnap; weatherT=wtSnap; closeBazaarPanel(); updateBuffHUD();
+    }
+
+    // 8p. 陶片图鉴: 鉴定器型 / 面板可翻 / 编年史有行 / 存档往返 + 老存档缺 shards 归零
+    {
+      const archSnapP=Object.assign({},archState,{shards:(archState.shards||[]).slice()});
+      const bagSnapP=new Map(bag), xpP=xp, lvlP=lvl, dmgP=dmgMul, maxP=maxHp, hpP=hp;
+      archState.pottery=0; archState.shards=[]; archState.setComplete=false;
+      ok("陶片图鉴收录多种器型", POTTERY_TYPES.length>=8, "n="+POTTERY_TYPES.length);
+      const g1=grantPotteryShard("blacktop");
+      ok("出土能鉴定新器型", g1.neu===true && potteryHave("blacktop") && potterySeenCount()===1, "seen="+potterySeenCount()+" id="+g1.id);
+      const g2=grantPotteryShard("blacktop");
+      ok("重复出土不重复入册", g2.neu===false && potterySeenCount()===1 && archState.pottery===2, "seen="+potterySeenCount()+" pottery="+archState.pottery);
+      openPotteryPanel();
+      const pt=document.getElementById("pottery-panel");
+      const card=pt && pt.querySelector(".pt-card");
+      ok("陶片图鉴面板能打开并列出器型", pt && pt.classList.contains("on") && card && /黑顶红陶/.test(card.innerHTML) && /？？？/.test(card.innerHTML), "open="+(pt&&pt.classList.contains("on")));
+      closePotteryPanel();
+      ok("编年史列出陶片图鉴", /陶片图鉴/.test(chronicleHTML()), "");
+      archState.shards=["blacktop","lotus"]; archState.pottery=4;
+      const wrotePt=collectSave();
+      ok("器型写入存档", wrotePt.arch && Array.isArray(wrotePt.arch.shards) && wrotePt.arch.shards.indexOf("blacktop")>=0, "shards="+JSON.stringify((wrotePt.arch||{}).shards));
+      { const A={}; archState.shards=Array.isArray(A.shards)?A.shards:[]; }   // 老存档无 shards
+      ok("老存档(无shards)图鉴归零", potterySeenCount()===0, "seen="+potterySeenCount());
+      { const A=wrotePt.arch; archState.shards=Array.isArray(A.shards)?A.shards.slice():[]; }
+      ok("陶片图鉴能从存档还原", potteryHave("blacktop") && potteryHave("lotus"), "shards="+archState.shards.join(","));
+      archState.shards=[]; archState.setComplete=false; archState.pottery=0;
+      POTTERY_TYPES.forEach(t=>grantPotteryShard(t.id));
+      ok("集齐全部器型会发一次奖励", archState.setComplete===true && potterySeenCount()===POTTERY_TYPES.length, "seen="+potterySeenCount()+" done="+archState.setComplete);
+      Object.assign(archState,{pottery:archSnapP.pottery,pages:archSnapP.pages,digs:archSnapP.digs,setComplete:!!archSnapP.setComplete});
+      archState.shards=(archSnapP.shards||[]).slice();
+      bag.clear(); for(const [k,v] of bagSnapP) bag.set(k,v); xp=xpP; lvl=lvlP; dmgMul=dmgP; maxHp=maxP; hp=hpP;
+      updateHearts(); updateXPHUD(); closePotteryPanel();
+    }
+
+    // 8q. 斯芬克斯谜题: 先问后打 / 答对有赏 / 答错开战 / 动手也开战 / 老存档归零
+    {
+      const sxSnap=Object.assign({},sphinxState);
+      const bagSnapS=new Map(bag), xpS=xp, lvlS=lvl, dmgS=dmgMul, maxS=maxHp, hpS=hp, armorS=armor;
+      const mythSnapS={frags:Object.assign({},mythicState.frags), done:mythicState.done.slice()};
+      const facS={rome:faction.rome, egypt:faction.egypt};
+      const mobsSnapS=mobs.slice(); mobs.length=0;
+      sphinxState.solved=0; sphinxState.failed=0; sphinxTalk=null;
+      const sx={type:"sphinx", def:MOB_DEFS.sphinx, x:player.x+1, y:player.y, z:player.z, vx:0,vy:0,vz:0,kbx:0,kbz:0,
+        yaw:0,tgtYaw:0,hp:MOB_DEFS.sphinx.hp,hurtT:0,animT:0,t:0,atkCd:0,burnT:0,swingT:0,groanT:0,fleeT:0,
+        onGround:true,pause:false,burning:false,held:null};
+      mobs.push(sx);
+      ok("斯芬克斯可登记为出谜看守", armSphinxRiddle(sx)===true && sx.riddleReady===true && !sx.riddleAngry, "ready="+sx.riddleReady);
+      ok("靠近出谜斯芬克斯能识别", nearSphinx()===sx, "near="+(nearSphinx()&&nearSphinx().type));
+      openSphinxPanel();
+      const sp=document.getElementById("sphinx-panel");
+      ok("谜题面板能打开", sp && sp.classList.contains("on") && /斯芬克斯/.test((sp.querySelector(".sx-card")||{}).innerHTML||""), "open="+(sp&&sp.classList.contains("on")));
+      sx.riddleIdx=0; renderSphinx();   // 固定第一题: 人
+      const gold0=bagCount(GOLD_ORE);
+      ok("答对谜题有赏且看守离去", answerSphinx(0)===true && sphinxState.solved===1 && mobs.indexOf(sx)<0, "solved="+sphinxState.solved+" gold+"+(bagCount(GOLD_ORE)-gold0));
+      ok("答对后面板关闭", !document.getElementById("sphinx-panel").classList.contains("on"), "");
+      const sx2={type:"sphinx", def:MOB_DEFS.sphinx, x:player.x+1, y:player.y, z:player.z, vx:0,vy:0,vz:0,kbx:0,kbz:0,
+        yaw:0,tgtYaw:0,hp:MOB_DEFS.sphinx.hp,hurtT:0,animT:0,t:0,atkCd:0,burnT:0,swingT:0,groanT:0,fleeT:0,
+        onGround:true,pause:false,burning:false,held:null};
+      mobs.push(sx2); armSphinxRiddle(sx2); sx2.riddleIdx=0; sphinxTalk=sx2;
+      ok("答错则开战", answerSphinx(1)===false && sx2.riddleAngry===true && !sx2.riddleReady && sphinxState.failed>=1, "angry="+sx2.riddleAngry+" failed="+sphinxState.failed);
+      const sx3={type:"sphinx", def:MOB_DEFS.sphinx, x:player.x+1, y:player.y, z:player.z, vx:0,vy:0,vz:0,kbx:0,kbz:0,
+        yaw:0,tgtYaw:0,hp:MOB_DEFS.sphinx.hp,hurtT:0,animT:0,t:0,atkCd:0,burnT:0,swingT:0,groanT:0,fleeT:0,
+        onGround:true,pause:false,burning:false,held:null};
+      mobs.push(sx3); armSphinxRiddle(sx3);
+      const fail0=sphinxState.failed;
+      hurtMob(sx3,1,0,0,true);
+      ok("动手打断谜题也会开战", sx3.riddleAngry===true && !sx3.riddleReady && sphinxState.failed===fail0+1, "angry="+sx3.riddleAngry+" failed="+sphinxState.failed);
+      sphinxState.solved=2; sphinxState.failed=3;
+      const wroteSx=collectSave();
+      ok("答谜战绩写入存档", wroteSx.sphinx && wroteSx.sphinx.solved===2 && wroteSx.sphinx.failed===3, "sphinx="+JSON.stringify(wroteSx.sphinx));
+      { const legacy=Object.assign({},wroteSx); delete legacy.sphinx;
+        sphinxState.solved=(legacy.sphinx&&legacy.sphinx.solved)|0; sphinxState.failed=(legacy.sphinx&&legacy.sphinx.failed)|0; }
+      ok("老存档(无sphinx字段)答谜归零", sphinxState.solved===0 && sphinxState.failed===0, "solved="+sphinxState.solved);
+      { const S=wroteSx.sphinx; sphinxState.solved=S.solved|0; sphinxState.failed=S.failed|0; }
+      ok("答谜战绩能从存档还原", sphinxState.solved===2 && sphinxState.failed===3, "solved="+sphinxState.solved);
+      ok("编年史列出斯芬克斯", /斯芬克斯/.test(chronicleHTML()), "");
+      const elSx=document.getElementById("sphinx-panel"); if(elSx) elSx.classList.remove("on"); sphinxTalk=null;
+      Object.assign(sphinxState,sxSnap);
+      mythicState.frags=mythSnapS.frags; mythicState.done=mythSnapS.done;
+      faction.rome=facS.rome; faction.egypt=facS.egypt;
+      bag.clear(); for(const [k,v] of bagSnapS) bag.set(k,v); xp=xpS; lvl=lvlS; dmgMul=dmgS; maxHp=maxS; hp=hpS; armor=armorS;
+      mobs.length=0; for(const m of mobsSnapS) mobs.push(m);
+      updateHearts(); updateXPHUD(); updateSphinxPrompt();
+    }
+
+    // 8r. 神话遗物被动: 灯/羊毛/法尔不再只是一次性掉落; 图鉴可翻; 神灯可按 L
+    {
+      const mythSnapR={frags:Object.assign({},mythicState.frags), done:mythicState.done.slice()};
+      const bagSnapR=new Map(bag), xpR=xp, lvlR=lvl, dmgR=dmgMul, maxR=maxHp, hpR=hp, armorR=armor;
+      const djinnR={rubs:djinnState.rubs, cd:djinnState.cd};
+      const facR={rome:faction.rome, egypt:faction.egypt};
+      const blessR={t:blessT, k:blessKind};
+      mythicState.frags={greece:0,rome:0,egypt:0,persia:0,arabia:0,medit:0}; mythicState.done=[];
+      ok("未拼合时无灯/羊毛/法尔被动", mythicDjinnCdMul()===1 && !mythicFallImmune() && mythicBazaarOff()===0 && mythicAegisMul()===1, "lamp="+mythicDjinnCdMul()+" fall="+mythicFallImmune()+" farr="+mythicBazaarOff());
+      ok("未拼合神灯时擦灯被拒", rubLamp()===false, "");
+      for(let i=0;i<MYTHIC_NEED;i++) addFragment("arabia");
+      ok("拼合不灭神灯后冷却加倍快", mythicDone("arabia") && mythicDjinnCdMul()===2, "done="+mythicState.done.join(","));
+      djinnState.cd=0;
+      const wish=rubLamp();
+      ok("拼合后可擦灯许愿", wish!==false && djinnState.cd>0 && djinnState.rubs===djinnR.rubs+1, "wish="+wish+" cd="+djinnState.cd);
+      mythicState.frags.persia=0; if(mythicDone("persia")) mythicState.done=mythicState.done.filter(c=>c!=="persia");
+      faction.rome=0;
+      const ware=BAZAAR_WARES[0];
+      const baseCost=ware.cost;
+      ok("无法尔时集市原价", bazaarCost(ware)===baseCost, "cost="+bazaarCost(ware));
+      for(let i=0;i<MYTHIC_NEED;i++) addFragment("persia");
+      ok("法尔使波斯集市减 1 文物", mythicDone("persia") && bazaarCost(ware)===baseCost-1 && mythicBazaarOff()===1, "cost="+bazaarCost(ware));
+      for(let i=0;i<MYTHIC_NEED;i++) addFragment("medit");
+      ok("黄金羊毛免疫摔落", mythicDone("medit") && mythicFallImmune()===true, "");
+      blessKind=""; blessT=0; armor=0; dead=false; hp=20; maxHp=20;
+      const h0=hp; damagePlayer(10,0,0);
+      const dropNo=h0-hp;
+      mythicState.frags.greece=0; mythicState.done=mythicState.done.filter(c=>c!=="greece");
+      for(let i=0;i<MYTHIC_NEED;i++) addFragment("greece");
+      hp=20; maxHp=Math.max(20,maxHp); dead=false; armor=0; blessKind=""; blessT=0;
+      const h1=hp; damagePlayer(10,0,0);
+      const dropYes=h1-hp;
+      ok("埃癸斯减轻伤害", mythicAegisMul()===0.9 && dropYes<dropNo, "noShield="+dropNo+" aegis="+dropYes);
+      openMythicPanel();
+      const mp=document.getElementById("mythic-panel");
+      const mcard=mp && mp.querySelector(".pt-card");
+      ok("神话遗物面板能打开并列出神器", mp && mp.classList.contains("on") && mcard && /不灭神灯|埃癸斯/.test(mcard.innerHTML) && /？？？/.test(mcard.innerHTML), "open="+(mp&&mp.classList.contains("on")));
+      closeMythicPanel();
+      ok("编年史提示按 K 翻神话遗物", /神话遗物/.test(chronicleHTML()) && /按 K/.test(chronicleHTML()), "");
+      ok("天象冷却函数仍只看西罗科", omenDjinnCdMul()===(omenActive("sirocco")?2:1), "omenCd="+omenDjinnCdMul());
+      mythicState.frags=mythSnapR.frags; mythicState.done=mythSnapR.done;
+      djinnState.rubs=djinnR.rubs; djinnState.cd=djinnR.cd;
+      faction.rome=facR.rome; faction.egypt=facR.egypt;
+      blessT=blessR.t; blessKind=blessR.k;
+      bag.clear(); for(const [k,v] of bagSnapR) bag.set(k,v); xp=xpR; lvl=lvlR; dmgMul=dmgR; maxHp=maxR; hp=hpR; armor=armorR;
+      updateHearts(); updateXPHUD(); updateBuffHUD(); closeMythicPanel();
+    }
+
     // 9. 渲染管线仍然可用
     let renderErr=null;
     try{ render(performance.now()); }catch(e){ renderErr=e.message; }
@@ -7771,12 +8352,20 @@ function selftest(){
     }
     player.x=fx2; player.z=fz2; pcx=1e9; refreshChunks();
     ok("远距离云层UV仍在[0,1)内(防白块)", worstUV<1, "最大|uUVOff|="+worstUV.toFixed(4));
+
+    // 收尾再确认一次: 即使中途 saveGame 写过测试世界, 还原后玩家存档仍在
+    sandseaStorageRestore(liveStore);
+    let endSave=null; try{ endSave=localStorage.getItem(SAVE_KEY); }catch(e){}
+    ok("自测结束时玩家存档仍未被测试世界覆盖", endSave===liveSave, "match="+(endSave===liveSave));
   } finally {
-    // 还原现场
-    player.x=snap.x; player.y=snap.y; player.z=snap.z; player.vy=snap.vy;
-    hp=snap.hp; dead=snap.dead; softLock=snap.softLock; worldGenReady=snap.wgr;
-    blockDiff.clear(); for(const [k,v] of prevDiff) blockDiff.set(k,v);
-    pcx=1e9; refreshChunks();
+    // 先还 localStorage(抛错也要还), 再还原内存现场
+    try{ sandseaStorageRestore(liveStore); }catch(e){}
+    try{
+      player.x=snap.x; player.y=snap.y; player.z=snap.z; player.vy=snap.vy;
+      hp=snap.hp; dead=snap.dead; softLock=snap.softLock; worldGenReady=snap.wgr;
+      blockDiff.clear(); for(const [k,v] of prevDiff) blockDiff.set(k,v);
+      pcx=1e9; refreshChunks();
+    }catch(e){}
   }
 
   const line="=".repeat(52);
@@ -7787,6 +8376,22 @@ function selftest(){
   console.log((fail===0?"%c全部通过":"%c存在失败项")+"  "+pass+" passed / "+fail+" failed",
               "font-weight:bold;color:"+(fail===0?"#4caf50":"#f44336"));
   return {pass, fail, total:pass+fail, results};
+}
+if(/[?&]selftest=1/.test(location.search||"")){
+  (function waitSelftest(){
+    if(typeof worldGenReady!=="undefined" && worldGenReady && typeof selftest==="function"){
+      const r=selftest();
+      saveDisabled=true;                      // 自测世界不得在关页/切后台时写回; 点「继续上次」会重新打开存档
+      try{ refreshMenu(); }catch(e){}
+      const pre=document.createElement("pre");
+      pre.id="selftest-out";
+      pre.style.cssText="position:fixed;inset:8px;overflow:auto;z-index:999;background:#111;color:#eee;padding:12px;font:12px/1.4 monospace";
+      pre.textContent=(r.fail?"FAIL":"PASS")+" "+r.pass+"/"+r.total+"\n"+r.results.map(x=>(x.ok?"OK":"NG")+" "+x.name+(x.detail?" ("+x.detail+")":"")).join("\n");
+      document.body.appendChild(pre);
+      document.title=(r.fail?"FAIL":"PASS")+" sandsea selftest "+r.pass+"/"+r.total;
+      window.__selftest = r;
+    } else setTimeout(waitSelftest, 250);
+  })();
 }
 </script>
 </body>
