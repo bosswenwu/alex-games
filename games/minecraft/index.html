@@ -3224,6 +3224,7 @@ document.addEventListener("keydown",e=>{
   if(e.code==="KeyY" && !e.repeat){ e.preventDefault(); toggleBazaarPanel(); return; }
   if(e.code==="KeyP" && !e.repeat){ e.preventDefault(); togglePotteryPanel(); return; }
   if(e.code==="KeyK" && !e.repeat){ e.preventDefault(); toggleMythicPanel(); return; }
+  if(e.code==="KeyL" && !e.repeat){ e.preventDefault(); rubLamp(); return; }   // 须在 playing() 之前: 开面板会退指针锁并暂停, 否则再按 L 关不掉
   if(e.code==="Escape" && npcPanelOpen){ closeNPCPanel(); return; }
   if(e.code==="Escape" && craftOpen){ toggleCraft(); return; }
   const potEl=document.getElementById("pottery-panel"), sxEl=document.getElementById("sphinx-panel"), myEl=document.getElementById("mythic-panel"), lpEl=document.getElementById("lamp-panel");
@@ -3249,7 +3250,6 @@ document.addEventListener("keydown",e=>{
     if(e.code==="KeyG" && !e.repeat){ e.preventDefault(); startArena(); }   // 斗兽场开战
     if(e.code==="KeyU" && !e.repeat){ e.preventDefault(); openVault(); }     // 封印宝库(花钥匙)
     if(e.code==="KeyR" && !e.repeat){ e.preventDefault(); openSphinxPanel(); } // 斯芬克斯答谜
-    if(e.code==="KeyL" && !e.repeat){ e.preventDefault(); rubLamp(); }         // 不灭神灯：打开自选许愿
   }
   keys[e.code]=true;
 });
@@ -8336,6 +8336,11 @@ function selftest(){
       const wish=grantWish(1);   // 黄金雨
       ok("点选愿望才生效并进入冷却", wish!==false && djinnState.cd>0 && djinnState.rubs===djinnR.rubs+1 && bagCount(GOLD_ORE)===gold0+15 && !document.getElementById("lamp-panel").classList.contains("on"), "wish="+wish+" cd="+djinnState.cd);
       ok("关闭许愿面板不扣冷却", (djinnState.cd=0, rubLamp(), closeLampPanel(), djinnState.cd===0 && djinnState.rubs===djinnR.rubs+1), "cd="+djinnState.cd);
+      djinnState.cd=0; openLampPanel();
+      const lockSnap=locked, softSnap=softLock; locked=false; softLock=false;   // 模拟退指针锁后 playing()===false
+      document.dispatchEvent(new KeyboardEvent("keydown",{code:"KeyL",bubbles:true}));
+      ok("暂停后按 L 仍能关闭许愿面板", !document.getElementById("lamp-panel").classList.contains("on") && djinnState.cd===0, "on="+document.getElementById("lamp-panel").classList.contains("on")+" playing="+playing());
+      locked=lockSnap; softLock=softSnap; closeLampPanel();
       mythicState.frags.persia=0; if(mythicDone("persia")) mythicState.done=mythicState.done.filter(c=>c!=="persia");
       faction.rome=0;
       const ware=BAZAAR_WARES[0];
