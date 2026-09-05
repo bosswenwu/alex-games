@@ -3224,7 +3224,13 @@ document.addEventListener("keydown",e=>{
   if(e.code==="KeyY" && !e.repeat){ e.preventDefault(); toggleBazaarPanel(); return; }
   if(e.code==="KeyP" && !e.repeat){ e.preventDefault(); togglePotteryPanel(); return; }
   if(e.code==="KeyK" && !e.repeat){ e.preventDefault(); toggleMythicPanel(); return; }
-  if(e.code==="KeyL" && !e.repeat){ e.preventDefault(); rubLamp(); return; }   // 须在 playing() 之前: 开面板会退指针锁并暂停, 否则再按 L 关不掉
+  if(e.code==="KeyL" && !e.repeat){                                          // 须在 playing() 之前: 开面板会退指针锁并暂停, 否则再按 L 关不掉
+    e.preventDefault();
+    const lp=document.getElementById("lamp-panel");
+    if(lp && lp.classList.contains("on")){ closeLampPanel(); return; }       // 已打开则始终可关(含暂停)
+    if(dead) return;                                                         // 死亡画面不许愿
+    rubLamp(); return;
+  }
   if(e.code==="Escape" && npcPanelOpen){ closeNPCPanel(); return; }
   if(e.code==="Escape" && craftOpen){ toggleCraft(); return; }
   const potEl=document.getElementById("pottery-panel"), sxEl=document.getElementById("sphinx-panel"), myEl=document.getElementById("mythic-panel"), lpEl=document.getElementById("lamp-panel");
@@ -7190,6 +7196,7 @@ const WISHES=[
 ];
 function grantWish(i){
   const w=WISHES[i|0]; if(!w) return false;
+  if(dead) return false;                                                     // 死亡画面不能靠许愿回血/领赏
   if(djinnState.cd>0){ showName("🪔 神灯余温未散，精灵稍作歇息…("+Math.ceil(djinnState.cd)+"s)"); return false; }
   djinnState.rubs++; djinnState.cd=45;
   closeLampPanel();
@@ -7211,6 +7218,7 @@ function renderLamp(){
   card.querySelectorAll(".sx-ans").forEach(el=>el.onclick=()=>{ grantWish(+el.dataset.i); });
 }
 function openLampPanel(){
+  if(dead) return false;
   if(!mythicDone("arabia")){ showName("🪔 尚未拼合「阿拉伯不灭神灯」— 集齐 3 枚碎片后可按 L 自选愿望"); return false; }
   if(djinnState.cd>0){ showName("🪔 神灯余温未散，精灵稍作歇息…("+Math.ceil(djinnState.cd)+"s)"); return false; }
   const el=document.getElementById("lamp-panel"); if(!el) return false;
@@ -8341,6 +8349,14 @@ function selftest(){
       document.dispatchEvent(new KeyboardEvent("keydown",{code:"KeyL",bubbles:true}));
       ok("暂停后按 L 仍能关闭许愿面板", !document.getElementById("lamp-panel").classList.contains("on") && djinnState.cd===0, "on="+document.getElementById("lamp-panel").classList.contains("on")+" playing="+playing());
       locked=lockSnap; softLock=softSnap; closeLampPanel();
+      const deadSnap=dead; dead=true; djinnState.cd=0;
+      const goldDead=bagCount(GOLD_ORE);
+      ok("死亡时不能打开许愿面板", openLampPanel()===false && !document.getElementById("lamp-panel").classList.contains("on"), "on="+document.getElementById("lamp-panel").classList.contains("on"));
+      ok("死亡时不能许愿领赏", grantWish(1)===false && djinnState.cd===0 && djinnState.rubs===djinnR.rubs+1 && bagCount(GOLD_ORE)===goldDead, "cd="+djinnState.cd+" gold="+bagCount(GOLD_ORE));
+      document.getElementById("lamp-panel").classList.add("on");
+      document.dispatchEvent(new KeyboardEvent("keydown",{code:"KeyL",bubbles:true}));
+      ok("死亡画面按 L 只关面板、不发奖", !document.getElementById("lamp-panel").classList.contains("on") && djinnState.cd===0, "on="+document.getElementById("lamp-panel").classList.contains("on"));
+      dead=deadSnap; closeLampPanel();
       mythicState.frags.persia=0; if(mythicDone("persia")) mythicState.done=mythicState.done.filter(c=>c!=="persia");
       faction.rome=0;
       const ware=BAZAAR_WARES[0];
