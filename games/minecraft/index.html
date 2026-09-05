@@ -168,17 +168,17 @@
   #bazaar-panel .bz-ware:hover { background:#ffd23f22; border-color:#ffd23f66; }
   #bazaar-panel .bz-poor { opacity:.45; cursor:not-allowed; }
   #bazaar-panel .bz-cost { color:#ffd23f; font-weight:700; white-space:nowrap; }
-  #pottery-panel, #sphinx-panel, #mythic-panel { position:fixed; inset:0; z-index:62; display:none; align-items:center; justify-content:center; padding:20px; background:rgba(8,6,3,.82); cursor:pointer; }
-  #pottery-panel.on, #sphinx-panel.on, #mythic-panel.on { display:flex; }
-  #pottery-panel .pt-card, #sphinx-panel .sx-card, #mythic-panel .pt-card { max-width:520px; width:100%; max-height:86vh; overflow:auto; background:linear-gradient(#1a140c,#120d07); border:2px solid #c9a24b; border-radius:12px; padding:20px 24px; color:#f0e6d0; box-shadow:0 10px 40px #000a; cursor:default; }
-  #pottery-panel h2, #sphinx-panel h2, #mythic-panel h2 { color:#ffd23f; margin:0 0 8px; font-size:19px; }
+  #pottery-panel, #sphinx-panel, #mythic-panel, #lamp-panel { position:fixed; inset:0; z-index:62; display:none; align-items:center; justify-content:center; padding:20px; background:rgba(8,6,3,.82); cursor:pointer; }
+  #pottery-panel.on, #sphinx-panel.on, #mythic-panel.on, #lamp-panel.on { display:flex; }
+  #pottery-panel .pt-card, #sphinx-panel .sx-card, #mythic-panel .pt-card, #lamp-panel .sx-card { max-width:520px; width:100%; max-height:86vh; overflow:auto; background:linear-gradient(#1a140c,#120d07); border:2px solid #c9a24b; border-radius:12px; padding:20px 24px; color:#f0e6d0; box-shadow:0 10px 40px #000a; cursor:default; }
+  #pottery-panel h2, #sphinx-panel h2, #mythic-panel h2, #lamp-panel h2 { color:#ffd23f; margin:0 0 8px; font-size:19px; }
   #pottery-panel .pt-row { display:flex; justify-content:space-between; gap:12px; padding:8px 10px; margin:5px 0; border:1px solid #ffffff14; border-radius:8px; background:#ffffff08; }
   #pottery-panel .pt-row.locked { opacity:.42; }
   #pottery-panel .pt-n { font-weight:700; color:#ffe9c4; }
   #pottery-panel .pt-d { color:#c9b98a; font-size:12px; margin-top:2px; }
-  #sphinx-panel .sx-q { color:#ffe9c4; font-size:16px; line-height:1.7; margin:8px 0 14px; }
-  #sphinx-panel .sx-ans { padding:11px 13px; margin:7px 0; border:1px solid #ffffff1e; border-radius:9px; background:#ffffff08; cursor:pointer; transition:.15s; }
-  #sphinx-panel .sx-ans:hover { background:#ffd23f22; border-color:#ffd23f66; }
+  #sphinx-panel .sx-q, #lamp-panel .sx-q { color:#ffe9c4; font-size:16px; line-height:1.7; margin:8px 0 14px; }
+  #sphinx-panel .sx-ans, #lamp-panel .sx-ans { padding:11px 13px; margin:7px 0; border:1px solid #ffffff1e; border-radius:9px; background:#ffffff08; cursor:pointer; transition:.15s; }
+  #sphinx-panel .sx-ans:hover, #lamp-panel .sx-ans:hover { background:#ffd23f22; border-color:#ffd23f66; }
   #sphinxPrompt { position:absolute; left:50%; bottom:162px; transform:translateX(-50%); display:none;
     background:rgba(20,14,26,.82); border:1px solid #c9a24b; border-radius:20px; padding:6px 16px;
     color:#f0e6d2; font-size:13px; z-index:30; pointer-events:none; white-space:nowrap; }
@@ -261,7 +261,7 @@
 <div id="fullhelp">
   <div class="fh-card">
     <div class="fh-title">完整帮助 · 按 <b>H</b> 或点此关闭</div>
-    <b>F5</b> 第三人称　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成　<b>Esc</b> 暂停　<b>T</b> 编年史　<b>P</b> 陶片图鉴　<b>K</b> 神话遗物　<b>U</b> 开宝库　<b>R</b> 答斯芬克斯　<b>L</b> 擦神灯<br>
+    <b>F5</b> 第三人称　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成　<b>Esc</b> 暂停　<b>T</b> 编年史　<b>P</b> 陶片图鉴　<b>K</b> 神话遗物　<b>U</b> 开宝库　<b>R</b> 答斯芬克斯　<b>L</b> 神灯许愿<br>
     <b>物品栏</b>：1烟花 2钩爪 3可乐 4铁剑 5机关枪 6火箭筒 7弓 8=TNT(右键放·左键点燃) 9弹跳板<br>
     <b>2 钩爪</b>甩向准星把你拉过去；<b>3 可乐</b>回血+加速；<b>9 弹跳板</b>踩上去高高弹飞不摔伤<br>
     击杀获得<b>经验</b>升级(提升生命与伤害)。白天长、夜晚短而亮，敌人只是点缀<br>
@@ -269,7 +269,7 @@
     　<b>斯芬克斯</b>守在金字塔外：靠近按 <b>R</b> 回答谜题，答对有赏；答错或动手则开战<br>
     　<b>阵营声望</b>：助罗马/敬埃及各有回报，袭击军团会被<b>通缉</b>　<b>🔮天象</b>（希腊+罗马/埃及/波斯/阿拉伯/地中海）·<b>🐫波斯集市·🌊金羊毛远征·🌑亡者之夜</b>会不时自行降临，左下状态栏会挂着倒计时<br>
     　<b>宝库钥匙</b>：通关斗兽场或斩杀法老获得，站在金字塔/宫殿/斗兽场按 <b>U</b> 开启封印宝库（钥匙会真正被花掉）<br>
-    　<b>神话遗物</b>：六文明碎片拼合后有被动神力（按 <b>K</b> 翻看）。拼合不灭神灯后按 <b>L</b> 可随时擦灯许愿<br>
+    　<b>神话遗物</b>：六文明碎片拼合后有被动神力（按 <b>K</b> 翻看）。拼合不灭神灯后按 <b>L</b> 自选一项愿望<br>
     <b>群系</b>：沙海·红土台地·干草原为主，另有盐湖·峡谷·火山·<b>晶洞高地·古代遗迹带</b><br>
     　💎 晶洞高地：地表紫晶标出入口，地下方解石洞可采　⛵ 遗迹带：沉船/商队残骸藏金<br>
     <b>地标</b>：金字塔(墓室石棺唤醒法老王Boss)·斗兽场·宫殿·绿洲·彩虹桥·机场·赛车场·陨石坑·游乐场<br>
@@ -282,6 +282,7 @@
 <div id="bazaar-panel" onclick="closeBazaarPanel()"><div class="bz-card" onclick="event.stopPropagation()"></div></div>
 <div id="pottery-panel" onclick="closePotteryPanel()"><div class="pt-card" onclick="event.stopPropagation()"></div></div>
 <div id="mythic-panel" onclick="closeMythicPanel()"><div class="pt-card" onclick="event.stopPropagation()"></div></div>
+<div id="lamp-panel" onclick="closeLampPanel()"><div class="sx-card" onclick="event.stopPropagation()"></div></div>
 <div id="sphinx-panel" onclick="closeSphinxPanel()"><div class="sx-card" onclick="event.stopPropagation()"></div></div>
 
 <div id="overlay">
@@ -3223,11 +3224,19 @@ document.addEventListener("keydown",e=>{
   if(e.code==="KeyY" && !e.repeat){ e.preventDefault(); toggleBazaarPanel(); return; }
   if(e.code==="KeyP" && !e.repeat){ e.preventDefault(); togglePotteryPanel(); return; }
   if(e.code==="KeyK" && !e.repeat){ e.preventDefault(); toggleMythicPanel(); return; }
+  if(e.code==="KeyL" && !e.repeat){                                          // 须在 playing() 之前: 开面板会退指针锁并暂停, 否则再按 L 关不掉
+    e.preventDefault();
+    const lp=document.getElementById("lamp-panel");
+    if(lp && lp.classList.contains("on")){ closeLampPanel(); return; }       // 已打开则始终可关(含暂停)
+    if(dead) return;                                                         // 死亡画面不许愿
+    rubLamp(); return;
+  }
   if(e.code==="Escape" && npcPanelOpen){ closeNPCPanel(); return; }
   if(e.code==="Escape" && craftOpen){ toggleCraft(); return; }
-  const potEl=document.getElementById("pottery-panel"), sxEl=document.getElementById("sphinx-panel"), myEl=document.getElementById("mythic-panel");
+  const potEl=document.getElementById("pottery-panel"), sxEl=document.getElementById("sphinx-panel"), myEl=document.getElementById("mythic-panel"), lpEl=document.getElementById("lamp-panel");
   if(e.code==="Escape" && potEl && potEl.classList.contains("on")){ closePotteryPanel(); return; }
   if(e.code==="Escape" && myEl && myEl.classList.contains("on")){ closeMythicPanel(); return; }
+  if(e.code==="Escape" && lpEl && lpEl.classList.contains("on")){ closeLampPanel(); return; }
   if(e.code==="Escape" && sxEl && sxEl.classList.contains("on")){ closeSphinxPanel(); return; }
   if(e.code==="Escape" && softLock){ pauseGame(); return; }
   if(!playing()) return;
@@ -3247,7 +3256,6 @@ document.addEventListener("keydown",e=>{
     if(e.code==="KeyG" && !e.repeat){ e.preventDefault(); startArena(); }   // 斗兽场开战
     if(e.code==="KeyU" && !e.repeat){ e.preventDefault(); openVault(); }     // 封印宝库(花钥匙)
     if(e.code==="KeyR" && !e.repeat){ e.preventDefault(); openSphinxPanel(); } // 斯芬克斯答谜
-    if(e.code==="KeyL" && !e.repeat){ e.preventDefault(); rubLamp(); }         // 不灭神灯许愿
   }
   keys[e.code]=true;
 });
@@ -7177,7 +7185,7 @@ function addFaction(side,n){
   else if(after.idx<before) showName(label+" 触怒！声望降为 "+after.name);
 }
 
-/* ---- 🪔 阿拉伯神灯 · 精灵许愿: 考古偶得神灯 → 精灵现身赐"每次不同"的随机恩惠(有冷却) ---- */
+/* ---- 🪔 阿拉伯神灯 · 精灵许愿: 考古偶得仍是随机恩惠; 拼合不灭神灯后按 L 自选愿望 ---- */
 const djinnState={ rubs:0, cd:0 };
 const WISHES=[
   { n:"💚 生命之赐 · 治愈全部创伤",     f:()=>{ hp=maxHp; updateHearts(); } },
@@ -7186,13 +7194,43 @@ const WISHES=[
   { n:"🛡 守护之赐 · 护甲+1",            f:()=>{ if(armor<5){ armor++; updateHearts(); } else { giveBlock(GEM_ORE,4); } } },
   { n:"🏺 神灯赐宝 · 文物碎片x3",         f:()=>{ npcState.relics+=3; } },
 ];
-function summonDjinn(){
+function grantWish(i){
+  const w=WISHES[i|0]; if(!w) return false;
+  if(dead) return false;                                                     // 死亡画面不能靠许愿回血/领赏
   if(djinnState.cd>0){ showName("🪔 神灯余温未散，精灵稍作歇息…("+Math.ceil(djinnState.cd)+"s)"); return false; }
-  const w=WISHES[Math.floor(Math.random()*WISHES.length)];
   djinnState.rubs++; djinnState.cd=45;
+  closeLampPanel();
   showName("🧞 神灯精灵现身，赐予：「"+w.n+"」");
   try{ w.f(); }catch(e){}
+  updateBuffHUD();
   return w.n;
+}
+function summonDjinn(){                                          // 沙中掘出: 随机一愿(未拼合神灯时的惊喜)
+  if(djinnState.cd>0){ showName("🪔 神灯余温未散，精灵稍作歇息…("+Math.ceil(djinnState.cd)+"s)"); return false; }
+  return grantWish((Math.random()*WISHES.length)|0);
+}
+function renderLamp(){
+  const card=document.querySelector("#lamp-panel .sx-card"); if(!card) return;
+  let h='<h2>🪔 不灭神灯 · 许愿</h2><div class="sx-q">精灵问你：这一回要哪一样？</div>';
+  WISHES.forEach((w,i)=>{ h+='<div class="sx-ans" data-i="'+i+'">'+w.n+'</div>'; });
+  h+='<div style="margin-top:12px;color:#c9b98a;font-size:12px">点选一项许愿 · 关闭不扣冷却 · 按 <b style="color:#ffd23f">Esc</b> 或 <b>L</b> 关闭</div>';
+  card.innerHTML=h;
+  card.querySelectorAll(".sx-ans").forEach(el=>el.onclick=()=>{ grantWish(+el.dataset.i); });
+}
+function openLampPanel(){
+  if(dead) return false;
+  if(!mythicDone("arabia")){ showName("🪔 尚未拼合「阿拉伯不灭神灯」— 集齐 3 枚碎片后可按 L 自选愿望"); return false; }
+  if(djinnState.cd>0){ showName("🪔 神灯余温未散，精灵稍作歇息…("+Math.ceil(djinnState.cd)+"s)"); return false; }
+  const el=document.getElementById("lamp-panel"); if(!el) return false;
+  renderLamp(); el.classList.add("on");
+  if(document.pointerLockElement) document.exitPointerLock();
+  return true;
+}
+function closeLampPanel(){ const el=document.getElementById("lamp-panel"); if(el) el.classList.remove("on"); }
+function toggleLampPanel(){
+  const el=document.getElementById("lamp-panel"); if(!el) return false;
+  if(el.classList.contains("on")){ closeLampPanel(); return false; }
+  return openLampPanel();
 }
 
 /* ---- 🏛 六文明天象: 定期宣告随机天象(希腊+罗马/埃及/波斯/阿拉伯/地中海), 给世界加"限时修正" ---- */
@@ -7344,7 +7382,7 @@ const MYTHIC=[
   { id:"aquila", civ:"rome",   n:"🦅 罗马军团的黄金鹰徽", d:"经验 ×1.2", f:()=>{} },
   { id:"ankh",   civ:"egypt",  n:"☥ 埃及生命之符 · 安卡", d:"免疫法老诅咒灼蚀", f:()=>{} },
   { id:"farr",   civ:"persia", n:"🔥 波斯王者荣光 · 法尔", d:"波斯集市货价再减 1 文物", f:()=>{ if(armor<5){ armor++; updateHearts(); } else giveBlock(GEM_ORE,4); } },
-  { id:"lamp",   civ:"arabia", n:"🪔 阿拉伯不灭神灯",     d:"按 L 擦灯许愿 · 冷却加倍快", f:()=>{ giveBlock(GEM_ORE,6); } },
+  { id:"lamp",   civ:"arabia", n:"🪔 阿拉伯不灭神灯",     d:"按 L 自选愿望 · 冷却加倍快", f:()=>{ giveBlock(GEM_ORE,6); } },
   { id:"fleece", civ:"medit",  n:"🌊 地中海黄金羊毛圣物", d:"免疫摔落 · 再寻金羊毛赏赐更丰", f:()=>{ giveBlock(GOLD_ORE,20); addXP(60); } },
 ];
 const MYTHIC_NEED=3;
@@ -7370,10 +7408,7 @@ function addFragment(civ,n){
   if(document.getElementById("mythic-panel") && document.getElementById("mythic-panel").classList.contains("on")) renderMythic();
   return true;
 }
-function rubLamp(){
-  if(!mythicDone("arabia")){ showName("🪔 尚未拼合「阿拉伯不灭神灯」— 集齐 3 枚碎片后可按 L 许愿"); return false; }
-  return summonDjinn();
-}
+function rubLamp(){ return toggleLampPanel(); }
 function renderMythic(){
   const card=document.querySelector("#mythic-panel .pt-card"); if(!card) return;
   const n=mythicState.done.length;
@@ -7384,7 +7419,7 @@ function renderMythic(){
     const desc=have?t.d:(got>0?("碎片 "+got+"/"+MYTHIC_NEED+" · 继续收集即可拼合"):"尚未发现此文明的碎片");
     h+='<div class="pt-row'+(have?'':' locked')+'"><div><div class="pt-n">'+name+'</div><div class="pt-d">'+desc+'</div></div><div>'+(have?'✓':(got+"/"+MYTHIC_NEED))+'</div></div>';
   });
-  h+='<div style="margin-top:12px;color:#c9b98a;font-size:12px">按 <b style="color:#ffd23f">K</b> 或点空白关闭'+(mythicDone("arabia")?' · 拼合神灯后按 <b style="color:#ffd23f">L</b> 擦灯':'')+'</div>';
+  h+='<div style="margin-top:12px;color:#c9b98a;font-size:12px">按 <b style="color:#ffd23f">K</b> 或点空白关闭'+(mythicDone("arabia")?' · 拼合神灯后按 <b style="color:#ffd23f">L</b> 自选愿望':'')+'</div>';
   card.innerHTML=h;
 }
 function openMythicPanel(){ const el=document.getElementById("mythic-panel"); if(!el) return; renderMythic(); el.classList.add("on"); if(document.pointerLockElement) document.exitPointerLock(); }
@@ -7615,8 +7650,9 @@ window.__game = {
   get codex(){ return { seen:[...bioSeen], total:CODEX_TOTAL, names:[...bioSeen].map(b=>BIOME_NAME[b]) }; },
   get faction(){ return { rome:faction.rome, egypt:faction.egypt, romeTier:facTier(faction.rome).name, egyptTier:facTier(faction.egypt).name }; },
   addFaction:(side,n)=>addFaction(side,n),
-  get djinn(){ return { rubs:djinnState.rubs, cd:+djinnState.cd.toFixed(1), wishes:WISHES.map(w=>w.n) }; },
-  summonDjinn:()=>summonDjinn(),
+  get djinn(){ return { rubs:djinnState.rubs, cd:+djinnState.cd.toFixed(1), wishes:WISHES.map(w=>w.n),
+                      panel:!!(document.getElementById("lamp-panel")&&document.getElementById("lamp-panel").classList.contains("on")) }; },
+  summonDjinn:()=>summonDjinn(), grantWish:(i)=>grantWish(i), openLamp:()=>openLampPanel(), closeLamp:()=>closeLampPanel(),
   get omen(){ return { kind:omenState.kind, t:+omenState.t.toFixed(1), xpMul:omenXpMul(), meleeMul:omenMeleeMul(), moveMul:omenMoveMul(), sandImmune:omenSandImmune(), djinnCdMul:omenDjinnCdMul(), bazaarDtMul:omenBazaarDtMul(), expeditionDtMul:omenExpeditionDtMul(), all:OMENS.map(o=>o.n), civs:OMENS.map(o=>o.k) }; },
   proclaimOmen:(k)=>proclaimOmen(k),
   get bazaar(){ return { active:bazaarState.active, t:+bazaarState.t.toFixed(1), bought:bazaarState.bought, wares:BAZAAR_WARES.map(w=>({n:w.n,cost:w.cost})), relics:npcState.relics }; },
@@ -8301,8 +8337,26 @@ function selftest(){
       for(let i=0;i<MYTHIC_NEED;i++) addFragment("arabia");
       ok("拼合不灭神灯后冷却加倍快", mythicDone("arabia") && mythicDjinnCdMul()===2, "done="+mythicState.done.join(","));
       djinnState.cd=0;
-      const wish=rubLamp();
-      ok("拼合后可擦灯许愿", wish!==false && djinnState.cd>0 && djinnState.rubs===djinnR.rubs+1, "wish="+wish+" cd="+djinnState.cd);
+      const opened=rubLamp();
+      const lp=document.getElementById("lamp-panel");
+      ok("拼合后擦灯打开许愿面板(不扣冷却)", opened!==false && lp && lp.classList.contains("on") && /生命之赐|黄金雨/.test((lp.querySelector(".sx-card")||{}).innerHTML||"") && djinnState.cd===0 && djinnState.rubs===djinnR.rubs, "open="+(lp&&lp.classList.contains("on"))+" cd="+djinnState.cd);
+      const gold0=bagCount(GOLD_ORE);
+      const wish=grantWish(1);   // 黄金雨
+      ok("点选愿望才生效并进入冷却", wish!==false && djinnState.cd>0 && djinnState.rubs===djinnR.rubs+1 && bagCount(GOLD_ORE)===gold0+15 && !document.getElementById("lamp-panel").classList.contains("on"), "wish="+wish+" cd="+djinnState.cd);
+      ok("关闭许愿面板不扣冷却", (djinnState.cd=0, rubLamp(), closeLampPanel(), djinnState.cd===0 && djinnState.rubs===djinnR.rubs+1), "cd="+djinnState.cd);
+      djinnState.cd=0; openLampPanel();
+      const lockSnap=locked, softSnap=softLock; locked=false; softLock=false;   // 模拟退指针锁后 playing()===false
+      document.dispatchEvent(new KeyboardEvent("keydown",{code:"KeyL",bubbles:true}));
+      ok("暂停后按 L 仍能关闭许愿面板", !document.getElementById("lamp-panel").classList.contains("on") && djinnState.cd===0, "on="+document.getElementById("lamp-panel").classList.contains("on")+" playing="+playing());
+      locked=lockSnap; softLock=softSnap; closeLampPanel();
+      const deadSnap=dead; dead=true; djinnState.cd=0;
+      const goldDead=bagCount(GOLD_ORE);
+      ok("死亡时不能打开许愿面板", openLampPanel()===false && !document.getElementById("lamp-panel").classList.contains("on"), "on="+document.getElementById("lamp-panel").classList.contains("on"));
+      ok("死亡时不能许愿领赏", grantWish(1)===false && djinnState.cd===0 && djinnState.rubs===djinnR.rubs+1 && bagCount(GOLD_ORE)===goldDead, "cd="+djinnState.cd+" gold="+bagCount(GOLD_ORE));
+      document.getElementById("lamp-panel").classList.add("on");
+      document.dispatchEvent(new KeyboardEvent("keydown",{code:"KeyL",bubbles:true}));
+      ok("死亡画面按 L 只关面板、不发奖", !document.getElementById("lamp-panel").classList.contains("on") && djinnState.cd===0, "on="+document.getElementById("lamp-panel").classList.contains("on"));
+      dead=deadSnap; closeLampPanel();
       mythicState.frags.persia=0; if(mythicDone("persia")) mythicState.done=mythicState.done.filter(c=>c!=="persia");
       faction.rome=0;
       const ware=BAZAAR_WARES[0];
@@ -8333,7 +8387,7 @@ function selftest(){
       faction.rome=facR.rome; faction.egypt=facR.egypt;
       blessT=blessR.t; blessKind=blessR.k;
       bag.clear(); for(const [k,v] of bagSnapR) bag.set(k,v); xp=xpR; lvl=lvlR; dmgMul=dmgR; maxHp=maxR; hp=hpR; armor=armorR;
-      updateHearts(); updateXPHUD(); updateBuffHUD(); closeMythicPanel();
+      updateHearts(); updateXPHUD(); updateBuffHUD(); closeMythicPanel(); closeLampPanel();
     }
 
     // 9. 渲染管线仍然可用
