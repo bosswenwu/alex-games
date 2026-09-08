@@ -4240,7 +4240,7 @@ function drawEntity(ent){
     pushBox(ent,pt,rot,roll,spin);
   }
   gl.bindBuffer(gl.ARRAY_BUFFER,entVbo);
-  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(entArr),gl.DYNAMIC_DRAW);
+  uploadDyn(entArr);
   bindMeshAttribs();
   if(ent.hurtT>0)       gl.uniform3f(U.uTint,1.7,0.35,0.35);
   else if(ent.fuse>0){  const f=0.5+0.5*Math.sin(ent.fuse*ent.fuse*22); gl.uniform3f(U.uTint,1+f*1.4,1+f*0.4,1+f*0.4); } // 苦力怕闪白
@@ -5844,13 +5844,47 @@ function processQueue(budgetMs){
 }
 
 /* ---------- 渲染 ---------- */
-function bindMeshAttribs(){
+// 主着色器的三个顶点属性数组只需启用一次(render() 里 useProgram(mainProg) 之后调一次),
+// 之后每次绑定不同 VBO 只重设指针即可 —— 省掉每帧成百上千次冗余的 enable 调用。
+function enableMeshAttribs(){
   gl.enableVertexAttribArray(A_POS);
   gl.enableVertexAttribArray(A_UV);
   gl.enableVertexAttribArray(A_L);
+}
+function bindMeshAttribs(){
   gl.vertexAttribPointer(A_POS,3,gl.FLOAT,false,24,0);
   gl.vertexAttribPointer(A_UV,2,gl.FLOAT,false,24,12);
   gl.vertexAttribPointer(A_L,1,gl.FLOAT,false,24,20);
+}
+// 复用的动态几何暂存: 生物/粒子/掉落/机关/蜃气楼/日月 每帧的广告牌顶点都写到这里,
+// 避免每帧 `new Float32Array(...)` 造成的 GC 抖动; 需要更大时按需扩容(极少触发)。
+let _dynF32=new Float32Array(1<<16);
+function uploadDyn(arr){
+  const n=arr.length;
+  if(n>_dynF32.length) _dynF32=new Float32Array(Math.max(n,_dynF32.length*2));
+  _dynF32.set(arr);
+  gl.bufferData(gl.ARRAY_BUFFER,_dynF32.subarray(0,n),gl.DYNAMIC_DRAW);
+}
+// 视锥剔除(Gribb-Hartmann): 从列优先 pv 提取 6 个归一化平面, 剔除完全在视野外(尤其相机背后)的区块。
+const _frustum=[[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]];
+function updateFrustum(m){
+  const raw=[
+    [m[3]+m[0], m[7]+m[4], m[11]+m[8],  m[15]+m[12]], // 左
+    [m[3]-m[0], m[7]-m[4], m[11]-m[8],  m[15]-m[12]], // 右
+    [m[3]+m[1], m[7]+m[5], m[11]+m[9],  m[15]+m[13]], // 下
+    [m[3]-m[1], m[7]-m[5], m[11]-m[9],  m[15]-m[13]], // 上
+    [m[3]+m[2], m[7]+m[6], m[11]+m[10], m[15]+m[14]], // 近
+    [m[3]-m[2], m[7]-m[6], m[11]-m[10], m[15]-m[14]]  // 远
+  ];
+  for(let i=0;i<6;i++){ const q=raw[i], il=1/(Math.hypot(q[0],q[1],q[2])||1), f=_frustum[i];
+    f[0]=q[0]*il; f[1]=q[1]*il; f[2]=q[2]*il; f[3]=q[3]*il; }
+}
+// 区块包围球半径 ≈ √((CS/2)²+(H/2)²+(CS/2)²) 再留 CS 松弛 → 边缘宁可多画一格也不漏画。
+const FR_R=Math.hypot(CS/2,H/2,CS/2)+CS;
+function chunkInFrustum(cx,cz){
+  const x=cx*CS+CS/2, y=H/2, z=cz*CS+CS/2;
+  for(let i=0;i<6;i++){ const f=_frustum[i]; if(f[0]*x+f[1]*y+f[2]*z+f[3] < -FR_R) return false; }
+  return true;
 }
 let fov=70*Math.PI/180;
 const mix3=(a,b,t)=>[a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t];
@@ -5934,6 +5968,7 @@ function render(now){
   const proj=matPersp(fov,w/h,0.1,1000);
   const view=matMul(matMul(matRotX(vPitch),matRotY(vYaw)),matTrans(-camX,-camY,-camZ));
   const pv=matMul(proj,view);
+  updateFrustum(pv);                          // 每帧刷新视锥平面, 供区块剔除
   // --- 天穹渐变 + 日晕(水下不画, 水下有自己的蓝调) ---
   if(!uw){
     const sunAng=dayT*Math.PI*2;
@@ -5972,7 +6007,7 @@ function render(now){
       const q=[cx2-rx*s-ux*s,cy2-uy2*s,cz2-rz*s-uz*s, cx2+rx*s-ux*s,cy2-uy2*s,cz2+rz*s-uz*s, cx2+rx*s+ux*s,cy2+uy2*s,cz2+rz*s+uz*s,
                cx2-rx*s-ux*s,cy2-uy2*s,cz2-rz*s-uz*s, cx2+rx*s+ux*s,cy2+uy2*s,cz2+rz*s+uz*s, cx2-rx*s+ux*s,cy2+uy2*s,cz2-rz*s+uz*s];
       gl.bindBuffer(gl.ARRAY_BUFFER,sunVbo);
-      gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(q),gl.DYNAMIC_DRAW);
+      uploadDyn(q);
       gl.enableVertexAttribArray(AC_POS);
       gl.vertexAttribPointer(AC_POS,3,gl.FLOAT,false,12,0);
       gl.uniform4fv(UC.uColor,col);
@@ -5985,6 +6020,7 @@ function render(now){
 
   // 主着色器公共 uniform
   gl.useProgram(mainProg);
+  enableMeshAttribs();                        // 主属性数组只启用一次, 之后各次绘制只重设指针(省掉每帧上千次冗余 enable)
   gl.uniformMatrix4fv(U.uPV,false,pv);
   gl.uniform3f(U.uEye,camX,camY,camZ);
   gl.uniform3f(U.uTint,1,1,1);
@@ -6004,6 +6040,7 @@ function render(now){
   for(const c of world.values()){
     if(!c.mesh) continue;
     if(Math.max(Math.abs(c.cx-pcx),Math.abs(c.cz-pcz))>RENDER) continue;
+    if(!chunkInFrustum(c.cx,c.cz)) continue;   // 视锥剔除: 跳过完全在视野外(尤其相机背后)的区块, 大幅减少绘制调用
     if(c.mesh.opaque){
       gl.bindBuffer(gl.ARRAY_BUFFER,c.mesh.opaque.vbo);
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,c.mesh.opaque.ibo);
@@ -6041,7 +6078,7 @@ function render(now){
         arr.push(p.x+(rx*a+ux*b2)*s, p.y+(uy2*b2)*s, p.z+(rz*a+uz*b2)*s, p.u+du, p.v+dv, p.l);
     }
     gl.bindBuffer(gl.ARRAY_BUFFER,partVbo);
-    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(arr),gl.DYNAMIC_DRAW);
+    uploadDyn(arr);
     bindMeshAttribs();
     gl.drawArrays(gl.TRIANGLES,0,particles.length*6);
   }
@@ -6060,7 +6097,7 @@ function render(now){
         arr.push(p.x+(rx*a+ux*b2)*s, yb+(uy2*b2)*s, p.z+(rz*a+uz*b2)*s, u0+du, v0+dv, 1.0);
     }
     gl.bindBuffer(gl.ARRAY_BUFFER,partVbo);
-    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(arr),gl.DYNAMIC_DRAW);
+    uploadDyn(arr);
     bindMeshAttribs();
     gl.drawArrays(gl.TRIANGLES,0,drops.length*6);
   }
@@ -6078,7 +6115,7 @@ function render(now){
         arr.push(e.x+(rx*a+ux*b2)*s, e.y+(uy2*b2)*s, e.z+(rz*a+uz*b2)*s, u0+du, v0+dv, 1.0);
     }
     gl.bindBuffer(gl.ARRAY_BUFFER,partVbo);
-    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(arr),gl.DYNAMIC_DRAW);
+    uploadDyn(arr);
     bindMeshAttribs();
     gl.drawArrays(gl.TRIANGLES,0,trapEnts.length*6);
   }
@@ -6107,7 +6144,7 @@ function render(now){
       }
       gl.uniform1f(U.uAlpha, Math.min(0.72, g.alpha*0.72));
       gl.bindBuffer(gl.ARRAY_BUFFER,partVbo);
-      gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(arr),gl.DYNAMIC_DRAW);
+      uploadDyn(arr);
       bindMeshAttribs();
       gl.drawArrays(gl.TRIANGLES,0,arr.length/6);
     }
@@ -6200,7 +6237,7 @@ function updateWeather(dt){
   const bio=biomeAt(Math.floor(player.x),Math.floor(player.z));
   const snowing = bio===BIO_SNOW;
   if(weather==="sand"){
-    const n=RENDER<=6?0:14;
+    const n=14;   // 此处 RENDER>6 已由上方 `if(RENDER<=6) return` 保证, 原三项式恒真, 化简
     for(let i=0;i<n;i++){
       const a=Math.random()*6.283, d=Math.random()*12;
       const px=player.x+Math.sin(a)*d, pz=player.z+Math.cos(a)*d;
@@ -6582,7 +6619,10 @@ function loadGame(){
   _hCache.clear(); _bioCache.clear();      // 换种子必须清掉地形缓存, 否则会串世界
   blockDiff.clear();
   if(s.diff) for(const k in s.diff) blockDiff.set(k, s.diff[k]);
-  player.x=s.px; player.y=s.py; player.z=s.pz;
+  // 坐标做有限值兜底: 残缺/损坏存档缺 px/py/pz 时退回出生点, 而不是变成 NaN 依赖下游帧守卫
+  player.x=Number.isFinite(s.px)?s.px:spawnPt.x;
+  player.y=Number.isFinite(s.py)?s.py:spawnPt.y;
+  player.z=Number.isFinite(s.pz)?s.pz:spawnPt.z;
   player.yaw=s.yaw||0; player.pitch=s.pitch||0;
   player.vx=player.vy=player.vz=player.kbx=player.kbz=0;
   hp=s.hp??20; maxHp=s.maxHp??20; lvl=s.lvl??1; xp=s.xp??0;
@@ -7767,6 +7807,22 @@ function selftest(){
     let matched=0;
     for(const [bx,by,bz] of marks){ ensureData(bx>>4,bz>>4); if(getBlock(bx,by,bz)===COBBLE) matched++; }
     ok("10 个方块存档往返一致", matched===10, matched+"/10 一致");
+
+    // 3b. 残缺/损坏存档: 只有 seed、缺 px/npc/arch… → 坐标必须有限、缺字段子系统必须归零
+    //     (锁定 BACKLOG 反复承诺的"老存档缺字段→归零"向后兼容契约)
+    const _bkSave=(function(){try{return localStorage.getItem(SAVE_KEY);}catch(e){return null;}})();
+    try{ localStorage.setItem(SAVE_KEY,'{"seed":1234}'); }catch(e){}
+    const partialLoaded=loadGame();
+    ok("残缺存档能载入(不抛错)", partialLoaded===true);
+    ok("残缺存档: 玩家坐标为有限值(未变 NaN)",
+       Number.isFinite(player.x)&&Number.isFinite(player.y)&&Number.isFinite(player.z),
+       player.x+","+player.y+","+player.z);
+    ok("残缺存档: 缺字段子系统全部归零",
+       npcState.relics===0&&archState.pottery===0&&faction.rome===0&&faction.egypt===0&&undeadNight.survived===0,
+       "npc="+npcState.relics+" arch="+archState.pottery+" fac="+faction.rome+"/"+faction.egypt+" undead="+undeadNight.survived);
+    // 还原真实(测试)存档并重载, 让后续用例在有效世界上继续
+    try{ if(_bkSave!=null) localStorage.setItem(SAVE_KEY,_bkSave); else localStorage.removeItem(SAVE_KEY); }catch(e){}
+    if(_bkSave!=null) loadGame();
 
     // 4. 长距离飞行: 无异常、无空洞
     const fx=player.x, fz=player.z;

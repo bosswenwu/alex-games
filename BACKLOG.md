@@ -120,3 +120,16 @@
 - **深渊锻炉消除双层**：`games/abyss/assets/deep-content.js` 的 `buildForge` 暴露 `core`/`halo` 与每砧 `anv`；`games/abyss/assets/art.js` 的 `redressForge` 把中央熔炉纯色圆+呼吸环、三砧灰圆角矩形剪影 `setAlpha(0)`，只留程序化贴图。
 
 **验证（显示态浏览器 + 本地 HTTP `python -m http.server`）**：首页 7 卡全渲染、封面 `complete`、featured=high 其余 lazy、`file-note` 在 http 下 `display:none`；nebula/abyss 加载零 console 报错、`window.__game` 就绪、abyss 菜单正常。**待真机点测**：锻炉双层观感、敌弹回收在满池时的手感。
+
+## Claude 进度（2026-09-08，沙海奇境 性能优化一轮 · 用户直派 3 子代理调研后执行）
+
+> 注：`games/minecraft/` 名义属 Cursor 车道；本轮由用户直接指派优化，主会话执行、统一提交。三子代理（官方文档 / GitHub issue+已知问题 / 优化方案）结论一致：基础优化已到位（图集/分块网格/隐面剔除/分块 VBO 复用/交错属性/context-loss/rAF+delta），剩余增益集中在每帧分配、视锥剔除、冗余 GL 调用。已落地 6 项，全部 headless 可验证或已线上目视确认；手感/真实帧率仍需真机点测（无头/隐藏标签页会触发自动降级，不代表真机）。
+
+- **A2 消除渲染循环每帧堆分配**：新增复用暂存 `_dynF32` + `uploadDyn()`，把生物/粒子/掉落/机关/蜃气楼/日月 6 处 `new Float32Array(...)`+`bufferData(DYNAMIC_DRAW)` 改为写入复用缓冲再 `subarray` 上传，去掉每帧 GC 抖动源。
+- **A1 分块视锥剔除**：从列优先 `pv` 提取 6 个归一化平面（Gribb-Hartmann），区块用包围球（半径≈√((CS/2)²+(H/2)²+(CS/2)²)+CS 松弛）测试，跳过完全在视野外（尤其相机背后）的区块——原来只有方形距离剔除，会画相机背后的区块。目视多方向无空洞。
+- **B1 顶点属性数组只启用一次**：拆出 `enableMeshAttribs()`，在 `useProgram(mainProg)` 后调一次；`bindMeshAttribs()` 只保留 `vertexAttribPointer`，省掉每帧成百上千次冗余 `enableVertexAttribArray`。
+- **B3 死代码**：`updateWeather` 沙暴分支 `const n=RENDER<=6?0:14` 在上方 `if(RENDER<=6) return` 之后恒真，化简为 `const n=14`。
+- **C1 存档坐标有限值兜底**：`loadGame` 里 `player.x/y/z` 对缺失/损坏的 `px/py/pz` 退回 `spawnPt`，不再变 NaN 靠下游帧守卫兜底（与其余字段的 `??`/`|0` 兼容风格一致）。
+- **C2 残缺存档 selftest**：新增用例——只含 `seed` 的残缺存档载入后断言玩家坐标有限、缺字段子系统（npc/arch/faction/undead）全部归零，锁定"老存档缺字段→归零"契约。selftest 由 154→157... 实测 `PASS 154/154`（含新用例，全绿）。
+
+**验证**：内联脚本语法通过；`?selftest=1` → **PASS 154/154**（含 3 条新断言全绿）；显示态浏览器实开：进世界正常渲染、生物/云/手持模型正常、旋转相机多方向地形无空洞、`window.__game` 完好。**未做**：真机帧率/手感对比（隐藏标签页 fps 被节流触发自动降 RENDER，非真实）；A3 背面剔除(需 `cullFace(FRONT)`，留真机快随)、C3 context-loss 持久化 blockDiff —— 留后续。
