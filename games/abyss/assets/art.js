@@ -682,6 +682,9 @@
     g.__artForged = f;
 
     // --- 中央熔炉 ---
+    // 先隐去主包画的底层几何（纯色圆 + 呼吸环），否则会与下面的程序化贴图叠成双层。
+    if (f.core && f.core.setAlpha) f.core.setAlpha(0);
+    if (f.halo && f.halo.setAlpha) { g.tweens.killTweensOf(f.halo); f.halo.setAlpha(0); }
     var coreKey = forgeCoreTex("art-forge-core");
     var glowK = glowTex("art-glow-forge", 0xff9a48, 256);
     var lamp = g.add
@@ -770,6 +773,7 @@
     f.anvils.forEach(function (a) {
       var wd = (D && D.tables.weapons[a.id]) || { color: 0xc8a86a };
       a.pad.setAlpha(0.0); // 主包的纯色圆退场，只留碰撞判定用的坐标
+      if (a.anv && a.anv.setAlpha) a.anv.setAlpha(0); // 铁砧的灰圆角矩形剪影退场，消除与新贴图的双层
       // 地面的武器色投光
       var lit = g.add
         .image(a.x, a.y + 6, glowTex("art-glow-w-" + a.id, wd.color, 160))

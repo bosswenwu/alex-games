@@ -604,6 +604,8 @@ function makePool(n,tex,size){
   let cur=0;
   return {geo,pos,col,items,
     take(){for(let k=0;k<n;k++){const it=items[(cur+k)%n];if(!it.alive){cur=(cur+k+1)%n;return it;}}return null;},
+    /* 池满时不再静默丢弹：回收存活最久（t 最大）的一颗，保证弹幕图案完整 */
+    takeOldest(){for(let k=0;k<n;k++){const it=items[(cur+k)%n];if(!it.alive){cur=(cur+k+1)%n;return it;}}let old=items[0];for(let k=1;k<n;k++){if(items[k].t>old.t)old=items[k];}return old;},
     kill(it){it.alive=false;pos[it.i*3+1]=-99999;},
     tint(it,r,g,b){col[it.i*3]=r;col[it.i*3+1]=g;col[it.i*3+2]=b;},
     flush(){
@@ -1482,8 +1484,8 @@ function spawnRock(){
 }
 const tmpV=new THREE.Vector3();
 function fireEnemyBolt(from,speed,spreadY){
-  const b=eBolts.take();if(!b)return null;
-  b.alive=true;b.p.copy(from);
+  const b=eBolts.takeOldest();if(!b)return null;
+  b.alive=true;b.t=0;b.p.copy(from);
   tmpV.copy(ship.position).sub(from);
   if(spreadY)tmpV.y+=spreadY;
   tmpV.normalize().multiplyScalar(speed);
@@ -1493,8 +1495,8 @@ function fireEnemyBolt(from,speed,spreadY){
 }
 function radialBolts(p,n,speed,vz,phase,r,g,bl){
   for(let i=0;i<n;i++){
-    const b=eBolts.take();if(!b)break;
-    b.alive=true;b.p.copy(p);b.p.z+=3;b.grazed=false;
+    const b=eBolts.takeOldest();if(!b)break;
+    b.alive=true;b.t=0;b.p.copy(p);b.p.z+=3;b.grazed=false;
     const a=i/n*Math.PI*2+phase;
     b.vx=Math.cos(a)*speed;b.vy=Math.sin(a)*speed;b.vz=vz;
     eBolts.tint(b,r,g,bl);
@@ -1951,6 +1953,7 @@ function step(now){
   const grazeIn=3.9*3.9,grazeOut=1.75*1.75;
   for(const b of eBolts.items){
     if(!b.alive)continue;
+    b.t+=dt;
     b.p.x+=b.vx*dt;b.p.y+=b.vy*dt;b.p.z+=b.vz*dt;
     if(b.p.z>16||Math.abs(b.p.x)>BX*2.4||Math.abs(b.p.y)>BY*2.8){eBolts.kill(b);continue;}
     if(!G.playing)continue;
@@ -2122,8 +2125,8 @@ function step(now){
           boss.fireT=.155/rage;
           for(const off of[0,Math.PI,boss.ph>=2?Math.PI/2:99]){
             if(off===99)continue;
-            const b=eBolts.take();if(!b)break;
-            b.alive=true;b.p.copy(p);b.p.z+=2;b.grazed=false;
+            const b=eBolts.takeOldest();if(!b)break;
+            b.alive=true;b.t=0;b.p.copy(p);b.p.z+=2;b.grazed=false;
             const a=boss.phase*2.6+off;
             b.vx=Math.cos(a)*21;b.vy=Math.sin(a)*21;b.vz=30;
             eBolts.tint(b,1,.7,.3);
@@ -2132,8 +2135,8 @@ function step(now){
           boss.fireT=1.3/rage*DIFF.fire;
           const dir=Math.atan2(ship.position.y-p.y,ship.position.x-p.x);
           for(let i=-2-boss.ph;i<=2+boss.ph;i++){
-            const b=eBolts.take();if(!b)break;
-            b.alive=true;b.p.copy(p);b.p.z+=2;b.grazed=false;
+            const b=eBolts.takeOldest();if(!b)break;
+            b.alive=true;b.t=0;b.p.copy(p);b.p.z+=2;b.grazed=false;
             const a=dir+i*.2;
             b.vx=Math.cos(a)*23;b.vy=Math.sin(a)*23;b.vz=45;
             eBolts.tint(b,1,.5,.3);

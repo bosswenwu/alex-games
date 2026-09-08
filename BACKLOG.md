@@ -109,3 +109,14 @@
 
 - **灯/羊毛/法尔不再是一次性掉落**：不灭神灯 → 按 **L** 擦灯许愿、冷却 ×2；法尔 → 波斯集市货价再减 1 文物；黄金羊毛 → 免疫摔落，再寻远征赏赐更丰。埃癸斯补受伤 ×0.9（鹰徽/安卡原被动保留）。
 - **神话图鉴可翻**：按 **K** 打开面板（已拼合显示名+被动，未拼合锁着并显示碎片进度）。编年史加「按 K」。左下状态栏在拼合神灯后挂冷却/就绪。`__game.mythic` / `rubLamp` / `openMythic`。无新存档字段，老存档已拼合的文明自动获得被动。
+
+## Claude 进度（2026-09-08，"打磨"一轮：首页 + nebula + abyss）
+
+按 ROLES「Claude 任务队列」1–4 落地（只碰自己车道文件：`index.html` / `games/nebula/` / `games/abyss/`）：
+
+- **首页封面优先级**：`index.html` hero-bg 与 featured 卡片加 `fetchpriority="high"`（+`decoding="async"`），其余卡片仍 `loading="lazy"`——首屏精选图更快出。
+- **首页 file:// 提示条**：去掉「file:// 就 `location.replace` 跳 Pages」的硬跳（Vercel 镜像访客会莫名跳站）。改为页内可关闭提示条（默认 `display:none`，仅 `window.__fileProto` 为真时显示），提示用 `npx serve .`。
+- **Nebula 敌弹不再静默丢弹**：`games/nebula/index.html` 弹池加 `takeOldest()`（无空位淘汰存活最久 `t` 最大者）；敌弹更新 `b.t+=dt`；`fireEnemyBolt`/`radialBolts`/两处 Boss 弹幕改用 `takeOldest` 并 `b.t=0`。高波次弹幕图案完整，玩家弹/导弹池不变。
+- **深渊锻炉消除双层**：`games/abyss/assets/deep-content.js` 的 `buildForge` 暴露 `core`/`halo` 与每砧 `anv`；`games/abyss/assets/art.js` 的 `redressForge` 把中央熔炉纯色圆+呼吸环、三砧灰圆角矩形剪影 `setAlpha(0)`，只留程序化贴图。
+
+**验证（显示态浏览器 + 本地 HTTP `python -m http.server`）**：首页 7 卡全渲染、封面 `complete`、featured=high 其余 lazy、`file-note` 在 http 下 `display:none`；nebula/abyss 加载零 console 报错、`window.__game` 就绪、abyss 菜单正常。**待真机点测**：锻炉双层观感、敌弹回收在满池时的手感。

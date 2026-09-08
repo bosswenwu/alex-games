@@ -2,9 +2,9 @@
 <html lang="zh-CN">
   <head>
     <script>
-      if (window.location.protocol === 'file:') {
-        window.location.replace('https://bosswenwu.github.io/alex-games/');
-      }
+      /* 以 file:// 打开时不再强行把用户踢到 Pages（会让 Vercel 镜像访客莫名跳站），
+         改为在页面里提示用本地 HTTP 打开。真正的判断与提示在 body 末尾。 */
+      window.__fileProto = window.location.protocol === 'file:';
     </script>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -43,13 +43,17 @@
   </style>
 </head>
 <body>
+  <div id="file-note" style="display:none;position:sticky;top:0;z-index:60;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap;padding:11px 16px;background:#241206;border-bottom:1px solid #ff9d4540;color:#ffd9b0;font-size:13px;line-height:1.5">
+    <span>⚠️ 你正以 <b>file://</b> 直接打开本页——摄像头与部分游戏模块需要 HTTP 环境。请在项目目录运行 <code style="background:#00000038;padding:1px 6px;border-radius:6px">npx serve .</code> 后，用终端给出的本地地址访问。</span>
+    <button type="button" id="file-note-x" style="cursor:pointer;border:1px solid #ffffff30;background:#0b0d10;color:#f6f7fb;border-radius:8px;padding:5px 12px;font-weight:700">知道了</button>
+  </div>
   <header class="shell nav">
     <a class="brand" href="./index.html" aria-label="Alex Arcade 首页"><span class="brand-mark">A</span><span>ARCADE</span><span>// ALEX</span></a>
     <div class="nav-meta"><span>原创游戏合集</span><span>无需下载</span><span class="status"><i></i> ONLINE</span></div>
   </header>
   <main class="shell">
     <section class="hero" aria-labelledby="hero-title">
-      <img class="hero-bg" id="hero-bg" src="covers/tank-strike.jpg" alt="精选游戏世界">
+      <img class="hero-bg" id="hero-bg" src="covers/tank-strike.jpg" alt="精选游戏世界" fetchpriority="high" decoding="async">
       <div class="hero-content">
         <span class="kicker" id="hero-kicker">Featured world · Iron Veil</span>
         <h1 id="hero-title">多元世界<br>打开即玩</h1>
@@ -94,7 +98,8 @@
       const grid = document.getElementById('games-grid');
       grid.innerHTML = GAMES.map((g, i) => {
         const badge = g.badge || `GAME ${String(i + 1).padStart(2, '0')}`;
-        return `<a class="game" href="${href(g)}"><img src="${esc(g.cover)}" alt="${esc(g.name)}游戏画面" loading="lazy">`
+        const imgLoad = g.featured ? 'fetchpriority="high"' : 'loading="lazy"';
+        return `<a class="game" href="${href(g)}"><img src="${esc(g.cover)}" alt="${esc(g.name)}游戏画面" ${imgLoad} decoding="async">`
           + `<div class="game-top"><span class="num">${esc(badge)}</span><span style="display:flex;gap:7px">${g.req?`<span class="genre">${esc(g.req)}</span>`:''}<span class="genre">${esc(g.genre)}</span></span></div>`
           + `<div class="game-info"><h3>${esc(g.name)}</h3><p>${esc(g.desc)}</p>`
           + `<div class="play-row"><span class="play-now">立即游玩</span><span class="arrow">↗</span></div></div></a>`;
@@ -106,6 +111,15 @@
         const cta = document.getElementById('hero-cta');
         cta.href = href(feat);
         cta.innerHTML = `${esc(feat.featured.cta)} <span>↗</span>`;
+      }
+      /* file:// 提示条：仅提示，不跳站 */
+      if (window.__fileProto) {
+        const fn = document.getElementById('file-note');
+        if (fn) {
+          fn.style.display = 'flex';
+          const x = document.getElementById('file-note-x');
+          if (x) x.addEventListener('click', () => { fn.style.display = 'none'; });
+        }
       }
     })();
   </script>

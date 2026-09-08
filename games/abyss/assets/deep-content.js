@@ -330,7 +330,7 @@
           .setOrigin(0.5, 0)
           .setDepth(20)
       );
-      anvils.push({ id: id, x: x, y: y, price: price, pad: pad });
+      anvils.push({ id: id, x: x, y: y, price: price, pad: pad, anv: anv });
     });
 
     // 重铸台：花金币把一件随机遗物换成另一件
@@ -371,7 +371,7 @@
     );
 
     // armed：先离开所有台座才允许触发，避免刚进门就踩在上面被误选
-    g.__forge = { anvils: anvils, reforge: { x: rx, y: ry, pad: rpad }, armed: false, objs: objs, room: room };
+    g.__forge = { anvils: anvils, reforge: { x: rx, y: ry, pad: rpad }, armed: false, objs: objs, room: room, core: core, halo: halo };
     g.audioFx.door();
   }
 

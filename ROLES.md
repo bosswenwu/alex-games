@@ -30,11 +30,13 @@
 4. **订正 BACKLOG 陈旧行**：顶部与 P0 段仍写"方案A/20M""haven.html 保留为离线单文件包"，已过时，改为方案B/已拆外链壳。
 
 ## Claude 任务队列
-1. 首页：给竹知了标「需摄像头」、深渊标「键鼠」；精选封面加 `fetchpriority="high"`（游戏卡 `loading="lazy"` 已有）。
-2. Nebula：补 `window.__game = NS`；弹池满时**回收最老的敌弹**而非静默丢弹（高波次掉手感真因）。
-3. 深渊：`redressForge()` 把底层圆/矩形 `setAlpha(0)`，消除锻炉双层（比逐帧动画划算）。
-4. `file://` 硬跳线上 → 改成「提示用本地 HTTP」而非静默踢走（避免 Vercel 用户被带到 Pages）。
-5. 协调 / 复核 / 维护 BACKLOG。
+1. [x] 首页：竹知了「📷 摄像头」、深渊「⌨️ 键鼠」（早前已上线）；**精选封面加 `fetchpriority="high"`**（hero-bg + featured 卡片，均补 `decoding="async"`；其余卡片保持 `loading="lazy"`）。✅ 2026-09-08
+2. [x] Nebula：`window.__game` 调试接口已在（暴露 `G`/settings/quality 等）；**弹池满时回收最老的敌弹**——`eBolts` 加 `takeOldest()`（无空位则淘汰 `t` 最大者），敌弹更新累加 `b.t`，三处敌弹发射（`fireEnemyBolt`/`radialBolts`/Boss 弹幕）改用之，不再静默丢弹。✅ 2026-09-08
+3. [x] 深渊：`redressForge()` 把底层圆/矩形 `setAlpha(0)`——`buildForge` 暴露 `core`/`halo` 与每砧 `anv` 引用，`redressForge` 隐去中央熔炉纯色圆+呼吸环、以及三砧的灰圆角矩形剪影，消除锻炉双层。✅ 2026-09-08
+4. [x] `file://` 硬跳线上 → 改成**页内提示用本地 HTTP** 的可关闭提示条（不再 `location.replace` 把 Vercel 访客带到 Pages）。✅ 2026-09-08
+5. 协调 / 复核 / 维护 BACKLOG。（进行中）
+
+> 验证（2026-09-08，显示态浏览器 + 本地 HTTP）：首页 7 卡渲染、封面全 `complete`、featured=high 其余 lazy、`file-note` 在 http 下 `display:none`；nebula/abyss 加载零 console 报错，`__game` 就绪。锻炉双层消除、敌弹回收手感仍属运行态，待真机点测。
 
 ## 验证分工（诚实边界）
 - 无头浏览器不合成帧、rAF 不推进：**瞄准/后坐/跳弹/摄像头/群系画面必须真机或显示态浏览器点测**（由用户或显示态会话做）。
