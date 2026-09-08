@@ -6037,6 +6037,9 @@ function render(now){
   // 不透明方块
   gl.uniform1i(U.uMode,0);
   const waterList=[];
+  // 背面剔除: 地形网格只输出朝外的可见面, 其背面永不可见 —— 剔掉可省近一半地形片元填充。
+  // 本游戏地形绕序为内向 CCW(外表面为 CW), 故须剔 FRONT(而非默认 BACK), 否则可见面会被全剔→地形消失。
+  gl.enable(gl.CULL_FACE); gl.cullFace(gl.FRONT);
   for(const c of world.values()){
     if(!c.mesh) continue;
     if(Math.max(Math.abs(c.cx-pcx),Math.abs(c.cz-pcz))>RENDER) continue;
@@ -6049,6 +6052,7 @@ function render(now){
     }
     if(c.mesh.water) waterList.push(c);
   }
+  gl.disable(gl.CULL_FACE);   // 仅地形不透明层剔背面; 生物/广告牌/水面/植物保持双面绘制
 
   // 生物模型 & 箭矢
   for(const m of mobs){
