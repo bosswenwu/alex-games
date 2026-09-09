@@ -2240,8 +2240,8 @@ const TS=1/16, EP=1/512;
 
 function buildChunkMesh(c){
   const bx=c.cx*CS, bz=c.cz*CS;
-  const oV=[], oI=[], wV=[], wI=[];
-  let oN=0, wN=0;
+  const oV=[], oI=[], wV=[], wI=[], pV=[], pI=[];   // p*: 十字植物单独成层, 在 disable(CULL_FACE) 后绘制
+  let oN=0, wN=0, pN=0;
   const ao=[0,0,0,0];
   for(let lx=0; lx<CS; lx++) for(let lz=0; lz<CS; lz++){
     const col=(lx*CS+lz)*H, wx=bx+lx, wz=bz+lz;
@@ -2261,10 +2261,10 @@ function buildChunkMesh(c){
              [[0.85,0,0.15],[0.15,0,0.85],[0.15,1,0.85],[0.85,1,0.15]]];
         for(const q of quads){
           const uvs=[[uu0,v1],[u1,v1],[u1,vv0],[uu0,vv0]];
-          for(let k=0;k<4;k++) oV.push(wx+q[k][0], y+q[k][1], wz+q[k][2], uvs[k][0], uvs[k][1], 0.92);
-          oI.push(oN,oN+1,oN+2, oN,oN+2,oN+3);
-          oI.push(oN,oN+2,oN+1, oN,oN+3,oN+2);   // 背面, 双面可见
-          oN+=4;
+          for(let k=0;k<4;k++) pV.push(wx+q[k][0], y+q[k][1], wz+q[k][2], uvs[k][0], uvs[k][1], 0.92);
+          // 只输出一套绕序: 植物层在关闭背面剔除后绘制, GL 天然双面可见, 无需再复制背面 → 省一半植物顶点。
+          pI.push(pN,pN+1,pN+2, pN,pN+2,pN+3);
+          pN+=4;
         }
         continue;
       }
@@ -2322,10 +2322,10 @@ function buildChunkMesh(c){
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint32Array(inds),gl.STATIC_DRAW);
     return {vbo,ibo,n:inds.length};
   };
-  c.mesh={opaque:up(oV,oI), water:up(wV,wI)};
+  c.mesh={opaque:up(oV,oI), water:up(wV,wI), plant:up(pV,pI)};
 }
 function destroyMesh(m){
-  for(const p of [m.opaque,m.water]) if(p){ gl.deleteBuffer(p.vbo); gl.deleteBuffer(p.ibo); }
+  for(const p of [m.opaque,m.water,m.plant]) if(p){ gl.deleteBuffer(p.vbo); gl.deleteBuffer(p.ibo); }
 }
 
 /* ---------- 矩阵 ---------- */
@@ -6042,9 +6042,9 @@ function render(now){
 
   // 不透明方块
   gl.uniform1i(U.uMode,0);
-  const waterList=[];
-  // 背面剔除: 地形网格只输出朝外的可见面, 其背面永不可见 —— 剔掉可省近一半地形片元填充。
-  // 本游戏地形绕序为内向 CCW(外表面为 CW), 故须剔 FRONT(而非默认 BACK), 否则可见面会被全剔→地形消失。
+  const waterList=[], plantList=[];
+  // 背面剔除: 地形网格每个方块面都只保留朝外的可见面。buildChunkMesh 已用 FACES.fl 逐面统一绕序,
+  // 令全部外表面为背面(CW), 故这里剔 FRONT(而非默认 BACK) —— 只丢真正朝内的隐藏面, 省近一半地形片元填充。
   gl.enable(gl.CULL_FACE); gl.cullFace(gl.FRONT);
   for(const c of world.values()){
     if(!c.mesh) continue;
@@ -6056,9 +6056,17 @@ function render(now){
       bindMeshAttribs();
       gl.drawElements(gl.TRIANGLES,c.mesh.opaque.n,gl.UNSIGNED_INT,0);
     }
+    if(c.mesh.plant) plantList.push(c);
     if(c.mesh.water) waterList.push(c);
   }
-  gl.disable(gl.CULL_FACE);   // 仅地形不透明层剔背面; 生物/广告牌/水面/植物保持双面绘制
+  gl.disable(gl.CULL_FACE);   // 以下(十字植物/生物/广告牌/水面)均需双面, 关掉背面剔除
+  // 十字植物: 单套绕序 + 关剔除 = 真正双面可见(仍走不透明 uMode=0 的 alpha<0.5 discard 抠像, 写深度)
+  for(const c of plantList){
+    gl.bindBuffer(gl.ARRAY_BUFFER,c.mesh.plant.vbo);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,c.mesh.plant.ibo);
+    bindMeshAttribs();
+    gl.drawElements(gl.TRIANGLES,c.mesh.plant.n,gl.UNSIGNED_INT,0);
+  }
 
   // 生物模型 & 箭矢
   for(const m of mobs){
