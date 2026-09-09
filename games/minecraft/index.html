@@ -2224,13 +2224,15 @@ gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.REPEAT);
 gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.REPEAT);
 
 /* ---------- 网格生成 ---------- */
+// fl: 该面默认绕序使"外表面"成为正面(CCW)——须翻转三角形绕序, 让全部外表面统一为背面(CW),
+//     这样 render() 里的 cullFace(FRONT) 只剔真正朝内的隐藏面, 不会误剔可见外表面(否则半数面空心透明)。
 const FACES=[
-  {d:[ 1,0,0], u:[0,0,1], v:[0,1,0], sh:0.62},
-  {d:[-1,0,0], u:[0,0,1], v:[0,1,0], sh:0.62},
-  {d:[ 0,1,0], u:[1,0,0], v:[0,0,1], sh:1.00},
-  {d:[ 0,-1,0],u:[1,0,0], v:[0,0,1], sh:0.48},
-  {d:[ 0,0,1], u:[1,0,0], v:[0,1,0], sh:0.80},
-  {d:[ 0,0,-1],u:[1,0,0], v:[0,1,0], sh:0.80},
+  {d:[ 1,0,0], u:[0,0,1], v:[0,1,0], sh:0.62, fl:0},
+  {d:[-1,0,0], u:[0,0,1], v:[0,1,0], sh:0.62, fl:1},
+  {d:[ 0,1,0], u:[1,0,0], v:[0,0,1], sh:1.00, fl:0},
+  {d:[ 0,-1,0],u:[1,0,0], v:[0,0,1], sh:0.48, fl:1},
+  {d:[ 0,0,1], u:[1,0,0], v:[0,1,0], sh:0.80, fl:1},
+  {d:[ 0,0,-1],u:[1,0,0], v:[0,1,0], sh:0.80, fl:0},
 ];
 const CORNERS=[[0,0],[1,0],[1,1],[0,1]];
 const AOL=[0.42,0.6,0.8,1.0];
@@ -2299,8 +2301,12 @@ function buildChunkMesh(c){
           V.push(wx+px, y+py, wz+pz, uu, vv, light);
         }
         const b=isW?wN:oN;
-        if(ao[0]+ao[2] >= ao[1]+ao[3]) I.push(b,b+1,b+2, b,b+2,b+3);
-        else I.push(b+1,b+2,b+3, b+1,b+3,b);
+        // AO 各向异性时翻转四边形对角线以避免插值撕裂; F.fl 面再整体反绕以统一外表面为背面(供 cullFace(FRONT))。
+        if(ao[0]+ao[2] >= ao[1]+ao[3]){
+          if(F.fl) I.push(b,b+2,b+1, b,b+3,b+2); else I.push(b,b+1,b+2, b,b+2,b+3);
+        } else {
+          if(F.fl) I.push(b+1,b+3,b+2, b+1,b,b+3); else I.push(b+1,b+2,b+3, b+1,b+3,b);
+        }
         if(isW) wN+=4; else oN+=4;
       }
     }
