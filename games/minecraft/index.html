@@ -2474,6 +2474,11 @@ let jumpPadGrace=false;                  // 被弹跳板弹起后, 直到落地�
 /* ---------- 生命值 / 死亡 ---------- */
 let hp=20, dead=false, lastDmg=-1e9, regenAcc=0, fallStart=null;
 let armor=0;                       // 护甲层数(拾取能量核心累积, 最多 5)
+let cores=0;                       // 能量核心存量: 护甲满5后, 击杀/精英掉落转为可花费的强化货币(成长闭环)
+function gainCore(){                // 拾取能量核心: 先补护甲, 满5后转存为核心货币
+  if(armor<5){ armor++; updateHearts(); return "🛡 护甲 +1 (共 "+armor+"/5, 减伤 "+(armor*6)+"%)"; }
+  cores++; return "⚡ 能量核心 +1 (共 "+cores+" · 按 B 花费强化)";
+}
 const spawnPt={x:8.5,y:60,z:8.5};
 const HEART_MAP=[".XX..XX.","XXXXXXXX","XXXXXXXX",".XXXXXX.","..XXXX..","...XX..."];
 function heartCanvas(kind){ // 2满 1半 0空
@@ -2708,6 +2713,15 @@ const RECIPES=[
   {name:"生命精华", desc:"钻石 + 金苹果之力，最大生命 +4", cost:[[GEM_ORE,3],[GOLD_ORE,3]],
    ok(){ return maxHp<40; }, lockMsg:"生命上限已满 40",
    run(){ maxHp=Math.min(40,maxHp+4); hp=maxHp; updateHearts(); return "❤ 最大生命 +4（"+maxHp+"）"; }},
+  // ---- 能量核心强化(成长闭环: 击杀/精英掉落的核心 → 永久提升, 让打怪的收益有去处) ----
+  {name:"⚡ 核心·锋锐", desc:"能量核心过载，全部伤害永久 +8%", coreCost:3, cost:[],
+   run(){ dmgMul+=0.08; return "⚔ 伤害 +8%（当前 x"+dmgMul.toFixed(2)+"）"; }},
+  {name:"⚡ 核心·丰血", desc:"能量核心滋养，最大生命 +2", coreCost:3, cost:[],
+   ok(){ return maxHp<40; }, lockMsg:"生命上限已满 40",
+   run(){ maxHp=Math.min(40,maxHp+2); hp=maxHp; updateHearts(); return "❤ 最大生命 +2（"+maxHp+"）"; }},
+  {name:"⚡ 核心·坚壁", desc:"能量核心成甲，永久减伤 6%", coreCost:4, cost:[],
+   ok(){ return armor<5; }, lockMsg:"护甲已满 5/5",
+   run(){ armor++; updateHearts(); return "🛡 护甲 +1（"+armor+"/5，减伤 "+(armor*6)+"%）"; }},
   {name:"庆典烟花", desc:"金 + 煤，做一批烟花", cost:[[GOLD_ORE,2],[COAL_ORE,2]],
    run(){ addXP(20); return "🎆 烟花已补充（+20 经验）"; }},
   {name:"沉船灯塔", desc:"航海图纸点亮远航：朽木 + 金 + 煤 → 灯笼", cost:[[WRECKWOOD,8],[GOLD_ORE,2],[COAL_ORE,2]],
@@ -2735,14 +2749,16 @@ function landUnlocked(type){
 function canCraft(r){
   if(r.needLand && !landUnlocked(r.needLand)) return false;
   if(r.ok && !r.ok()) return false;
+  if(r.coreCost && cores<r.coreCost) return false;
   return r.cost.every(([id,n])=>bagCount(id)>=n);
 }
 function doCraft(i){
   const r=RECIPES[i]; if(!r) return;
   if(r.needLand && !landUnlocked(r.needLand)){ showName("⚠ "+(r.lockMsg||"尚未取得对应图纸")); return; }
   if(r.ok && !r.ok()){ showName("⚠ "+(r.lockMsg||"暂时无法合成")); return; }
-  if(!canCraft(r)){ showName("⚠ 材料不足：需要 "+r.cost.map(([id,n])=>BLOCKS[id].name+" x"+n).join("、")); return; }
+  if(!canCraft(r)){ showName("⚠ 材料不足：需要 "+[...r.cost.map(([id,n])=>BLOCKS[id].name+" x"+n), ...(r.coreCost?["能量核心 x"+r.coreCost]:[])].join("、")); return; }
   for(const [id,n] of r.cost) bagTake(id,n);
+  if(r.coreCost) cores-=r.coreCost;
   showName("✅ "+r.run());
   sfxLevel && sfxLevel();
   renderCraft(); saveGame(true);
@@ -2752,16 +2768,19 @@ function renderCraft(){
   const g=document.getElementById("bagGrid"); if(!g) return;
   const items=[...bag.entries()].filter(([id,n])=>n>0 && BLOCKS[id]);
   items.sort((a,b)=>b[1]-a[1]);
-  g.innerHTML = items.length
+  const coreCell='<div class="bagCell" style="color:#ffd27a">⚡ 能量核心 <b>x'+cores+'</b></div>';
+  g.innerHTML = coreCell + (items.length
     ? items.map(([id,n])=>'<div class="bagCell">'+BLOCKS[id].name+' <b>x'+n+'</b></div>').join("")
-    : '<div class="bagCell bagEmpty">空空如也——去挖点方块吧</div>';
+    : '<div class="bagCell bagEmpty">方块空空——去挖点方块吧</div>');
   document.getElementById("recipeList").innerHTML = RECIPES.map((r,i)=>{
     const okc=canCraft(r);
     const lockedLand=r.needLand && !landUnlocked(r.needLand);
-    const cost=r.cost.map(([id,n])=>{
+    const parts=r.cost.map(([id,n])=>{
       const have=bagCount(id);
       return (have>=n?"":"⚠ ")+BLOCKS[id].name+" "+have+"/"+n;
-    }).join("　");
+    });
+    if(r.coreCost) parts.push((cores>=r.coreCost?"":"⚠ ")+"⚡核心 "+cores+"/"+r.coreCost);
+    const cost=parts.join("　");
     return '<div class="recipe'+(okc?"":" locked")+'" data-i="'+i+'">'+
              '<div><div class="rn">'+r.name+'</div><div class="rd">'+(lockedLand?(r.lockMsg||"需要先探索对应地标"):r.desc)+'</div></div>'+
              '<div class="rc">'+cost+'</div></div>';
@@ -3251,6 +3270,7 @@ function chronicleHTML(){
     + row('💀 精英斩杀', elitesSlain+' 只')
     + row('🎯 悬赏完成', bountyDone+' 单')
     + row('⚔ 当前强度', '第 '+dayCount+' 天 · 敌伤 ×'+foeDmgMul().toFixed(2)+' · 敌血 ×'+foeHpMul().toFixed(2))
+    + row('⚡ 能量核心', cores+' 枚 · 护甲 '+armor+'/5 · 按 B 强化')
     + row('🔮 当前天象', om)
     + row('🐫 波斯集市', bz)
     + row('🌊 金羊毛远征', ex)
@@ -3404,7 +3424,7 @@ newworldbtn.addEventListener("click",()=>{
   for(const [,c] of world) if(c.mesh) destroyMesh(c.mesh);
   world.clear(); meshQueue.length=0; queued.clear();
   mobs.length=0; arrows.length=0; drops.length=0; particles.length=0;
-  hp=maxHp=20; lvl=1; xp=0; armor=0; kills=0; dayCount=1; dmgMul=1; dead=false;
+  hp=maxHp=20; lvl=1; xp=0; armor=0; cores=0; kills=0; dayCount=1; dmgMul=1; dead=false;
   questIdx=0; questProg=0; questDone=false; _qWalkX=null; _qDriveX=null; bag.clear(); updateQuestHUD();
   document.getElementById("victory").style.display="none";
   _gcx=1e9; pcx=1e9; pcz=1e9;
@@ -5665,8 +5685,8 @@ function updateDrops(dt){
       const d=DROP_DEF[p.kind];
       if(d.heal>0 && hp<maxHp){ hp=Math.min(maxHp,hp+d.heal); updateHearts(); }
       if(d.xp) addXP(d.xp);
-      if(p.kind==="core" && armor<5){ armor++; showName("🛡 护甲 +1 (共 "+armor+"/5, 减伤 "+(armor*6)+"%)"); }
-      showName("拾取 "+d.name+(d.heal>0?"  +"+(d.heal/2)+"❤":""));
+      if(p.kind==="core"){ showName(gainCore()); }
+      else showName("拾取 "+d.name+(d.heal>0?"  +"+(d.heal/2)+"❤":""));
       sfxPickup(); drops.splice(i,1);
     }
   }
@@ -6716,7 +6736,7 @@ function collectSave(){
     v:1, seed:SEED, ts:Date.now(),
     px:+player.x.toFixed(2), py:+player.y.toFixed(2), pz:+player.z.toFixed(2),
     yaw:+player.yaw.toFixed(3), pitch:+player.pitch.toFixed(3),
-    hp, maxHp, lvl, xp, armor, kills, dayCount, bioSeen:[...bioSeen], landSeen:[...landSeen], weather,
+    hp, maxHp, lvl, xp, armor, cores, kills, dayCount, bioSeen:[...bioSeen], landSeen:[...landSeen], weather,
     npc:{ relics:npcState.relics, traderMet:npcState.traderMet, oracleMet:npcState.oracleMet, trades:npcState.trades, blessings:npcState.blessings },
     arch:{ pottery:archState.pottery, pages:archState.pages, digs:archState.digs, shards:archState.shards.slice(), setComplete:!!archState.setComplete },
     arena:{ bestWave:arenaState.bestWave, cleared:arenaState.cleared, keys:arenaState.keys },
@@ -6779,7 +6799,7 @@ function loadGame(){
   player.yaw=s.yaw||0; player.pitch=s.pitch||0;
   player.vx=player.vy=player.vz=player.kbx=player.kbz=0;
   hp=s.hp??20; maxHp=s.maxHp??20; lvl=s.lvl??1; xp=s.xp??0;
-  armor=s.armor??0; kills=s.kills??0; dayCount=s.dayCount??1;
+  armor=s.armor??0; cores=s.cores|0; kills=s.kills??0; dayCount=s.dayCount??1;
   bioSeen.clear(); if(Array.isArray(s.bioSeen)) for(const b of s.bioSeen) bioSeen.add(b|0);   // 恢复图鉴(老存档缺字段→空,自然兼容)
   landSeen.clear(); if(Array.isArray(s.landSeen)) for(const k of s.landSeen) landSeen.add(String(k));
   // NPC 系统: 恢复文物与来往记录(老存档无 npc 字段 → 全部归零, 自然向后兼容)
@@ -7880,6 +7900,7 @@ window.__game = {
   get difficulty(){ return { day:dayCount, foeDmg:+foeDmgMul().toFixed(3), foeHp:+foeHpMul().toFixed(3),
                               eliteChance:+eliteChance().toFixed(3), spawnCap:Math.min(8,2+Math.floor(Math.min(dayCount,10)/2)) }; },
   get streak(){ return { cur:killStreak, best:bestStreak, elites:elitesSlain }; },
+  get cores(){ return cores; }, get armor(){ return armor; },
   get bounty(){ const b=curBounty(); return { id:b.id, desc:b.desc, prog:bountyProg, goal:b.goal, done:bountyDone }; },
   get bossBar(){ return bossBarState(); },
   get sandstorm(){ return { weather, active:weather==="sand", arid:aridBiome(biomeAt(Math.floor(player.x),Math.floor(player.z))) }; },
@@ -8695,6 +8716,28 @@ function selftest(){
       const mlenS=mobs.length; const t0=sandRaidType(0.1); const spawned=spawnMob(t0,10,20);
       ok("沙暴袭击能刷出敌人", spawned && mobs.length-mlenS===1 && mobs[mobs.length-1].type===t0, "type="+t0+" ok="+spawned);
       mobs.length=mlenS;
+    }
+
+    // ---- 成长闭环: 能量核心货币 + 核心强化(kill→core→永久提升) ----
+    {
+      const aS=armor, cS=cores, dS=dmgMul, mS=maxHp, hS=hp, bagS=new Map(bag);
+      try{
+        armor=0; cores=0; gainCore();
+        ok("核心拾取: 护甲未满先补甲", armor===1 && cores===0, "armor="+armor+" cores="+cores);
+        armor=5; cores=0; gainCore();
+        ok("核心拾取: 护甲满后转存为核心货币", armor===5 && cores===1, "armor="+armor+" cores="+cores);
+        const iSharp=RECIPES.findIndex(r=>r.name==="⚡ 核心·锋锐");
+        ok("核心强化配方存在", iSharp>=0 && RECIPES[iSharp].coreCost===3, "idx="+iSharp);
+        cores=2; const dmg0=dmgMul; doCraft(iSharp);
+        ok("核心不足时强化被挡下", dmgMul===dmg0 && cores===2, "dmg未变="+(dmgMul===dmg0)+" cores="+cores);
+        cores=5; doCraft(iSharp);
+        ok("核心充足: 伤害强化生效并扣核心3", Math.abs(dmgMul-(dmg0+0.08))<1e-9 && cores===2, "dmg="+dmgMul.toFixed(2)+" cores="+cores);
+        cores=7; const sv=collectSave();
+        ok("能量核心写入存档", sv.cores===7, "sv.cores="+sv.cores);
+        ok("老存档(无cores字段)核心归零", (({}).cores|0)===0, "ok");
+      } finally {
+        armor=aS; cores=cS; dmgMul=dS; maxHp=mS; hp=hS; bag.clear(); for(const [k,v] of bagS) bag.set(k,v); updateHearts();
+      }
     }
 
     // 收尾再确认一次: 即使中途 saveGame 写过测试世界, 还原后玩家存档仍在
