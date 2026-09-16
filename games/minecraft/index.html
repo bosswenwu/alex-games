@@ -4937,8 +4937,8 @@ function spawnPack(type, n, minD, maxD){ let ok=0; for(let i=0;i<n;i++) if(spawn
 function sandRaidType(r){ const pool=["scarab","serqet","spider","sandworm"]; return pool[Math.min(pool.length-1, (r*pool.length)|0)]; }
 function startSandRaid(){
   if(typeof playing==="function" && !playing()) return;
-  const n=2+((Math.random()*2)|0);                 // 开场 2~3 只, 随后 trySpawns 持续补充
-  for(let i=0;i<n;i++) spawnMob(sandRaidType(Math.random()), 16, 34);
+  const n=1+((Math.random()*2)|0);                 // 开场 1~2 只(轻量), 随后 trySpawns 偶尔补充
+  for(let i=0;i<n;i++) spawnMob(sandRaidType(Math.random()), 18, 34);
 }
 /* 夜间对手挑选(纯函数: 群系 + [0,1) 随机数 → [类型,最近,最远]); 大幅降低僵尸/木乃伊占比, 便于 selftest 断言分布 */
 function nightSpawnFor(bio, r){
@@ -4998,8 +4998,8 @@ function trySpawns(dt){
     }
   }
   // 沙暴袭击波: 沙暴中沙漠生物趁乱来袭——不分昼夜, 给白天的战斗一个"舞台"(信号明确、有时限)
-  if(weather==="sand" && zc<cap+3 && Math.random()<0.6 && aridBiome(biomeAt(Math.floor(player.x),Math.floor(player.z)))){
-    spawnMob(sandRaidType(Math.random()), 16, 34);
+  if(weather==="sand" && zc<cap+2 && Math.random()<0.3 && aridBiome(biomeAt(Math.floor(player.x),Math.floor(player.z)))){
+    spawnMob(sandRaidType(Math.random()), 18, 34);
   }
   // 金字塔守卫: 靠近金字塔时白天也会有木乃伊/圣甲虫, 并有一只阿努比斯守卫
   const pyr=nearStructure(["pyramid"],46);
@@ -6039,8 +6039,8 @@ function render(now){
   // 天气: 阴云压暗天空; 闪电瞬间照亮全场
   if(weather!=="clear"){
     if(weather==="sand"){
-      daylight*=0.72;
-      sky=mix3(sky,[0.76,0.56,0.32],0.58);
+      daylight*=0.86;
+      sky=mix3(sky,[0.82,0.62,0.36],0.42);   // 沙暴改为暖金薄雾, 不再灰暗压抑
     } else {
       const murk = weather==="storm" ? 0.88 : 0.95;   // 阴天只是稍暗, 不再灰蒙蒙
       daylight*=murk;
@@ -6074,7 +6074,7 @@ function render(now){
   const fogCol = uw ? [0.08,0.22,0.55] : (weather==="sand" ? mix3(sky,[0.78,0.58,0.34],0.35) : sky);
   let fogFar = uw ? 22 : RENDER*CS*1.05;
   let fogNear= uw ? 2  : fogFar*0.68;
-  if(weather==="sand" && !uw){ fogFar=16; fogNear=1.2; }
+  if(weather==="sand" && !uw){ fogFar=34; fogNear=12; }   // 沙暴不再白到看不见: 近处清晰, 远处才起黄雾
   document.getElementById("watertint").style.display=uw?"block":"none";
   document.getElementById("lavatint").style.display=eyeInLava()?"block":"none";
   document.getElementById("firetint").style.display=(burnT>0&&!eyeInLava())?"block":"none";
@@ -6376,7 +6376,7 @@ function updateWeather(dt){
     const r=Math.random();
     const bio=biomeAt(Math.floor(player.x),Math.floor(player.z));
     if(weather==="clear"){
-      if(aridBiome(bio) && r<0.48){ weather="sand"; weatherT=10+Math.random()*8; showName("🌪 沙暴袭来！黄沙里有东西在逼近——小心伏击"); startSandRaid(); }   // 沙暴(10~18秒)会掩护一波沙漠生物突袭
+      if(aridBiome(bio) && r<0.42){ weather="sand"; weatherT=8+Math.random()*5; showName("🌪 沙暴来袭！能见度下降 — 黄沙中偶有生物出没"); startSandRaid(); }   // 沙暴(8~13秒)轻量掩护少量沙漠生物
       else { weather = r<0.25?"storm":"rain"; weatherT=25+Math.random()*35; showName(weather==="storm"?"⛈ 雷暴来袭！":"🌧 下雨了"); }
     }
     else { weather="clear"; weatherT=240+Math.random()*260; showName("☀ 天放晴了"); }
