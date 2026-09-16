@@ -79,6 +79,18 @@
   #questbar { margin-top:6px; height:8px; background:rgba(0,0,0,.5); border-radius:5px; overflow:hidden; }
   #questbar > i { display:block; height:100%; width:0%; background:linear-gradient(90deg,#ffd07a,#ff9a3c); transition:width .25s; }
   #questNum { font-size:11px; opacity:.75; margin-top:3px; }
+  #bossbar { position:absolute; left:50%; top:14px; transform:translateX(-50%); width:min(52vw,440px); display:none; text-align:center;
+             font:bold 13px/1.4 "Microsoft YaHei",sans-serif; color:#ffe0e0; text-shadow:1px 1px 0 #000; }
+  #bossbar .bn { letter-spacing:2px; margin-bottom:3px; }
+  #bossbar .bt { height:12px; background:rgba(0,0,0,.55); border-radius:7px; overflow:hidden; box-shadow:0 0 0 1px rgba(255,120,120,.45) inset; }
+  #bossbar .bf { display:block; height:100%; width:100%; background:linear-gradient(90deg,#ff5a4d,#b81d2c); transition:width .18s; }
+  #bountybox { position:absolute; left:10px; top:122px; min-width:210px; max-width:300px; padding:7px 10px; border-radius:10px;
+               background:rgba(14,10,20,.42); box-shadow:0 0 0 1px rgba(120,200,150,.22) inset; color:#dff5e2;
+               font:12px/1.4 "Microsoft YaHei",sans-serif; text-shadow:1px 1px 0 #000; display:none; }
+  #bountybox .kh { font-size:11px; color:#9be3a8; letter-spacing:2px; }
+  #bountybox .kt { font-weight:bold; font-size:13px; color:#eafff0; margin-top:1px; }
+  #bountybar { margin-top:5px; height:7px; background:rgba(0,0,0,.5); border-radius:5px; overflow:hidden; }
+  #bountybar > i { display:block; height:100%; width:0%; background:linear-gradient(90deg,#8ce6a0,#39b06a); transition:width .25s; }
   #victory { position:fixed; inset:0; z-index:70; display:none; flex-direction:column; align-items:center; justify-content:center;
              background:radial-gradient(circle at 50% 40%,rgba(60,40,20,.92),rgba(12,10,20,.96)); color:#ffe9c4; text-align:center; padding:30px; }
   #stats { position:absolute; right:8px; top:8px; color:#fff; font:bold 15px/1.5 "Microsoft YaHei",sans-serif; text-shadow:2px 2px 0 #000; text-align:right; }
@@ -235,6 +247,13 @@
     <div id="questbar"><i id="questFill"></i></div>
     <div id="questNum"></div>
   </div>
+  <div id="bountybox">
+    <div class="kh">🎯 悬赏</div>
+    <div class="kt" id="bountyDesc">—</div>
+    <div id="bountybar"><i id="bountyFill"></i></div>
+    <div id="bountyNum" style="font-size:11px;opacity:.72;margin-top:3px"></div>
+  </div>
+  <div id="bossbar"><div class="bn">—</div><div class="bt"><i class="bf"></i></div></div>
   <div id="hearts"></div>
   <div id="hotbar"></div>
   <div id="viewmodel"></div>
@@ -540,6 +559,8 @@ const isTreeAt = (x,z,h,bio) => {
   const [p,ty]=treeInfo(bio);
   return ty!==3 && h>WATER_Y+1 && h<58 && hash2(x+91337, z-40507) < p;
 };
+// 沙漠仙人掌: 开阔沙地上零星生长(只在沙漠、水位之上), 让荒漠不再空旷
+const isCactusAt = (x,z,h,bio) => bio===BIO_DESERT && h>WATER_Y+1 && h<58 && hash2(x*13+701, z*7-233) < 0.014;
 
 function genChunk(cx, cz){
   const b = new Uint8Array(CS*CS*H);
@@ -628,6 +649,11 @@ function genChunk(cx, cz){
         for(let k=1;k<=ch;k++) put(gx,h+k,gz,SANDSTONE,true);
         if(hash2(gx,gz)<0.4) put(gx,h+ch+1,gz,CLAY,true);
       }
+    }
+    // ---- 沙漠仙人掌(独立于上面的岩石/断柱概率) ----
+    if(isCactusAt(gx,gz,h,bio) && b[col+h]!==AIR){
+      const ch=2+Math.floor(hash2(gx+11,gz-7)*2);     // 高 2~3 格
+      for(let k=1;k<=ch;k++) put(gx,h+k,gz,CACTUS,true);
     }
     // ---- 新群系专属地表资源 ----
     if(b[col+h]!==AIR && h>0){
@@ -2545,6 +2571,56 @@ function completeQuest(){
   updateQuestHUD();
   saveGame(true);
 }
+/* ---------- 悬赏: 与主线并行的可循环支线目标(咬合精英/连杀战斗系统) ---------- */
+const BOUNTIES=[
+  {id:"cull",    desc:"斩杀 8 个敌人",   goal:8, xp:40, reward:"key"},
+  {id:"elite",   desc:"斩杀 3 个精英怪", goal:3, xp:60, reward:"core"},
+  {id:"streak",  desc:"打出 6 连杀",     goal:6, xp:50, reward:"core"},
+  {id:"survive", desc:"熬过一个夜晚",     goal:1, xp:45, reward:"key"},
+];
+let bountyIdx=0, bountyProg=0, bountyDone=0;
+function curBounty(){ return BOUNTIES[bountyIdx%BOUNTIES.length]; }
+function updateBountyHUD(){
+  const box=document.getElementById("bountybox"); if(!box) return;
+  if(typeof playing==="function" && !playing()){ box.style.display="none"; return; }
+  const b=curBounty();
+  box.style.display="block";
+  document.getElementById("bountyDesc").textContent=b.desc;
+  document.getElementById("bountyFill").style.width=(Math.max(0,Math.min(1,bountyProg/b.goal))*100).toFixed(0)+"%";
+  document.getElementById("bountyNum").textContent=Math.min(bountyProg,b.goal)+" / "+b.goal+"　· 已完成 "+bountyDone+" 单 · 奖励 +"+b.xp+"xp "+(b.reward==="key"?"+宝库钥匙":"+能量核心");
+}
+function bountyProgress(id, value, mode){
+  const b=curBounty(); if(!b || b.id!==id) return;
+  bountyProg = (mode==="max") ? Math.max(bountyProg, value) : bountyProg+value;
+  if(bountyProg>=b.goal) bountyComplete(); else updateBountyHUD();
+}
+function bountyComplete(){
+  const b=curBounty();
+  addXP(b.xp);
+  if(b.reward==="key" && typeof arenaState!=="undefined") arenaState.keys=(arenaState.keys|0)+1;
+  else if(b.reward==="core") spawnDrop(player.x, player.y+1, player.z, "core");
+  bountyDone++;
+  showName("🎯 悬赏达成：【"+b.desc+"】奖励已发放！");
+  sfxLevel && sfxLevel();
+  bountyIdx=(bountyIdx+1)%BOUNTIES.length; bountyProg=0;
+  updateBountyHUD();
+}
+/* ---------- Boss 血条: 有 Boss 在场时顶部居中显示 ---------- */
+function bossBarState(){
+  let b=null;
+  for(const m of mobs){ if(m.def && m.def.boss){ b=m; break; } }
+  if(!b) return {visible:false, pct:0, name:""};
+  const mx=b.maxHp||b.def.hp||1;
+  return {visible:true, pct:Math.max(0,Math.min(1,b.hp/mx)), name:b.def.name};
+}
+function updateBossBar(){
+  const el=document.getElementById("bossbar"); if(!el) return;
+  const s=bossBarState();
+  if(!s.visible){ el.style.display="none"; return; }
+  el.style.display="block";
+  el.querySelector(".bn").textContent="⚔ "+s.name+"　"+Math.ceil(s.pct*100)+"%";
+  el.querySelector(".bf").style.width=(s.pct*100).toFixed(1)+"%";
+}
 function showVictory(){
   const v=document.getElementById("victory"); if(!v) return;
   document.getElementById("victoryText").innerHTML=
@@ -3173,6 +3249,7 @@ function chronicleHTML(){
     + row('⚙ 机关触发', trapState.triggered)
     + row('🔥 最高连杀', bestStreak+' 连')
     + row('💀 精英斩杀', elitesSlain+' 只')
+    + row('🎯 悬赏完成', bountyDone+' 单')
     + row('⚔ 当前强度', '第 '+dayCount+' 天 · 敌伤 ×'+foeDmgMul().toFixed(2)+' · 敌血 ×'+foeHpMul().toFixed(2))
     + row('🔮 当前天象', om)
     + row('🐫 波斯集市', bz)
@@ -4317,6 +4394,10 @@ function hurtMob(m,dmg,kx,kz,silent){
       if(killStreak>=3){ addXP(killStreak); showName("🔥 "+killStreak+" 连杀！  +"+killStreak+" 经验"); }
       // 精英怪: 掉能量核心 + 额外经验
       if(m.elite){ elitesSlain++; spawnDrop(m.x, m.y+m.def.h*0.4, m.z, "core"); addXP(12); showName("💰 精英击杀！能量核心 + 大量经验"); }
+      // 悬赏进度: 击杀/精英/连杀
+      bountyProgress("cull",1,"add");
+      bountyProgress("streak",killStreak,"max");
+      if(m.elite) bountyProgress("elite",1,"add");
       if(m.def.boss) questSet("boss");
       if(m.type==="champion")  questSet("champion");
       if(m.type==="legionary") questAdd("legion",1);
@@ -5798,24 +5879,37 @@ const sunVbo=gl.createBuffer();
 /* ---------- 天穹: 竖直渐变 + 日晕 ----------
    原本天空是单一 clearColor(一整片平色), 是全画面最"塑料"的地方。
    这里在清屏后先铺一张全屏渐变, 再叠一圈太阳光晕, 成本约等于一次全屏填充。 */
+// 夜色系数: 白天 0 → 夜里 1(供夜空繁星强度用; 也可被 selftest 断言)
+function skyNightFactor(h){ return Math.max(0, Math.min(1, (0.10 - h) / 0.20)); }
 const skyProg = makeShader(`
   attribute vec2 aP; varying vec2 vN;
   void main(){ vN = aP; gl_Position = vec4(aP, 0.999, 1.0); }`,`
   precision mediump float;
   varying vec2 vN;
   uniform vec3 uZenith, uHorizon, uGlowCol;
-  uniform vec2 uSun; uniform float uGlow, uAspect;
+  uniform vec2 uSun; uniform float uGlow, uAspect, uNight, uYaw;
+  float sHash(vec2 p){ return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }
   void main(){
     // 天顶->地平线的渐变(幂次让靠近地平线的过渡更紧)
     float t = clamp(vN.y * 0.5 + 0.5, 0.0, 1.0);
     vec3 col = mix(uHorizon, uZenith, pow(t, 0.85));
+    // 夜空繁星: 仅夜里、仅高天出现; 随相机偏航横向漂移, 近似天球转动而非贴屏
+    if(uNight > 0.01){
+      vec2 sp = vec2(vN.x * uAspect + uYaw * 0.9, vN.y) * 46.0;
+      float h = sHash(floor(sp));
+      if(h > 0.982){
+        float d = length(fract(sp) - 0.5);
+        float star = smoothstep(0.10, 0.0, d) * (h - 0.982) / 0.018;
+        col += vec3(star) * uNight * smoothstep(0.18, 0.65, t);
+      }
+    }
     // 太阳光晕: 屏幕空间径向衰减, 需按宽高比修正避免拉成椭圆
     vec2 d = vec2((vN.x - uSun.x) * uAspect, vN.y - uSun.y);
     float r = length(d);
     col += uGlowCol * (uGlow * (exp(-r * 2.6) * 0.75 + exp(-r * 8.0) * 0.55));
     gl_FragColor = vec4(col, 1.0);
   }`);
-const USK={}; for(const n of ["uZenith","uHorizon","uGlowCol","uSun","uGlow","uAspect"]) USK[n]=gl.getUniformLocation(skyProg,n);
+const USK={}; for(const n of ["uZenith","uHorizon","uGlowCol","uSun","uGlow","uAspect","uNight","uYaw"]) USK[n]=gl.getUniformLocation(skyProg,n);
 const ASK_P=gl.getAttribLocation(skyProg,"aP");
 const skyVbo=gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER,skyVbo);
@@ -6017,6 +6111,8 @@ function render(now){
     gl.uniform1f(USK.uGlow, sn ? (0.16+0.55*glow) : 0.0);
     gl.uniform2f(USK.uSun, sn?sn[0]:0, sn?sn[1]:2);
     gl.uniform1f(USK.uAspect, canvas.width/Math.max(1,canvas.height));
+    gl.uniform1f(USK.uNight, skyNightFactor(sunH));   // 夜空繁星强度
+    gl.uniform1f(USK.uYaw, vYaw);                     // 随相机偏航让星空漂移
     gl.bindBuffer(gl.ARRAY_BUFFER,skyVbo);
     gl.enableVertexAttribArray(ASK_P);
     gl.vertexAttribPointer(ASK_P,2,gl.FLOAT,false,8,0);
@@ -6383,7 +6479,7 @@ function frame(now){
   dayT=((now/1000)/DAY_LEN+dayShift)%1;
   // 把太阳高度整体抬高: 白天占约 80% 的循环, 夜晚又短又亮(不再是"永夜僵尸游戏")
   sunH=Math.sin(dayT*Math.PI*2)*0.55+0.45;
-  if(playing() && prevSunH<0 && sunH>=0){ dayCount++; bossSpawnedTonight=false; showName("第 "+dayCount+" 天 · 黎明"); } // 天亮=新一天
+  if(playing() && prevSunH<0 && sunH>=0){ dayCount++; bossSpawnedTonight=false; showName("第 "+dayCount+" 天 · 黎明"); bountyProgress("survive",1,"add"); } // 天亮=新一天(并结算"熬过一夜"悬赏)
 
   if(playing()){
     // 移动
@@ -6492,6 +6588,8 @@ function frame(now){
     // 生物 & 生存
     updateMobs(dt);
     trySpawns(dt);
+    updateBossBar();                                                            // Boss 血条实时刷新
+    updateBountyHUD();                                                          // 悬赏进度实时刷新
     if(killStreakT>0){ killStreakT-=dt; if(killStreakT<=0){ killStreak=0; } }   // 连杀窗口冷却归零
     const regenBless=(blessKind==="regen"&&blessT>0);
     if(!dead && hp<maxHp && (regenBless || performance.now()-lastDmg>7000)){
@@ -6630,6 +6728,7 @@ function collectSave(){
     dmgMul:+dmgMul.toFixed(3),
     questIdx, questId:(QUESTS[questIdx]||{}).id||null,
     questProg:+questProg.toFixed(1), questDone,
+    bounty:{ idx:bountyIdx, prog:bountyProg, done:bountyDone },
     dayT:+dayT.toFixed(5),
     spawn:[spawnPt.x,spawnPt.y,spawnPt.z],
     diff
@@ -6713,6 +6812,7 @@ function loadGame(){
   const qById = s.questId ? QUESTS.findIndex(q=>q.id===s.questId) : -1;
   questIdx = qById>=0 ? qById : Math.min(s.questIdx??0, QUESTS.length);
   questProg=s.questProg??0; questDone=!!s.questDone;
+  { const bt=s.bounty||{}; bountyIdx=bt.idx|0; bountyProg=bt.prog|0; bountyDone=bt.done|0; }   // 悬赏(老存档无→归零)
   _qWalkX=null; _qDriveX=null;
   updateQuestHUD();
   dmgMul=1+(lvl-1)*0.12;
@@ -7774,6 +7874,9 @@ window.__game = {
   get difficulty(){ return { day:dayCount, foeDmg:+foeDmgMul().toFixed(3), foeHp:+foeHpMul().toFixed(3),
                               eliteChance:+eliteChance().toFixed(3), spawnCap:Math.min(8,2+Math.floor(Math.min(dayCount,10)/2)) }; },
   get streak(){ return { cur:killStreak, best:bestStreak, elites:elitesSlain }; },
+  get bounty(){ const b=curBounty(); return { id:b.id, desc:b.desc, prog:bountyProg, goal:b.goal, done:bountyDone }; },
+  get bossBar(){ return bossBarState(); },
+  skyNight:(h)=>skyNightFactor(h),
   setDay(n){ dayCount=Math.max(1,n|0); return dayCount; },     // 调试/自测: 直接设定天数以检验难度曲线
   selftest
 };
@@ -8514,6 +8617,44 @@ function selftest(){
         kills=snapKills; xp=snapXp; lvl=snapLvl; maxHp=snapMax; dmgMul=snapDmgMul; hp=snapHp;
         armor=snapArmor; blessT=snapBless; questIdx=snapQi; questProg=snapQp; questDone=snapQd;
         mobs.length=mlen; drops.length=dlen; updateHearts();
+      }
+    }
+
+    // ---- 丰富批次: 地图(仙人掌) / 画面(夜空) / 玩法(Boss血条) / 任务(悬赏) ----
+    {
+      // 画面: 夜色系数 —— 正午 0、深夜 1、黄昏介于之间
+      ok("夜色系数: 正午=0/深夜=1/黄昏(0,1)", skyNightFactor(1)===0 && skyNightFactor(-1)===1 && skyNightFactor(0)>0 && skyNightFactor(0)<1,
+         "noon="+skyNightFactor(1)+" mid="+skyNightFactor(-1)+" dusk="+skyNightFactor(0).toFixed(2));
+      // 地图: 沙漠仙人掌谓词 —— 沙漠水位之上可命中; 水下/非沙漠不长
+      let cactusHit=false;
+      for(let gx=0; gx<600 && !cactusHit; gx++) for(let gz=0; gz<30; gz++){ if(isCactusAt(gx,gz, WATER_Y+6, BIO_DESERT)){ cactusHit=true; break; } }
+      ok("沙漠仙人掌谓词可命中", cactusHit, "扫描命中="+cactusHit);
+      ok("仙人掌不长在水下/非沙漠", !isCactusAt(5,5,WATER_Y-1,BIO_DESERT) && !isCactusAt(5,5,WATER_Y+6,BIO_MESA), "ok");
+      // 玩法: Boss 血条 —— 无Boss隐藏; 有Boss显示且血量比正确
+      const mlen0=mobs.length; mobs.length=0;
+      ok("无Boss时血条隐藏", bossBarState().visible===false, "visible="+bossBarState().visible);
+      mobs.push({type:"king",def:MOB_DEFS.king,x:player.x,y:player.y,z:player.z,vx:0,vy:0,vz:0,kbx:0,kbz:0,yaw:0,tgtYaw:0,
+        hp:MOB_DEFS.king.hp/2, maxHp:MOB_DEFS.king.hp, hurtT:0,animT:0,t:0,atkCd:0,burnT:0,swingT:0,groanT:0,fleeT:0,onGround:true,pause:false,burning:false,held:null});
+      const bs=bossBarState();
+      ok("有Boss时血条显示且半血≈50%", bs.visible && Math.abs(bs.pct-0.5)<0.02 && bs.name===MOB_DEFS.king.name, "pct="+bs.pct.toFixed(2)+" name="+bs.name);
+      mobs.length=mlen0;
+      // 任务: 悬赏 —— 达标发奖轮换 / 分类计数 / 存档往返 / 老档归零
+      const bI=bountyIdx,bP=bountyProg,bD=bountyDone, keyS=(typeof arenaState!=="undefined"?arenaState.keys:0),
+            xpS=xp,lvlS=lvl,maxS=maxHp,hpS=hp,dmgS=dmgMul,dropS=drops.length;
+      try{
+        bountyIdx=0; bountyProg=0; bountyDone=0;                       // 第1单: 斩杀8敌
+        for(let k=0;k<BOUNTIES[0].goal;k++) bountyProgress("cull",1,"add");
+        ok("悬赏达标发奖并轮到下一单", bountyDone===1 && bountyIdx===1 && bountyProg===0, "done="+bountyDone+" idx="+bountyIdx+" prog="+bountyProg);
+        bountyProgress("elite",99,"add");                             // 第2单: 斩杀精英(一次超额直接达标)
+        ok("不同类型悬赏各自计数并推进", bountyDone===2 && bountyIdx===2, "done="+bountyDone+" idx="+bountyIdx);
+        bountyIdx=2; bountyProg=3; bountyDone=5;
+        const sv2=collectSave();
+        ok("悬赏写入存档(bounty)", sv2.bounty && sv2.bounty.idx===2 && sv2.bounty.prog===3 && sv2.bounty.done===5, "bounty="+JSON.stringify(sv2.bounty));
+        const oldB={}; ok("老存档(无bounty)悬赏归零", (((oldB.bounty||{}).idx)|0)===0 && (((oldB.bounty||{}).done)|0)===0, "ok");
+      } finally {
+        bountyIdx=bI; bountyProg=bP; bountyDone=bD;
+        if(typeof arenaState!=="undefined") arenaState.keys=keyS;
+        xp=xpS; lvl=lvlS; maxHp=maxS; hp=hpS; dmgMul=dmgS; drops.length=dropS; updateHearts();
       }
     }
 

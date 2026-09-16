@@ -168,3 +168,14 @@
 - **连杀(Streak)**: 4 秒窗口内连续击杀累计, ≥3 连出提示并给经验; `killStreak/bestStreak/elitesSlain` 三态, 死亡清零、`bestStreak/elitesSlain` 入存档 `feats`(老存档缺字段→归零)、编年史新增"最高连杀/精英斩杀/当前强度"三行。
 - **调试接口**: `window.__game` 增 `difficulty`(day/foeDmg/foeHp/eliteChance/spawnCap 只读) + `streak`(cur/best/elites 只读) + `setDay(n)`。
 - **验证**: 无头 Chromium(SwiftShader) `?selftest=1` → **PASS 165/165**(新增 11 条: 难度基线/递增/封顶、敌对上限曲线、精英概率区间、精英 +50% 伤害、连杀累计/超时清零、精英战绩、存档往返、老档归零); 新用例全程快照/还原 dayCount/连杀/经验/任务等运行态, 不污染现场; 实渲染进世界正常, 第三人称第一人称手仍正确隐藏。**待真机点测**: 后期围攻手感与精英出现频率。
+
+## Claude 进度（2026-09-16 续：沙海奇境「丰富地图/画面/任务/玩法」批次）
+
+> 用户直派: "丰富地图, 画面质量, 任务, 玩法"。四块各落一项自成体系、可 selftest 验证的内容。
+
+- **地图 · 沙漠仙人掌**: 新增 `isCactusAt(x,z,h,bio)` 谓词(仅 `BIO_DESERT`、水位之上、hash<1.4%), 在 `genChunk` 地表装饰里长 2~3 格 `CACTUS`(复用既有贴图)。荒漠不再空旷——实渲染沙漠已成片仙人掌。
+- **画面 · 夜空繁星**: 天空片元着色器加 `uNight`(白天0→夜里1, 由 `skyNightFactor(sunH)` 驱动) + `uYaw`(随相机偏航横向漂移, 近似天球转动而非贴屏)。仅夜里、仅高天出现稀疏亮星; 白天 uNight=0 完全不显, selftest(默认白天)渲染不受影响。
+- **玩法/UI · Boss 血条**: 顶部居中血条, 有 Boss 在场时显示名字+百分比(`bossBarState()`/`updateBossBar()`, 每帧刷新), 无 Boss 自动隐藏。Boss 血量比用 `maxHp`(spawnMob 已记录), 手搓 Boss 用 `maxHp||def.hp` 兜底。
+- **任务 · 悬赏(Bounty)**: 与主线并行的可循环支线, 4 种目标(斩杀8敌/斩杀3精英/6连杀/熬过一夜)咬合精英+连杀战斗系统; 达标发经验+宝库钥匙/能量核心并轮换下一单; `bountyIdx/prog/done` 入存档(老档→归零)+编年史+左上 HUD 面板。
+- **调试**: `window.__game` 增 `bounty` / `bossBar` / `skyNight(h)` 只读接口。
+- **验证**: 无头 Chromium(SwiftShader) `?selftest=1` → **PASS 174/174**(新增 9 条: 夜色系数曲线、仙人掌谓词命中/水下非沙漠不长、Boss血条隐藏/半血比、悬赏达标轮换/分类计数/存档往返/老档归零), 新用例快照/还原运行态; 实渲染沙漠仙人掌成片、悬赏面板正常、无 Boss 时血条隐藏、进世界无 PAGEERROR。**待真机点测**: 夜空繁星观感(需真实夜晚)、Boss 血条实战手感、悬赏节奏。
