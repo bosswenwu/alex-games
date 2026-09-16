@@ -569,6 +569,20 @@ const isTreeAt = (x,z,h,bio) => {
 };
 // 沙漠仙人掌: 开阔沙地上零星生长(只在沙漠、水位之上), 让荒漠不再空旷
 const isCactusAt = (x,z,h,bio) => bio===BIO_DESERT && h>WATER_Y+1 && h<58 && hash2(x*13+701, z*7-233) < 0.014;
+// 群系表层材质(抽成纯函数, 供边界柔化复用同一套映射)
+function surfaceTop(bio,h,beach){
+  if(bio===BIO_SALTLAKE) return SALTCRUST;
+  if(bio===BIO_CANYON)   return WINDROCK;
+  if(bio===BIO_VOLCANO)  return BLACKSAND;
+  if(h>=64)              return SNOW;
+  if(beach)              return (bio===BIO_SWAMP? DIRT : SAND);
+  if(bio===BIO_DESERT)   return SAND;
+  if(bio===BIO_MESA)     return CLAY;
+  if(bio===BIO_SNOW)     return SNOW;
+  if(bio===BIO_FOREST)   return MOSSY;
+  if(bio===BIO_TAIGA)    return SANDSTONE;
+  return GRASS;
+}
 
 function genChunk(cx, cz){
   const b = new Uint8Array(CS*CS*H);
@@ -606,17 +620,13 @@ function genChunk(cx, cz){
         else id=DIRT;
       }
       else { // 顶层
-        if(bio===BIO_SALTLAKE)     id=SALTCRUST;                     // 盐壳平原
-        else if(bio===BIO_CANYON)  id=WINDROCK;                      // 风蚀岩台顶
-        else if(bio===BIO_VOLCANO) id=BLACKSAND;                     // 黑沙覆盖
-        else if(h>=64) id=SNOW;
-        else if(beach) id = (bio===BIO_SWAMP? DIRT : SAND);
-        else if(bio===BIO_DESERT) id=SAND;
-        else if(bio===BIO_MESA)   id=CLAY;
-        else if(bio===BIO_SNOW) id=SNOW;
-        else if(bio===BIO_FOREST) id=MOSSY;
-        else if(bio===BIO_TAIGA) id=SANDSTONE;
-        else id=GRASS;
+        id=surfaceTop(bio,h,beach);
+        // 群系边界柔化: 交界 ~5 格内, 用噪声把邻域表层材质散点渗过来, 软化刀切直线
+        if(!beach && h<64){
+          let nb=-1;
+          for(const [dx,dz] of [[5,0],[-5,0],[0,5],[0,-5]]){ const b2=biomeAt(gx+dx,gz+dz); if(b2!==bio){ nb=b2; break; } }
+          if(nb>=0 && hash2(gx*3+91, gz*3-57) < 0.5) id=surfaceTop(nb,h,beach);
+        }
       }
       b[col+y]=id;
     }
@@ -640,7 +650,15 @@ function genChunk(cx, cz){
       if(b[col+y]!==AIR) continue;
       if(b[col+y-1]===AIR || b[col+y-1]===LAVA) continue;          // 要长在实地上
       const caveR = hash3(gx*3+y, y*7, gz*3-y);
-      if(caveR < (bio===BIO_FOREST ? 0.034 : 0.006)) b[col+y]= (bio===BIO_FOREST && caveR>0.018 ? AMETHYST : CRYSTAL);
+      if(caveR < (bio===BIO_FOREST ? 0.034 : 0.006)){
+        b[col+y]= (bio===BIO_FOREST && caveR>0.018 ? AMETHYST : CRYSTAL);
+        // 晶簇: 稀有地向上叠一节水晶尖 + 四周挂紫晶, 比单块更有"晶洞"观感(只填空气)
+        if(caveR < 0.0022){
+          if(b[col+y+1]===AIR) b[col+y+1]=CRYSTAL;
+          put(gx+1,y,gz,AMETHYST,false); put(gx-1,y,gz,AMETHYST,false);
+          put(gx,y,gz+1,AMETHYST,false); put(gx,y,gz-1,AMETHYST,false);
+        }
+      }
       else if(bio===BIO_FOREST && caveR<0.08 && b[col+y-1]===STONE) b[col+y-1]=CAVECALC;
     }
     // ---- 地表装饰: 不再生成花/草/树, 改用岩石与遗迹点缀荒野 ----
@@ -662,6 +680,33 @@ function genChunk(cx, cz){
     if(isCactusAt(gx,gz,h,bio) && b[col+h]!==AIR){
       const ch=2+Math.floor(hash2(gx+11,gz-7)*2);     // 高 2~3 格
       for(let k=1;k<=ch;k++) put(gx,h+k,gz,CACTUS,true);
+    }
+    // ---- 沙漠"看点": 风蚀石拱 / 白骨遗骸 / 绿洲棕榈(都很稀有, 各占一片荒漠的地标) ----
+    if(bio===BIO_DESERT && h>WATER_Y+1 && h<58 && b[col+h]!==AIR){
+      const dr=hash2(gx*17+3, gz*17-9);
+      if(dr<0.0009){                                   // 风蚀石拱: 一道砂岩拱门
+        const AW=2+((hash2(gx,gz+1)*2)|0), AH=3+((hash2(gx+2,gz)*2)|0);
+        for(let k=1;k<=AH;k++){ put(gx-AW,h+k,gz,SANDSTONE,true); put(gx+AW,h+k,gz,SANDSTONE,true); }
+        for(let ax=-AW;ax<=AW;ax++) put(gx+ax,h+AH+1,gz,SANDSTONE,true);
+        put(gx-(AW-1),h+AH,gz,SANDSTONE,true); put(gx+(AW-1),h+AH,gz,SANDSTONE,true);  // 内抹角
+      } else if(dr<0.0018){                            // 白骨遗骸: 漂白的巨兽肋骨(复用砂岩=骨色)
+        const L=3+((hash2(gx,gz)*3)|0);
+        for(let s=0;s<L;s++){                          // 脊椎沿 +z, 每节向上弯出一对肋骨
+          put(gx,h+1,gz+s,SANDSTONE,true);
+          put(gx-1,h+1,gz+s,SANDSTONE,false); put(gx+1,h+1,gz+s,SANDSTONE,false);
+          put(gx-2,h+2,gz+s,SANDSTONE,false); put(gx+2,h+2,gz+s,SANDSTONE,false);
+        }
+        put(gx,h+2,gz-1,SANDSTONE,true); put(gx,h+2,gz-2,SANDSTONE,false);             // 头骨方向
+      }
+    }
+    // 绿洲棕榈: 只沿沙漠里的河岸(尼罗河两侧)零星生长, 给绿洲补一抹绿
+    if(bio===BIO_DESERT && h>WATER_Y && h<=WATER_Y+3 && Math.abs(riverField(gx,gz))<0.06
+       && b[col+h]!==AIR && hash2(gx*23+1, gz*23-3)<0.05){
+      const th=4+((hash2(gx,gz)*3)|0);
+      for(let k=1;k<=th;k++) put(gx,h+k,gz,LOG,true);           // 棕榈干(复用橡木原木)
+      const cy=h+th;
+      put(gx,cy+1,gz,LEAVES,false);
+      for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){ put(gx+dx,cy,gz+dz,LEAVES,false); put(gx+dx*2,cy-1,gz+dz*2,LEAVES,false); }  // 下垂的棕榈冠
     }
     // ---- 新群系专属地表资源 ----
     if(b[col+h]!==AIR && h>0){
@@ -8756,6 +8801,22 @@ function selftest(){
       let hmn=1e9,hmx=-1e9,n=0;
       for(let gx=-800;gx<=800 && n<220;gx+=17) for(let gz=-800;gz<=800;gz+=17){ if(biomeAt(gx,gz)===BIO_DESERT){ const hh=heightAt(gx,gz); hmn=Math.min(hmn,hh); hmx=Math.max(hmx,hh); n++; } }
       ok("沙漠地形有起伏且仍可建造(不过高)", n===0 || ((hmx-hmn)>=2 && hmx<52), "样本="+n+" 高差="+(n?(hmx-hmn):0)+" 最高="+(n?hmx:0));
+    }
+
+    // ---- 地图丰富性: 表层材质函数 / 边界柔化 / genChunk 各装饰不崩 ----
+    {
+      ok("表层材质函数分群系正确", surfaceTop(BIO_DESERT,30,false)===SAND && surfaceTop(BIO_MESA,30,false)===CLAY
+         && surfaceTop(BIO_PLAIN,30,false)===GRASS && surfaceTop(BIO_SNOW,66,false)===SNOW && surfaceTop(BIO_FOREST,30,false)===MOSSY,
+         "sand="+(surfaceTop(BIO_DESERT,30,false)===SAND));
+      let genErr=null, okLen=true, sawCactusOrProp=false;
+      try{
+        for(let c=0;c<8;c++){
+          const arr=genChunk(c*3-6, c*2+5);
+          if(arr.length!==CS*CS*H) okLen=false;
+          for(let i=0;i<arr.length;i++){ if(arr[i]===CACTUS||arr[i]===AMETHYST){ sawCactusOrProp=true; break; } }
+        }
+      }catch(e){ genErr=e.message; }
+      ok("genChunk 生成各群系装饰(沙丘/石拱/白骨/棕榈/晶簇/边界柔化)无异常且尺寸正确", !genErr && okLen, genErr||("len="+(CS*CS*H)));
     }
 
     // 收尾再确认一次: 即使中途 saveGame 写过测试世界, 还原后玩家存档仍在
