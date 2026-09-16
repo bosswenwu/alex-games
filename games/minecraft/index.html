@@ -516,6 +516,14 @@ function riverInfluence(x,z){
   if(d<=halfW) return 1;
   return 1-(d-halfW)/bank;                    // 1→0 的平滑过渡, 避免河岸变成垂直峭壁
 }
+/* 沙海沙丘: 沿"风向"的长条沙脊(周期约70格, 坡缓) + 大尺度沙丘群起伏; 恒 ≥0, 约 0~8。
+   让"沙海奇境"的沙漠真正起伏成海, 又保留波谷平地便于建造。 */
+function desertDune(x,z){
+  const wind = x*0.045 + z*0.022;                    // 斜向风
+  const ridge = 1 - Math.abs(Math.sin(wind));        // 0..1, 一列列沙脊
+  const swell = fbm2(x*0.012+911, z*0.012-733, 3);   // 0..1, 大尺度沙丘群
+  return Math.pow(ridge,1.6)*5.0 + swell*3.2;        // ≥0, 约 0~8
+}
 function heightAt(x, z){
   const k=ckey(x,z), c=_hCache.get(k);
   if(c!==undefined) return c;
@@ -524,7 +532,7 @@ function heightAt(x, z){
   const m  = fbm2(x*0.0038+533.7, z*0.0038-217.3, 4);       // 山脉遮罩(阈值抬高→更稀少)
   let h = 31 + n1*7 + Math.pow(Math.max(0,(m-0.72)/0.28), 2.2)*26;
   const bio=biomeAt(x,z);
-  if(bio===BIO_DESERT) h = WATER_Y+2 + (h-WATER_Y-2)*0.45;  // 沙漠平坦
+  if(bio===BIO_DESERT) h = WATER_Y+2 + (h-WATER_Y-2)*0.45 + desertDune(x,z);  // 沙海: 平坦基底 + 沙丘起伏
   // 沼泽: 在水位线上下起伏, 形成"浅水+小岛"的湿地, 而不是压成一条平线
   else if(bio===BIO_SWAMP) h = WATER_Y - 3.2 + (h-WATER_Y)*0.42;
   else if(bio===BIO_MESA)  h = h*0.82 + 6;
@@ -8738,6 +8746,16 @@ function selftest(){
       } finally {
         armor=aS; cores=cS; dmgMul=dS; maxHp=mS; hp=hS; bag.clear(); for(const [k,v] of bagS) bag.set(k,v); updateHearts();
       }
+    }
+
+    // ---- 地图: 沙海沙丘 ----
+    {
+      let mn=1e9,mx=-1e9;
+      for(let i=0;i<400;i++){ const d=desertDune(i*7-100, i*3+40); mn=Math.min(mn,d); mx=Math.max(mx,d); }
+      ok("沙丘高度非负且有起伏", mn>=0 && mx<=10 && (mx-mn)>2, "min="+mn.toFixed(1)+" max="+mx.toFixed(1));
+      let hmn=1e9,hmx=-1e9,n=0;
+      for(let gx=-800;gx<=800 && n<220;gx+=17) for(let gz=-800;gz<=800;gz+=17){ if(biomeAt(gx,gz)===BIO_DESERT){ const hh=heightAt(gx,gz); hmn=Math.min(hmn,hh); hmx=Math.max(hmx,hh); n++; } }
+      ok("沙漠地形有起伏且仍可建造(不过高)", n===0 || ((hmx-hmn)>=2 && hmx<52), "样本="+n+" 高差="+(n?(hmx-hmn):0)+" 最高="+(n?hmx:0));
     }
 
     // 收尾再确认一次: 即使中途 saveGame 写过测试世界, 还原后玩家存档仍在
