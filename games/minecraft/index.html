@@ -4933,6 +4933,13 @@ function foeHpMul(){  return 1 + (diffLevel()-1)*0.05; }      // 敌人血量: �
 function eliteChance(){ return Math.min(0.30, 0.04 + dayCount*0.02); } // 精英怪概率: 第1天6% → 随天数最高30%
 function swarmChance(){ return 0.12 + Math.min(dayCount,8)*0.012; }     // 成群出没概率: 第1天≈13% → 后期≈22%
 function spawnPack(type, n, minD, maxD){ let ok=0; for(let i=0;i<n;i++) if(spawnMob(type,minD,maxD)) ok++; return ok; } // 一次刷一窝(蜂群式)
+/* 沙暴袭击: 沙暴中出没的沙漠生物(纯函数便于 selftest); startSandRaid 在沙暴降临时开一波 */
+function sandRaidType(r){ const pool=["scarab","serqet","spider","sandworm"]; return pool[Math.min(pool.length-1, (r*pool.length)|0)]; }
+function startSandRaid(){
+  if(typeof playing==="function" && !playing()) return;
+  const n=2+((Math.random()*2)|0);                 // 开场 2~3 只, 随后 trySpawns 持续补充
+  for(let i=0;i<n;i++) spawnMob(sandRaidType(Math.random()), 16, 34);
+}
 /* 夜间对手挑选(纯函数: 群系 + [0,1) 随机数 → [类型,最近,最远]); 大幅降低僵尸/木乃伊占比, 便于 selftest 断言分布 */
 function nightSpawnFor(bio, r){
   if(bio===BIO_VOLCANO)  return r<0.34?["slime",20,42]  : r<0.60?["skeleton",22,46]: r<0.82?["spider",18,40] : ["creeper",22,46];   // 火山
@@ -4989,6 +4996,10 @@ function trySpawns(dt){
         spawnMob(t, mn, mx);
       }
     }
+  }
+  // 沙暴袭击波: 沙暴中沙漠生物趁乱来袭——不分昼夜, 给白天的战斗一个"舞台"(信号明确、有时限)
+  if(weather==="sand" && zc<cap+3 && Math.random()<0.6 && aridBiome(biomeAt(Math.floor(player.x),Math.floor(player.z)))){
+    spawnMob(sandRaidType(Math.random()), 16, 34);
   }
   // 金字塔守卫: 靠近金字塔时白天也会有木乃伊/圣甲虫, 并有一只阿努比斯守卫
   const pyr=nearStructure(["pyramid"],46);
@@ -6365,7 +6376,7 @@ function updateWeather(dt){
     const r=Math.random();
     const bio=biomeAt(Math.floor(player.x),Math.floor(player.z));
     if(weather==="clear"){
-      if(aridBiome(bio) && r<0.48){ weather="sand"; weatherT=8+Math.random()*6; showName("🌪 沙暴来袭！能见度骤降 — 躲进掩体或建筑"); }   // 沙暴短(8~14秒)
+      if(aridBiome(bio) && r<0.48){ weather="sand"; weatherT=10+Math.random()*8; showName("🌪 沙暴袭来！黄沙里有东西在逼近——小心伏击"); startSandRaid(); }   // 沙暴(10~18秒)会掩护一波沙漠生物突袭
       else { weather = r<0.25?"storm":"rain"; weatherT=25+Math.random()*35; showName(weather==="storm"?"⛈ 雷暴来袭！":"🌧 下雨了"); }
     }
     else { weather="clear"; weatherT=240+Math.random()*260; showName("☀ 天放晴了"); }
@@ -7871,6 +7882,8 @@ window.__game = {
   get streak(){ return { cur:killStreak, best:bestStreak, elites:elitesSlain }; },
   get bounty(){ const b=curBounty(); return { id:b.id, desc:b.desc, prog:bountyProg, goal:b.goal, done:bountyDone }; },
   get bossBar(){ return bossBarState(); },
+  get sandstorm(){ return { weather, active:weather==="sand", arid:aridBiome(biomeAt(Math.floor(player.x),Math.floor(player.z))) }; },
+  raidType:(r)=>sandRaidType(r),
   skyNight:(h)=>skyNightFactor(h),
   setDay(n){ dayCount=Math.max(1,n|0); return dayCount; },     // 调试/自测: 直接设定天数以检验难度曲线
   selftest
@@ -8670,6 +8683,17 @@ function selftest(){
       ok("成群概率合法且随天数上升", sc1>0 && sc1<1 && sc8>sc1 && sc8<1, "第1天="+sc1.toFixed(2)+" 后期="+sc8.toFixed(2));
       const mlenS=mobs.length; const got=spawnPack("scarab",4,10,20);
       ok("成群出没一次刷多只", got>=1 && mobs.length-mlenS===got, "生成="+got);
+      mobs.length=mlenS;
+    }
+
+    // ---- 战斗舞台批次: 沙暴袭击 ----
+    {
+      const pool=new Set(); for(let i=0;i<40;i++) pool.add(sandRaidType(i/40));
+      const okPool=[...pool].every(t=>["scarab","serqet","spider","sandworm"].includes(t) && MOB_DEFS[t] && MOB_DEFS[t].hostile && !MOB_DEFS[t].boss);
+      ok("沙暴袭击者均为沙漠系可战敌人", okPool && pool.size>=3, "谱系="+[...pool].join(","));
+      ok("沙暴袭击限定干旱群系", aridBiome(BIO_DESERT)&&aridBiome(BIO_MESA)&&!aridBiome(BIO_SNOW)&&!aridBiome(BIO_FOREST), "ok");
+      const mlenS=mobs.length; const t0=sandRaidType(0.1); const spawned=spawnMob(t0,10,20);
+      ok("沙暴袭击能刷出敌人", spawned && mobs.length-mlenS===1 && mobs[mobs.length-1].type===t0, "type="+t0+" ok="+spawned);
       mobs.length=mlenS;
     }
 
