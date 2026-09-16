@@ -67,6 +67,7 @@
   #lavatint { position:absolute; inset:0; background:rgba(190,60,10,.72); display:none; }
   #firetint { position:absolute; inset:0; box-shadow:inset 0 0 120px 40px rgba(255,110,20,.55); display:none; pointer-events:none; }
   #hurttint { position:absolute; inset:0; background:radial-gradient(ellipse at center, rgba(180,0,0,.15) 30%, rgba(170,0,0,.55)); opacity:0; transition:opacity .12s; }
+  #poisontint { position:absolute; inset:0; background:radial-gradient(ellipse at center, rgba(70,150,40,0) 42%, rgba(70,160,50,.5)); opacity:0; transition:opacity .3s; pointer-events:none; }
   #hearts { position:absolute; left:50%; bottom:72px; transform:translateX(-50%); display:flex; }
   #hearts canvas { width:21px; height:18px; image-rendering:pixelated; margin-right:1px; }
   #questbox { position:absolute; left:10px; top:10px; min-width:210px; max-width:300px;
@@ -229,6 +230,7 @@
   <div id="lavatint"></div>
   <div id="firetint"></div>
   <div id="hurttint"></div>
+  <div id="poisontint"></div>
   <div id="cross"></div>
   <div id="itemname"></div>
   <div id="toast"></div>
@@ -3108,6 +3110,8 @@ function doDie(){
 function respawn(){
   dead=false; hp=maxHp; updateHearts();
   killStreak=0; killStreakT=0;                     // 死亡清空连杀
+  poisonT=0; poisonTickT=0;                        // 死亡清除中毒
+  { const pt=document.getElementById("poisontint"); if(pt) pt.style.opacity=0; }
   player.x=spawnPt.x; player.y=spawnPt.y+1; player.z=spawnPt.z;
   player.vx=player.vy=player.vz=player.kbx=player.kbz=0;
   player.flying=false; fallStart=null;
@@ -4801,6 +4805,7 @@ function updateMobs(dt){
           if(dist<reach && m.atkCd<=0 && player.y>m.y-1.5 && player.y<m.y+2.2){
             m.atkCd=D.spider?0.85:1.2; m.swingT=0.3;
             foeStrike(dmg, dx/dist*6, dz/dist*6, m);
+            if(m.type==="serqet") applyPoison(5);   // 巨蝎毒尾: 蜇中→中毒(持续掉血)
           }
         }
       } else if(m.patrol){
@@ -5026,6 +5031,21 @@ function nightSpawnFor(bio, r){
 /* 敌人攻击统一走这里以吃难度加成; 环境/陷阱/摔落伤害仍直接走 damagePlayer, 不随天数膨胀。
    传入攻击者 m 时, 精英怪额外 +50% 伤害。 */
 function foeStrike(dmg,kx,kz,m){ const em=(m&&m.elite)?1.5:1; damagePlayer(Math.max(1,Math.round(dmg*foeDmgMul()*em)), kx, kz); }
+/* ---------- 蝎毒(敌人行为差异化 · 巨蝎) ----------
+   被巨蝎蜇中→中毒: 数秒内每秒掉 1 血(无视护甲, 但不致死, 最低留 1 血), 逼玩家拉开距离回血, 而非硬扛。 */
+let poisonT=0, poisonTickT=0;
+function applyPoison(sec){
+  const was=poisonT; poisonT=Math.max(poisonT, sec);
+  if(was<=0){ poisonTickT=1.0; showName("🦂 蝎毒侵体！持续掉血——拉开距离回血"); }
+}
+function tickPoison(dt){
+  const pt=document.getElementById("poisontint");
+  if(poisonT<=0){ if(pt) pt.style.opacity=0; return; }
+  poisonT-=dt; poisonTickT-=dt;
+  if(poisonTickT<=0){ poisonTickT=1.0; if(!dead && hp>1){ hp=Math.max(1, hp-1); updateHearts(); lastDmg=performance.now(); } }  // 毒不致死
+  if(pt) pt.style.opacity = poisonT>0 ? (0.16+0.12*(0.5+0.5*Math.sin(performance.now()/170))) : 0;
+  if(poisonT<=0){ poisonT=0; if(pt) pt.style.opacity=0; }
+}
 function trySpawns(dt){
   spawnTimer-=dt;
   if(spawnTimer>0) return;
@@ -6678,6 +6698,7 @@ function frame(now){
     updateArrows(dt);
     updateFuses(dt);
     updateDrops(dt);
+    tickPoison(dt);                                                             // 蝎毒持续伤害
     // 岩浆灼烧: 泡在里面持续掉血, 出来后还会继续烧几秒
     if(!dead){
       if(lava){
@@ -7954,6 +7975,7 @@ window.__game = {
                               eliteChance:+eliteChance().toFixed(3), spawnCap:Math.min(8,2+Math.floor(Math.min(dayCount,10)/2)) }; },
   get streak(){ return { cur:killStreak, best:bestStreak, elites:elitesSlain }; },
   get cores(){ return cores; }, get armor(){ return armor; },
+  get poison(){ return +poisonT.toFixed(2); },
   get bounty(){ const b=curBounty(); return { id:b.id, desc:b.desc, prog:bountyProg, goal:b.goal, done:bountyDone }; },
   get bossBar(){ return bossBarState(); },
   get sandstorm(){ return { weather, active:weather==="sand", arid:aridBiome(biomeAt(Math.floor(player.x),Math.floor(player.z))) }; },
@@ -8817,6 +8839,25 @@ function selftest(){
         }
       }catch(e){ genErr=e.message; }
       ok("genChunk 生成各群系装饰(沙丘/石拱/白骨/棕榈/晶簇/边界柔化)无异常且尺寸正确", !genErr && okLen, genErr||("len="+(CS*CS*H)));
+    }
+
+    // ---- 敌人行为差异化: 巨蝎蝎毒(中毒 DoT) ----
+    {
+      const hpS=hp, mS=maxHp, pS=poisonT, ptS=poisonTickT, dS=dead;
+      try{
+        dead=false; maxHp=999; hp=20; poisonT=0; poisonTickT=0;
+        applyPoison(5);
+        ok("蝎毒可施加(中毒计时开始)", poisonT>0, "poisonT="+poisonT.toFixed(1));
+        const h0=hp; tickPoison(1.1);
+        ok("中毒每秒掉血", hp===h0-1, "掉血="+(h0-hp));
+        hp=1; poisonTickT=0; tickPoison(1.1);
+        ok("蝎毒不致死(最低留1血)", hp===1, "hp="+hp);
+        poisonT=0.05; tickPoison(0.2);
+        ok("中毒到期自动清除", poisonT===0, "poisonT="+poisonT);
+      } finally {
+        hp=hpS; maxHp=mS; poisonT=pS; poisonTickT=ptS; dead=dS; updateHearts();
+        const pt=document.getElementById("poisontint"); if(pt) pt.style.opacity=0;
+      }
     }
 
     // 收尾再确认一次: 即使中途 saveGame 写过测试世界, 还原后玩家存档仍在
