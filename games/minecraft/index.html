@@ -2959,6 +2959,7 @@ function doDie(){
 }
 function respawn(){
   dead=false; hp=maxHp; updateHearts();
+  killStreak=0; killStreakT=0;                     // 死亡清空连杀
   player.x=spawnPt.x; player.y=spawnPt.y+1; player.z=spawnPt.z;
   player.vx=player.vy=player.vz=player.kbx=player.kbz=0;
   player.flying=false; fallStart=null;
@@ -3170,6 +3171,9 @@ function chronicleHTML(){
     + row('🪔 神灯许愿', djinnState.rubs+' 次')
     + row('🌊 金羊毛', expeditionState.fleeces+' 束')
     + row('⚙ 机关触发', trapState.triggered)
+    + row('🔥 最高连杀', bestStreak+' 连')
+    + row('💀 精英斩杀', elitesSlain+' 只')
+    + row('⚔ 当前强度', '第 '+dayCount+' 天 · 敌伤 ×'+foeDmgMul().toFixed(2)+' · 敌血 ×'+foeHpMul().toFixed(2))
     + row('🔮 当前天象', om)
     + row('🐫 波斯集市', bz)
     + row('🌊 金羊毛远征', ex)
@@ -4253,6 +4257,7 @@ function drawEntity(ent){
   if(ent.hurtT>0)       gl.uniform3f(U.uTint,1.7,0.35,0.35);
   else if(ent.fuse>0){  const f=0.5+0.5*Math.sin(ent.fuse*ent.fuse*22); gl.uniform3f(U.uTint,1+f*1.4,1+f*0.4,1+f*0.4); } // 苦力怕闪白
   else if(ent.burning)  gl.uniform3f(U.uTint,1.5,0.75,0.4);
+  else if(ent.elite)    gl.uniform3f(U.uTint,1.5,1.22,0.55);   // 精英怪: 金光加身, 一眼可辨
   else if(ent.def.fly)  gl.uniform3f(U.uTint,1.1,1.0,0.9);     // 飞龙暖色
   else if(ent.def.boss) gl.uniform3f(U.uTint,1.15,0.9,1.15);   // 僵尸王偏紫,更威慑
   else                  gl.uniform3f(U.uTint,1,1,1);
@@ -4306,6 +4311,12 @@ function hurtMob(m,dmg,kx,kz,silent){
     }
     if(m.def.hostile){
       kills++; questAdd("hunt",1);
+      // 连杀: 4 秒窗口内连续击杀累计, 越高奖励越多
+      killStreak++; killStreakT=4.0;
+      if(killStreak>bestStreak) bestStreak=killStreak;
+      if(killStreak>=3){ addXP(killStreak); showName("🔥 "+killStreak+" 连杀！  +"+killStreak+" 经验"); }
+      // 精英怪: 掉能量核心 + 额外经验
+      if(m.elite){ elitesSlain++; spawnDrop(m.x, m.y+m.def.h*0.4, m.z, "core"); addXP(12); showName("💰 精英击杀！能量核心 + 大量经验"); }
       if(m.def.boss) questSet("boss");
       if(m.type==="champion")  questSet("champion");
       if(m.type==="legionary") questAdd("legion",1);
@@ -4607,14 +4618,14 @@ function updateMobs(dt){
             }
           }
           // 泰坦近身横扫
-          if(D.boss && dist<3.2 && m.atkCd2<=0){ m.atkCd2=1.4; m.swingT=0.3; damagePlayer(6, dx/dist*10, dz/dist*10); }
+          if(D.boss && dist<3.2 && m.atkCd2<=0){ m.atkCd2=1.4; m.swingT=0.3; foeStrike(6, dx/dist*10, dz/dist*10, m); }
           m.atkCd2=(m.atkCd2||0)-dt;
         } else if(D.hop){                          // 史莱姆: 一跳一跳地追
           speed=D.speed*(m.onGround?0.35:1);
           if(m.onGround && m.hopCd<=0){ m.vy=7.4; m.hopCd=0.55+Math.random()*0.35; }
           m.hopCd=(m.hopCd||0)-dt;
           if(dist<1.5 && m.atkCd<=0 && player.y>m.y-1.2 && player.y<m.y+1.6){
-            m.atkCd=0.9; damagePlayer(3, dx/dist*7, dz/dist*7);
+            m.atkCd=0.9; foeStrike(3, dx/dist*7, dz/dist*7, m);
           }
         } else if(D.creeper){                      // 苦力怕: 贴近自爆
           speed=D.speed;
@@ -4628,14 +4639,14 @@ function updateMobs(dt){
           speed=D.speed;
           if(dist<2.8 && m.atkCd<=0 && player.y>m.y-2 && player.y<m.y+4){
             m.atkCd=1.5; m.swingT=0.3;
-            damagePlayer(5, dx/dist*9, dz/dist*9);
+            foeStrike(5, dx/dist*9, dz/dist*9, m);
           }
         } else {                                   // 僵尸/蜘蛛: 近战
           speed=D.speed;
           const reach=D.spider?1.5:(D.crocodile?2.1:1.7), dmg=D.spider?2:(D.crocodile?7:(D.bigCat?4:3));
           if(dist<reach && m.atkCd<=0 && player.y>m.y-1.5 && player.y<m.y+2.2){
             m.atkCd=D.spider?0.85:1.2; m.swingT=0.3;
-            damagePlayer(dmg, dx/dist*6, dz/dist*6);
+            foeStrike(dmg, dx/dist*6, dz/dist*6, m);
           }
         }
       } else if(m.patrol){
@@ -4745,11 +4756,16 @@ function spawnMob(type,minD,maxD){
     const gy=groundY(x,z);
     if(gy<0 || gy<=WATER_Y+1) continue;
     const sy = (def.fly && (def.ambient||def.plane||def.mount)) ? gy+def.hover : gy;   // 飞行单位生成在空中
+    // 难度: 敌对怪血量随天数上浮; 普通(非Boss)敌对怪有几率成为"精英"——更肉、更痛、掉落更肥
+    const isElite = def.hostile && !def.boss && Math.random() < eliteChance();
+    let mobHp = def.hostile ? Math.max(1, Math.round(def.hp*foeHpMul())) : def.hp;
+    if(isElite) mobHp = Math.round(mobHp*1.6);
     mobs.push({type, def, x:x+0.5, y:sy, z:z+0.5, vx:0,vy:0,vz:0, kbx:0,kbz:0,
-               yaw:Math.random()*6.283, tgtYaw:0, hp:def.hp, hurtT:0, animT:0, t:0,
-               atkCd:0, burnT:0, swingT:0, groanT:2+Math.random()*5, fleeT:0,
+               yaw:Math.random()*6.283, tgtYaw:0, hp:mobHp, maxHp:mobHp, hurtT:0, animT:0, t:0,
+               atkCd:0, burnT:0, swingT:0, groanT:2+Math.random()*5, fleeT:0, elite:isElite,
                onGround:false, pause:false, burning:false,
                held: def.weapon ? heldFor(def.weapon, def.handP) : null});   // 生物手持武器
+    if(isElite) showName("💀 精英"+def.name+"现身——更强，也更肥美！");
     return true;
   }
   return false;
@@ -4778,6 +4794,8 @@ function spawnNearWater(type){
   return false;
 }
 let spawnTimer=0, dayCount=1, kills=0, bossSpawnedTonight=false, boss=null;
+/* ---------- 连杀 / 精英战绩 ---------- */
+let killStreak=0, killStreakT=0, bestStreak=0, elitesSlain=0;   // 4秒窗口内连续击杀累计; bestStreak/elitesSlain 入存档与编年史
 /* ---------- 经验 / 等级: 升级提升最大生命与伤害 ---------- */
 let xp=0, lvl=1;
 const xpNeed = l => 20+ (l-1)*18;
@@ -4826,16 +4844,25 @@ function nearVillage(){                   // 玩家附近(<44格)是否有可住
   }
   return false;
 }
+/* ---------- 难度强度: 随生存天数递增(每次天亮 +1 天), 中后期真正有压迫感 ----------
+   selftest 默认 dayCount=1 → 三个系数恒为基线(1.0/1.0), 不影响既有战斗断言。 */
+function diffLevel(){ return Math.min(dayCount, 12); }        // 难度等级(天数封顶 12, 不再第6天见顶)
+function foeDmgMul(){ return 1 + (diffLevel()-1)*0.06; }      // 敌人伤害: 每天 +6%, 第12天≈+66%
+function foeHpMul(){  return 1 + (diffLevel()-1)*0.05; }      // 敌人血量: 每天 +5%, 第12天≈+55%
+function eliteChance(){ return Math.min(0.30, 0.04 + dayCount*0.02); } // 精英怪概率: 第1天6% → 随天数最高30%
+/* 敌人攻击统一走这里以吃难度加成; 环境/陷阱/摔落伤害仍直接走 damagePlayer, 不随天数膨胀。
+   传入攻击者 m 时, 精英怪额外 +50% 伤害。 */
+function foeStrike(dmg,kx,kz,m){ const em=(m&&m.elite)?1.5:1; damagePlayer(Math.max(1,Math.round(dmg*foeDmgMul()*em)), kx, kz); }
 function trySpawns(dt){
   spawnTimer-=dt;
   if(spawnTimer>0) return;
-  const diff=Math.min(dayCount,6);              // 难度等级(随天数,更平缓)
-  spawnTimer=Math.max(3.0, 5.0-diff*0.2) * (omenActive('ares')?0.55:1) * undeadSpawnMul();   // 连锁: 阿瑞斯躁动天象 / 亡者之夜 → 刷怪更急
+  const diff=Math.min(dayCount,10);             // 难度等级(随天数, 封顶延后到第10天)
+  spawnTimer=Math.max(2.0, 4.5-diff*0.25) * (omenActive('ares')?0.55:1) * undeadSpawnMul();   // 连锁: 阿瑞斯躁动天象 / 亡者之夜 → 刷怪更急
   const night=sunH<0.02;
   const hasBoss=mobs.some(m=>m.def.boss);
   let zc=0, pc=0;
   for(const m of mobs){ if(m.def.boss||m.def.ambient||m.def.car||m.def.plane||m.def.mount) continue; if(m.def.hostile) zc++; else pc++; }
-  let cap=Math.min(4, 1+Math.floor(diff/2));    // 敌对上限: 平时最多 4 只, 只作点缀
+  let cap=Math.min(8, 2+Math.floor(diff/2));    // 敌对上限: 第1天 2 只起步, 随天数最多 7~8 只围攻
   if(omenActive('ares')) cap+=3;                // 连锁: 阿瑞斯躁动天象 → 敌对更多
   if(undeadNight.active) cap=Math.max(cap,10);  // 亡者之夜: 真围城, 敌对上限拉到 10
   if(night){
@@ -5468,7 +5495,7 @@ function updateArrows(dt){
         if(!dead && px>player.x-0.5 && px<player.x+0.5 && pz>player.z-0.5 && pz<player.z+0.5 &&
            py>player.y-0.2 && py<player.y+PH){
           const d=Math.hypot(a.vx,a.vz)||1;
-          damagePlayer(a.fire?5:(a.plasma?3:4), a.vx/d*5, a.vz/d*5);
+          foeStrike(a.fire?5:(a.plasma?3:4), a.vx/d*5, a.vz/d*5);
           if(a.fire||a.plasma) for(let k=0;k<10;k++) particles.push({x:px,y:py,z:pz,vx:(Math.random()-.5)*5,vy:Math.random()*4,vz:(Math.random()-.5)*5,life:.4,size:.12,u:15*TS,v:0,l:1.7});
           arrows.splice(i,1); consumed=true; break;
         }
@@ -6465,6 +6492,7 @@ function frame(now){
     // 生物 & 生存
     updateMobs(dt);
     trySpawns(dt);
+    if(killStreakT>0){ killStreakT-=dt; if(killStreakT<=0){ killStreak=0; } }   // 连杀窗口冷却归零
     const regenBless=(blessKind==="regen"&&blessT>0);
     if(!dead && hp<maxHp && (regenBless || performance.now()-lastDmg>7000)){
       regenAcc+=dt;
@@ -6590,7 +6618,7 @@ function collectSave(){
     arena:{ bestWave:arenaState.bestWave, cleared:arenaState.cleared, keys:arenaState.keys },
     curse:{ pharaohSlain:curseState.pharaohSlain },
     // 尾巴系统累计战绩(机关触发/踩塌/砸中 + 战车碾压); 老存档无 feats → 全归零
-    feats:{ trapsTriggered:trapState.triggered, trapsSprung:trapState.sprung, trapHits:trapState.hits, chariotRams:chariotState.rams, vaultsOpened:vaultState.opened },
+    feats:{ trapsTriggered:trapState.triggered, trapsSprung:trapState.sprung, trapHits:trapState.hits, chariotRams:chariotState.rams, vaultsOpened:vaultState.opened, bestStreak, elitesSlain },
     faction:{ rome:faction.rome, egypt:faction.egypt },
     djinn:{ rubs:djinnState.rubs },
     sphinx:{ solved:sphinxState.solved, failed:sphinxState.failed },
@@ -6667,6 +6695,7 @@ function loadGame(){
   const FT=s.feats||{};
   trapState.triggered=FT.trapsTriggered|0; trapState.sprung=FT.trapsSprung|0; trapState.hits=FT.trapHits|0;
   chariotState.rams=FT.chariotRams|0;
+  bestStreak=FT.bestStreak|0; elitesSlain=FT.elitesSlain|0; killStreak=0; killStreakT=0;   // 连杀战绩(老存档无→归零)
   if(typeof vaultState!=="undefined") vaultState.opened=FT.vaultsOpened|0;   // 封印宝库开启次数(老存档无→0)
   sphinxState.solved=(s.sphinx&&s.sphinx.solved)|0; sphinxState.failed=(s.sphinx&&s.sphinx.failed)|0;   // 斯芬克斯答谜战绩(老存档无→0)
   const FC=s.faction||{}; faction.rome=Math.max(0,Math.min(FAC_MAX,FC.rome|0)); faction.egypt=Math.max(0,Math.min(FAC_MAX,FC.egypt|0));   // 阵营声望(老存档无→归零)
@@ -7742,6 +7771,10 @@ window.__game = {
   getBlock, setBlock, groundY, heightAt, biomeAt,
   save:()=>saveGame(true), load:()=>loadGame(), hasSave, deleteSave,
   teleport(x,y,z){ player.x=x; player.y=y; player.z=z; player.vx=player.vy=player.vz=0; pcx=1e9; refreshChunks(); },
+  get difficulty(){ return { day:dayCount, foeDmg:+foeDmgMul().toFixed(3), foeHp:+foeHpMul().toFixed(3),
+                              eliteChance:+eliteChance().toFixed(3), spawnCap:Math.min(8,2+Math.floor(Math.min(dayCount,10)/2)) }; },
+  get streak(){ return { cur:killStreak, best:bestStreak, elites:elitesSlain }; },
+  setDay(n){ dayCount=Math.max(1,n|0); return dayCount; },     // 调试/自测: 直接设定天数以检验难度曲线
   selftest
 };
 
@@ -8428,6 +8461,61 @@ function selftest(){
     }
     player.x=fx2; player.z=fz2; pcx=1e9; refreshChunks();
     ok("远距离云层UV仍在[0,1)内(防白块)", worstUV<1, "最大|uUVOff|="+worstUV.toFixed(4));
+
+    // ---- 上强度批次: 难度递增 / 精英怪 / 连杀 ----
+    { const snapD=dayCount, snapKS=killStreak, snapBS=bestStreak, snapES=elitesSlain,
+            snapKills=kills, snapXp=xp, snapLvl=lvl, snapMax=maxHp, snapDmgMul=dmgMul, snapHp=hp,
+            snapArmor=armor, snapBless=blessT, snapQi=questIdx, snapQp=questProg, snapQd=questDone,
+            mlen=mobs.length, dlen=drops.length;
+      try{
+        // 1) 难度基线: 第1天系数恒为 1.0(锁定"selftest 不被难度膨胀影响"的前提)
+        dayCount=1;
+        ok("难度基线: 第1天敌伤/敌血系数=1.0", foeDmgMul()===1 && foeHpMul()===1, "dmg="+foeDmgMul()+" hp="+foeHpMul());
+        // 2) 随天数上升
+        dayCount=10;
+        ok("难度随天数上升(第10天敌伤&敌血均>基线)", foeDmgMul()>1.3 && foeHpMul()>1.3, "dmg="+foeDmgMul().toFixed(2)+" hp="+foeHpMul().toFixed(2));
+        // 3) 系数封顶(第12天见顶,不无限膨胀)
+        dayCount=99;
+        ok("难度系数第12天封顶", Math.abs(foeDmgMul()-(1+11*0.06))<1e-9 && Math.abs(foeHpMul()-(1+11*0.05))<1e-9, "dmg="+foeDmgMul().toFixed(3)+" hp="+foeHpMul().toFixed(3));
+        // 4) 敌对上限随天数增多(更有围攻感)
+        const cap=d=>Math.min(8,2+Math.floor(Math.min(d,10)/2));
+        ok("敌对上限随天数上升(第1天<第10天)", cap(1)<cap(10) && cap(10)<=8, "第1天="+cap(1)+" 第10天="+cap(10));
+        // 5) 精英概率随天数上升且落在 (0,0.30]
+        dayCount=1;  const ec1=eliteChance();
+        dayCount=99; const ec2=eliteChance();
+        ok("精英怪概率随天数上升并封顶0.30", ec1>0 && ec1<ec2 && ec2<=0.30, "第1天="+ec1.toFixed(2)+" 封顶="+ec2.toFixed(2));
+        // 6) foeStrike: 精英 +50% 伤害(第1天基线, 排除护甲/祝福干扰)
+        dayCount=1; blessT=0; armor=0; maxHp=999; hp=999;
+        foeStrike(10,0,0,null);         const dmgN=999-hp; hp=999;
+        foeStrike(10,0,0,{elite:true}); const dmgE=999-hp;
+        ok("精英攻击比普通更痛(约+50%)", dmgE>dmgN, "普通="+dmgN+" 精英="+dmgE);
+        // 7) 连杀累计 + best 记录(用手搓僵尸走真实 hurtMob 击杀流程)
+        maxHp=999; hp=999; killStreak=0; bestStreak=0; killStreakT=0;
+        const foe=()=>({type:"zombie",def:MOB_DEFS.zombie,x:player.x+0.6,y:player.y,z:player.z,vx:0,vy:0,vz:0,kbx:0,kbz:0,
+          yaw:0,tgtYaw:0,hp:1,hurtT:0,animT:0,t:0,atkCd:0,burnT:0,swingT:0,groanT:0,fleeT:0,onGround:true,pause:false,burning:false,held:null});
+        for(let k=0;k<3;k++){ const z=foe(); mobs.push(z); hurtMob(z,50,0,0); }
+        ok("连杀累计(连斩3只→streak=3)", killStreak===3 && bestStreak===3, "streak="+killStreak+" best="+bestStreak);
+        // 8) 连杀窗口超时清零(复刻 tick 内的衰减, best 保留)
+        killStreakT=0.02; killStreakT-=0.05; if(killStreakT<=0) killStreak=0;
+        ok("连杀窗口超时清零(最高纪录保留)", killStreak===0 && bestStreak===3, "streak="+killStreak+" best="+bestStreak);
+        // 9) 精英击杀计入战绩
+        const eBefore=elitesSlain; const ez=foe(); ez.elite=true; mobs.push(ez); hurtMob(ez,50,0,0);
+        ok("精英击杀计入战绩", elitesSlain===eBefore+1, "elitesSlain="+elitesSlain);
+        // 10) 战绩写入存档(feats)并可还原; 老存档(无字段)归零
+        bestStreak=7; elitesSlain=4;
+        const sv=collectSave();
+        ok("连杀/精英战绩写入存档(feats)", sv.feats.bestStreak===7 && sv.feats.elitesSlain===4,
+           "feats={best:"+sv.feats.bestStreak+",elites:"+sv.feats.elitesSlain+"}");
+        const ftOld={}; // 模拟老存档: feats 缺这两个字段 → |0 归零
+        ok("老存档(无连杀字段)战绩归零", (ftOld.bestStreak|0)===0 && (ftOld.elitesSlain|0)===0, "best="+(ftOld.bestStreak|0)+" elites="+(ftOld.elitesSlain|0));
+      } finally {
+        // 还原一切被本批次改动的运行态
+        dayCount=snapD; killStreak=snapKS; bestStreak=snapBS; elitesSlain=snapES; killStreakT=0;
+        kills=snapKills; xp=snapXp; lvl=snapLvl; maxHp=snapMax; dmgMul=snapDmgMul; hp=snapHp;
+        armor=snapArmor; blessT=snapBless; questIdx=snapQi; questProg=snapQp; questDone=snapQd;
+        mobs.length=mlen; drops.length=dlen; updateHearts();
+      }
+    }
 
     // 收尾再确认一次: 即使中途 saveGame 写过测试世界, 还原后玩家存档仍在
     sandseaStorageRestore(liveStore);

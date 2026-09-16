@@ -157,3 +157,14 @@
 - **根因**：`#viewmodel` 是独立于 WebGL 场景的 DOM 2D 覆盖层, 只在 `selectSlot()`/初始化时重绘, 其显隐从不随 `camMode` 变化; 而第三人称玩家模型走 `camMode>0` 分支单独绘制。两者互不知情, 故第三人称时第一人称手不被隐藏。
 - **修复**：`F5` 切换处理里, 依 `camMode` 同步 `#viewmodel` 显隐(`camMode>0` → `display:none`, 回到第一人称 → 恢复)。`camMode` 仅在声明处(=0)与该处赋值, 无其它重置路径, 首帧默认第一人称手可见——状态始终一致。
 - **验证**：无头 Chromium(SwiftShader) `?selftest=1` → **PASS 154/154**(无回归); 自动化操作(移动/转视角/挖掘/放置/切枪/多次切视角)全程 **0 运行时异常**; 实渲染第三人称截图确认右下角第一人称手已消失, 第一人称下(含手持 TNT)手持模型仍正常。
+
+## Claude 进度（2026-09-16：沙海奇境「上强度 + 丰富玩法」批次）
+
+> 用户直派: "给沙海奇境上强度 / 丰富游戏"。一批相互咬合的战斗强化, 全部 headless `?selftest=1` 可断言, 且第1天(=selftest 默认 dayCount)三系数恒为基线 1.0, 不动既有 154 条断言。
+
+- **难度随天数递增**: 新增 `diffLevel()`(天数封顶12) + `foeDmgMul()`(每天 +6%, 顶 +66%) + `foeHpMul()`(每天 +5%, 顶 +55%)。敌人攻击统一改走 `foeStrike(dmg,kx,kz,m)`(6 处近战/远程弹), 环境/陷阱/摔落伤害仍走 `damagePlayer` 不膨胀; 敌对怪血量在 `spawnMob` 里按 `foeHpMul()` 上浮(仅 `def.hostile`, 动物/坐骑不变)。
+- **刷怪压力**: 难度封顶从第6天延到第10天; 敌对上限 `min(4,1+diff/2)` → `min(8,2+diff/2)`(第1天2只起, 后期7~8只围攻); 夜间刷怪更快更频(spawnTimer `5-0.2d`→`4.5-0.25d`, 夜刷概率 0.25→0.40)。
+- **精英怪(Elite)**: `spawnMob` 里普通(非Boss)敌对怪按 `eliteChance()`(6%→封顶30%)升为精英——血量 ×1.6、`foeStrike` 攻击 ×1.5、`drawEntity` 金光染色一眼可辨、击杀掉能量核心 + 额外经验。
+- **连杀(Streak)**: 4 秒窗口内连续击杀累计, ≥3 连出提示并给经验; `killStreak/bestStreak/elitesSlain` 三态, 死亡清零、`bestStreak/elitesSlain` 入存档 `feats`(老存档缺字段→归零)、编年史新增"最高连杀/精英斩杀/当前强度"三行。
+- **调试接口**: `window.__game` 增 `difficulty`(day/foeDmg/foeHp/eliteChance/spawnCap 只读) + `streak`(cur/best/elites 只读) + `setDay(n)`。
+- **验证**: 无头 Chromium(SwiftShader) `?selftest=1` → **PASS 165/165**(新增 11 条: 难度基线/递增/封顶、敌对上限曲线、精英概率区间、精英 +50% 伤害、连杀累计/超时清零、精英战绩、存档往返、老档归零); 新用例全程快照/还原 dayCount/连杀/经验/任务等运行态, 不污染现场; 实渲染进世界正常, 第三人称第一人称手仍正确隐藏。**待真机点测**: 后期围攻手感与精英出现频率。
