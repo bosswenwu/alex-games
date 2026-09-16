@@ -4931,6 +4931,18 @@ function diffLevel(){ return Math.min(dayCount, 12); }        // 难度等级(�
 function foeDmgMul(){ return 1 + (diffLevel()-1)*0.06; }      // 敌人伤害: 每天 +6%, 第12天≈+66%
 function foeHpMul(){  return 1 + (diffLevel()-1)*0.05; }      // 敌人血量: 每天 +5%, 第12天≈+55%
 function eliteChance(){ return Math.min(0.30, 0.04 + dayCount*0.02); } // 精英怪概率: 第1天6% → 随天数最高30%
+function swarmChance(){ return 0.12 + Math.min(dayCount,8)*0.012; }     // 成群出没概率: 第1天≈13% → 后期≈22%
+function spawnPack(type, n, minD, maxD){ let ok=0; for(let i=0;i<n;i++) if(spawnMob(type,minD,maxD)) ok++; return ok; } // 一次刷一窝(蜂群式)
+/* 夜间对手挑选(纯函数: 群系 + [0,1) 随机数 → [类型,最近,最远]); 大幅降低僵尸/木乃伊占比, 便于 selftest 断言分布 */
+function nightSpawnFor(bio, r){
+  if(bio===BIO_VOLCANO)  return r<0.34?["slime",20,42]  : r<0.60?["skeleton",22,46]: r<0.82?["spider",18,40] : ["creeper",22,46];   // 火山
+  if(bio===BIO_SALTLAKE) return r<0.32?["skeleton",20,44]:r<0.58?["scarab",16,34]  : r<0.80?["serqet",18,38] : r<0.92?["spider",18,40]:["mummy",22,44]; // 盐湖(木乃伊仅8%)
+  if(bio===BIO_CANYON)   return r<0.34?["serqet",18,38] : r<0.60?["scarab",16,34]  : r<0.80?["skeleton",22,46]:["sandworm",22,44];  // 峡谷
+  if(bio===BIO_DESERT||bio===BIO_MESA)                                                                                              // 沙海主场(木乃伊仅4%)
+    return r<0.24?["scarab",16,34]: r<0.44?["serqet",18,38]: r<0.62?["spider",18,40]: r<0.78?["skeleton",22,46]: r<0.90?["slime",22,44]: r<0.96?["sandworm",22,44]:["mummy",22,46];
+  if(bio===BIO_SNOW||bio===BIO_TAIGA) return r<0.34?["skeleton",22,46]:r<0.60?["slime",22,44]:r<0.82?["spider",18,40]:["mech",24,46]; // 雪原/遗迹
+  return r<0.30?["slime",22,44]: r<0.55?["spider",18,40]: r<0.78?["skeleton",22,46]: r<0.90?["creeper",22,46]:["zombie",22,46];     // 其余(僵尸仅10%)
+}
 /* 敌人攻击统一走这里以吃难度加成; 环境/陷阱/摔落伤害仍直接走 damagePlayer, 不随天数膨胀。
    传入攻击者 m 时, 精英怪额外 +50% 伤害。 */
 function foeStrike(dmg,kx,kz,m){ const em=(m&&m.elite)?1.5:1; damagePlayer(Math.max(1,Math.round(dmg*foeDmgMul()*em)), kx, kz); }
@@ -4966,33 +4978,15 @@ function trySpawns(dt){
     if(zc<cap && Math.random()<(undeadNight.active?0.75:(omenActive('ares')?0.45:0.25))){   // 亡者之夜/躁动 → 刷得更急更多
       const bio=biomeAt(Math.floor(player.x),Math.floor(player.z));
       const r=Math.random();
-      // 敌人按群系分化, 不再永远是僵尸
-      // 去掉圣甲虫/虫豸类, 保留少量有辨识度的对手
-      if(bio===BIO_VOLCANO){                        // 火山: 焦土亡魂 + 岩浆史莱姆
-        if(r<0.4) spawnMob("slime",20,42);
-        else if(r<0.7) spawnMob("skeleton",22,46);
-        else spawnMob("creeper",22,46);
-      } else if(bio===BIO_SALTLAKE){                 // 枯骨盐湖: 白骨遍地, 以骷髅/圣甲虫为主
-        if(r<0.5) spawnMob("skeleton",20,44);
-        else if(r<0.8) spawnMob("scarab",16,34);
-        else spawnMob("mummy",22,44);
-      } else if(bio===BIO_CANYON){                   // 风蚀峡谷: 岩缝里的巨蝎与圣甲虫
-        if(r<0.45) spawnMob("serqet",18,38);
-        else if(r<0.75) spawnMob("scarab",16,34);
-        else spawnMob("skeleton",22,46);
-      } else if(bio===BIO_DESERT||bio===BIO_MESA){
-        if(r<0.45) spawnMob("mummy",22,46);
-        else if(r<0.75) spawnMob("skeleton",22,46);
-        else spawnMob("slime",22,44);
-      } else if(bio===BIO_SNOW||bio===BIO_TAIGA){
-        if(r<0.45) spawnMob("skeleton",22,46);
-        else if(r<0.75) spawnMob("slime",22,44);
-        else spawnMob("mech",24,46);
+      // 成群出没: 小概率一次涌出一窝快速小怪(蜂群式围攻, 区别于零散单刷)
+      if(Math.random() < swarmChance()){
+        const swarmType = (bio===BIO_DESERT||bio===BIO_MESA||bio===BIO_SALTLAKE||bio===BIO_CANYON) ? "scarab"
+                        : (bio===BIO_SNOW||bio===BIO_TAIGA) ? "slime" : "spider";
+        const n = 3 + ((Math.random()*2)|0);        // 3~4 只
+        if(spawnPack(swarmType, n, 16, 34) > 0) showName("🐝 "+MOB_DEFS[swarmType].name+"群涌来了！");
       } else {
-        if(r<0.30) spawnMob("slime",22,44);
-        else if(r<0.60) spawnMob("skeleton",22,46);
-        else if(r<0.80) spawnMob("zombie",22,46);
-        else spawnMob("creeper",22,46);
+        const [t,mn,mx]=nightSpawnFor(bio, r);       // 按群系挑一个对手(纯函数, 便于 selftest 断言分布)
+        spawnMob(t, mn, mx);
       }
     }
   }
@@ -5000,8 +4994,9 @@ function trySpawns(dt){
   const pyr=nearStructure(["pyramid"],46);
   if(pyr){
     let guard=0, anu=0;
-    for(const m of mobs){ if(m.type==="mummy") guard++; if(m.type==="anubis") anu++; }
-    if(guard<3 && Math.random()<0.30) spawnMob("mummy",10,26);
+    for(const m of mobs){ if(m.type==="mummy"||m.type==="scarab"||m.type==="serqet") guard++; if(m.type==="anubis") anu++; }
+    // 金字塔守卫多样化: 圣甲虫/巨蝎为主, 木乃伊只占少数(不再一律木乃伊)
+    if(guard<4 && Math.random()<0.34){ const g=Math.random(); spawnMob(g<0.5?"scarab":(g<0.8?"serqet":"mummy"),10,26); }
     if(anu===0 && !hasBoss && Math.random()<0.25){
       if(spawnMob("anubis",10,24)) showName("⚠ 阿努比斯守卫苏醒了！⚠");
     }
@@ -8656,6 +8651,26 @@ function selftest(){
         if(typeof arenaState!=="undefined") arenaState.keys=keyS;
         xp=xpS; lvl=lvlS; maxHp=maxS; hp=hpS; dmgMul=dmgS; drops.length=dropS; updateHearts();
       }
+    }
+
+    // ---- 敌人多样化批次: 僵尸/木乃伊减量 + 群系分布 + 成群出没 ----
+    {
+      const N=200, cnt={};
+      for(let i=0;i<N;i++){ const [t]=nightSpawnFor(BIO_DESERT, i/N); cnt[t]=(cnt[t]||0)+1; }
+      const mummyFrac=(cnt.mummy||0)/N, kinds=Object.keys(cnt).length;
+      ok("沙漠夜刷木乃伊占比≤8%", mummyFrac<=0.08, "木乃伊="+(mummyFrac*100).toFixed(0)+"%");
+      ok("沙漠夜刷类型丰富(≥5种)且无僵尸", kinds>=5 && !cnt.zombie, "种类="+kinds+" 僵尸="+(cnt.zombie||0));
+      const pln={}; for(let i=0;i<N;i++){ const [t]=nightSpawnFor(BIO_PLAIN, i/N); pln[t]=(pln[t]||0)+1; }
+      ok("平原夜刷僵尸占比≤12%", (pln.zombie||0)/N<=0.12, "僵尸="+(((pln.zombie||0)/N)*100).toFixed(0)+"%");
+      const all=new Set();
+      for(const b of [BIO_DESERT,BIO_MESA,BIO_SALTLAKE,BIO_CANYON,BIO_SNOW,BIO_TAIGA,BIO_VOLCANO,BIO_PLAIN,BIO_FOREST,BIO_SWAMP,BIO_SAVANNA])
+        for(let i=0;i<40;i++){ all.add(nightSpawnFor(b, i/40)[0]); }
+      ok("夜刷谱系含蝎/甲虫/蛛/沙虫/机甲等多样对手", ["scarab","serqet","spider","sandworm","mech","slime","skeleton"].every(t=>all.has(t)), "谱系="+[...all].join(","));
+      const dS=dayCount; dayCount=1; const sc1=swarmChance(); dayCount=8; const sc8=swarmChance(); dayCount=dS;
+      ok("成群概率合法且随天数上升", sc1>0 && sc1<1 && sc8>sc1 && sc8<1, "第1天="+sc1.toFixed(2)+" 后期="+sc8.toFixed(2));
+      const mlenS=mobs.length; const got=spawnPack("scarab",4,10,20);
+      ok("成群出没一次刷多只", got>=1 && mobs.length-mlenS===got, "生成="+got);
+      mobs.length=mlenS;
     }
 
     // 收尾再确认一次: 即使中途 saveGame 写过测试世界, 还原后玩家存档仍在
