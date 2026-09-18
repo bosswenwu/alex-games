@@ -18,6 +18,7 @@
   <meta property="og:image" content="https://bosswenwu.github.io/alex-games/covers/tank-strike.jpg">
   <meta property="og:image:alt" content="Alex Arcade · 钢铁前线 IRON VEIL 装甲射击">
   <meta name="twitter:card" content="summary_large_image">
+  <link rel="preload" as="image" href="covers/tank-strike.jpg" fetchpriority="high">
   <title>Alex Arcade · 在线游戏厅</title>
   <style>
     :root{color-scheme:dark;--bg:#07080c;--panel:#11141b;--line:#ffffff18;--text:#f6f7fb;--muted:#a0a7b5;--lime:#c9ff54;--orange:#ff9d45;font-family:Inter,"Microsoft YaHei",system-ui,sans-serif}
@@ -54,7 +55,7 @@
   </header>
   <main class="shell">
     <section class="hero" aria-labelledby="hero-title">
-      <img class="hero-bg" id="hero-bg" src="covers/tank-strike.jpg" alt="精选游戏世界" fetchpriority="high" decoding="async">
+      <img class="hero-bg" id="hero-bg" src="covers/tank-strike.jpg" alt="精选游戏世界" width="1440" height="900" fetchpriority="high" decoding="async">
       <div class="hero-content">
         <span class="kicker" id="hero-kicker">Featured world · Iron Veil</span>
         <h1 id="hero-title">多元世界<br>打开即玩</h1>
@@ -69,13 +70,13 @@
       <div class="games" id="games-grid"></div>
       <noscript>
         <div class="games">
-          <a class="game" href="games/minecraft/index.html">沙海奇境</a>
-          <a class="game" href="games/abyss/index.html">深渊圣所</a>
-          <a class="game" href="games/zhuzhiliao/index.html">竹知了</a>
-          <a class="game" href="games/haven/index.html">Haven</a>
-          <a class="game" href="games/nebula/index.html">Nebula Strike</a>
-          <a class="game" href="games/three-kingdoms/index.html">三国塔防</a>
-          <a class="game" href="games/tank-strike/index.html">钢铁前线 · IRON VEIL</a>
+          <a class="game" href="games/minecraft/index.html" aria-label="进入沙海奇境">沙海奇境</a>
+          <a class="game" href="games/abyss/index.html" aria-label="进入深渊圣所">深渊圣所</a>
+          <a class="game" href="games/zhuzhiliao/index.html" aria-label="进入竹知了">竹知了</a>
+          <a class="game" href="games/haven/index.html" aria-label="进入 Haven">Haven</a>
+          <a class="game" href="games/nebula/index.html" aria-label="进入 Nebula Strike">Nebula Strike</a>
+          <a class="game" href="games/three-kingdoms/index.html" aria-label="进入三国塔防">三国塔防</a>
+          <a class="game" href="games/tank-strike/index.html" aria-label="进入钢铁前线 IRON VEIL">钢铁前线 · IRON VEIL</a>
         </div>
       </noscript>
     </section>
@@ -100,10 +101,10 @@
       grid.innerHTML = GAMES.map((g, i) => {
         const badge = g.badge || `GAME ${String(i + 1).padStart(2, '0')}`;
         const imgLoad = g.featured ? 'fetchpriority="high"' : 'loading="lazy"';
-        return `<a class="game" href="${href(g)}"><img src="${esc(g.cover)}" alt="${esc(g.name)}游戏画面" ${imgLoad} decoding="async">`
+        return `<a class="game" href="${href(g)}" aria-label="进入${esc(g.name)}"><img src="${esc(g.cover)}" alt="${esc(g.name)}游戏画面" width="1440" height="900" ${imgLoad} decoding="async">`
           + `<div class="game-top"><span class="num">${esc(badge)}</span><span style="display:flex;gap:7px">${g.req?`<span class="genre">${esc(g.req)}</span>`:''}<span class="genre">${esc(g.genre)}</span></span></div>`
           + `<div class="game-info"><h3>${esc(g.name)}</h3><p>${esc(g.desc)}</p>`
-          + `<div class="play-row"><span class="play-now">立即游玩</span><span class="arrow">↗</span></div></div></a>`;
+          + `<div class="play-row"><span class="play-now">立即游玩</span><span class="arrow" aria-hidden="true">↗</span></div></div></a>`;
       }).join('');
       const feat = GAMES.find(g => g.featured);
       if (feat) {
