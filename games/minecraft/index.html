@@ -4451,6 +4451,7 @@ function deathPoof(m){
   });
 }
 function hurtMob(m,dmg,kx,kz,silent){
+  if(m.burrowed) dmg*=0.4;                    // 沙虫埋沙时只受 4 成伤害(出土露头才是反击窗口), 但仍可击杀, 避免"隐身无敌"
   m.hp-=dmg; m.hurtT=0.4;
   m.kbx+=kx; m.kbz+=kz;
   if(kx||kz) m.vy=Math.max(m.vy,4.2);
@@ -4799,6 +4800,22 @@ function updateMobs(dt){
             m.atkCd=1.5; m.swingT=0.3;
             foeStrike(5, dx/dist*9, dz/dist*9, m);
           }
+        } else if(m.type==="sandworm"){            // 沙虫: 钻沙潜行逼近 → 破沙而出爆发
+          m.erupt=(m.erupt||0)-dt;
+          m.burrowed = !(m.erupt>0);               // 出土(erupt>0)时露头可被攻击, 其余时间埋在沙里
+          m.tgtYaw=Math.atan2(dx,-dz);
+          if(m.burrowed){
+            speed=D.speed*1.7;                     // 埋沙时贴地疾行追人
+            // 地表沙尘拖尾: 给玩家"有东西在土里逼近"的预警
+            if(m.onGround) particles.push({x:m.x+(Math.random()-.5),y:m.y+0.1,z:m.z+(Math.random()-.5),
+              vx:(Math.random()-.5)*1.2,vy:0.6+Math.random()*1.0,vz:(Math.random()-.5)*1.2,life:.5,size:.14,u:4*TS,v:0,l:1.1});
+            if(dist<2.8 && m.atkCd<=0){            // 靠近 → 破沙而出, 爆发重击 + 强击退
+              m.atkCd=2.8; m.erupt=1.2; m.swingT=0.3;
+              foeStrike(9, dx/dist*13, dz/dist*13, m);
+              for(let q=0;q<16;q++) particles.push({x:m.x+(Math.random()-.5)*1.5,y:m.y+0.3,z:m.z+(Math.random()-.5)*1.5,
+                vx:(Math.random()-.5)*6,vy:2+Math.random()*4,vz:(Math.random()-.5)*6,life:.7,size:.16,u:4*TS,v:0,l:1.2});
+            }
+          } else speed=D.speed*0.5;                // 出土露头时较慢, 是玩家反击的窗口
         } else {                                   // 僵尸/蜘蛛: 近战
           speed=D.speed;
           const reach=D.spider?1.5:(D.crocodile?2.1:1.7), dmg=D.spider?2:(D.crocodile?7:(D.bigCat?4:3));
@@ -4814,6 +4831,7 @@ function updateMobs(dt){
         m.t=2+Math.random()*3.5; m.pause=Math.random()<0.35; m.tgtYaw=Math.random()*6.283;
       }
       if(!chasing && !m.patrol && !m.pause) speed=D.speed*0.35;
+      if(m.type==="sandworm" && !chasing){ m.burrowed=false; m.erupt=0; }   // 沙虫脱战即露头, 避免隐身游荡
       // 白天阳光下燃烧(苦力怕/蜘蛛/Boss 不燃烧)
       m.burning=false;
       if(sunH>0.08 && !D.creeper && !D.spider && !D.boss){
@@ -6294,6 +6312,7 @@ function render(now){
 
   // 生物模型 & 箭矢
   for(const m of mobs){
+    if(m.burrowed) continue;                          // 沙虫钻沙潜行: 不画模型, 只留地表沙尘拖尾预警
     if(Math.hypot(m.x-camX,m.z-camZ)>fogFar+6) continue;
     drawEntity(m);
   }
@@ -8857,6 +8876,25 @@ function selftest(){
       } finally {
         hp=hpS; maxHp=mS; poisonT=pS; poisonTickT=ptS; dead=dS; updateHearts();
         const pt=document.getElementById("poisontint"); if(pt) pt.style.opacity=0;
+      }
+    }
+
+    // ---- 敌人行为差异化: 沙虫钻沙突袭 ----
+    {
+      const hpS=hp,mS=maxHp,aS=armor,pS=poisonT, mlen=mobs.length, px=player.x,py=player.y,pz=player.z;
+      try{
+        armor=0; maxHp=999; hp=999; poisonT=0;
+        const sw={type:"sandworm",def:MOB_DEFS.sandworm,x:player.x+2,y:player.y,z:player.z,vx:0,vy:0,vz:0,kbx:0,kbz:0,
+          yaw:0,tgtYaw:0,hp:MOB_DEFS.sandworm.hp,hurtT:0,animT:0,t:0,atkCd:0,burnT:0,swingT:0,groanT:0,fleeT:0,onGround:true,pause:false,burning:false,held:null};
+        mobs.length=0; mobs.push(sw);
+        const hp0=hp; let sawBurrow=false, sawErupt=false;
+        for(let f=0; f<20; f++){ updateMobs(0.05); if(sw.burrowed) sawBurrow=true; if(sw.erupt>0) sawErupt=true; }
+        ok("沙虫会钻沙潜行(burrowed)", sawBurrow, "曾潜行="+sawBurrow);
+        ok("沙虫破沙而出并造成伤害", sawErupt && hp<hp0, "曾出土="+sawErupt+" 掉血="+(hp0-hp));
+        sw.burrowed=true; const whp=sw.hp; hurtMob(sw,10,0,0,true);
+        ok("沙虫埋沙时只受4成伤害(可击杀非无敌)", Math.abs((whp-sw.hp)-4)<1e-6, "掉血="+(whp-sw.hp));
+      } finally {
+        mobs.length=mlen; hp=hpS; maxHp=mS; armor=aS; poisonT=pS; player.x=px; player.y=py; player.z=pz; updateHearts();
       }
     }
 
