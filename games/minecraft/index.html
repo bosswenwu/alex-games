@@ -2441,7 +2441,7 @@ const mainProg = makeShader(`
     vec3 col = aces(alb * light * uTint * uDay);
     col = pow(col, vec3(1.0/2.2));
     float lum = dot(col, vec3(0.299, 0.587, 0.114));
-    col = clamp(mix(vec3(lum), col, 1.18), 0.0, 1.0);   // ACES 会压饱和, 补回体素色块的鲜明度
+    col = clamp(mix(vec3(lum), col, 1.06), 0.0, 1.0);   // ACES 会压饱和, 略补; 其余饱和/鲜艳度交给后处理调色(否则草地发荧光)
     // --- 大气透视: 雾色取天空同方向的颜色(朝太阳偏暖亮、背阳偏蓝), 浓度 = 高度雾与距离雾取大 ---
     float d = length(vRel);
     col = mix(col, fogColor(vRel/max(d, 0.001)), fogAmount(vRel, d, vSky));
@@ -7928,7 +7928,7 @@ function lightState(){
   _ls.light[0]=L[0]; _ls.light[1]=L[1]; _ls.light[2]=L[2];
   // 光的颜色(线性空间)
   if(useSun){
-    const k=1.25*sunI;
+    const k=1.15*sunI;
     _ls.sunCol[0]=k*1.0; _ls.sunCol[1]=k*(0.93-0.33*warm); _ls.sunCol[2]=k*(0.82-0.48*warm);
   } else {
     _ls.sunCol[0]=moonI*0.55; _ls.sunCol[1]=moonI*0.66; _ls.sunCol[2]=moonI*0.95;
