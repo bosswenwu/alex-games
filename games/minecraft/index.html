@@ -19,7 +19,7 @@
   #cross::before, #cross::after { content:""; position:absolute; background:#ddd; }
   #cross::before { left:50%; top:0; width:2px; height:100%; transform:translateX(-50%); }
   #cross::after  { top:50%; left:0; height:2px; width:100%; transform:translateY(-50%); }
-  #craftPanel, #enchPanel { position:absolute; inset:0; margin:auto; width:min(760px,92vw); max-height:82vh;
+  #craftPanel, #enchPanel, #potionPanel { position:absolute; inset:0; margin:auto; width:min(760px,92vw); max-height:82vh;
     display:none; flex-direction:column; gap:10px; padding:16px 18px; z-index:40;
     background:rgba(18,16,26,.95); border:2px solid #6b5a3a; border-radius:10px;
     color:#f0e6d2; font-size:13px; overflow:auto; box-shadow:0 12px 48px rgba(0,0,0,.6); }
@@ -33,7 +33,8 @@
   .bagCell b { color:#ffd98a; font-weight:bold; }
   .bagEmpty { color:#7d7264; font-style:italic; }
   #enchInfo { color:#c9b184; line-height:1.7; }
-  #recipeList, #enchList { display:flex; flex-direction:column; gap:6px; }
+  #potionInfo { color:#c9b184; line-height:1.7; }
+  #recipeList, #enchList, #potionList { display:flex; flex-direction:column; gap:6px; }
   .recipe { display:flex; justify-content:space-between; align-items:center; gap:12px;
     padding:8px 10px; border-radius:6px; background:rgba(255,255,255,.05);
     border:1px solid rgba(255,255,255,.10); cursor:pointer; }
@@ -234,6 +235,11 @@
   <div id="enchInfo"></div>
   <div id="enchList"></div>
 </div>
+<div id="potionPanel">
+  <div id="craftHead">🧪 沙漠药水<span id="craftHint">按 1–4 饮用 · V / Esc 关闭</span></div>
+  <div id="potionInfo"></div>
+  <div id="potionList"></div>
+</div>
 <div id="npcPanel">
   <div id="npcHead"><span id="npcTitle">NPC</span><span id="craftHint">按 F / Esc 关闭</span></div>
   <div id="npcGreet"></div>
@@ -340,7 +346,7 @@
     <b>W A S D</b> 移动　<b>空格</b> 跳跃(双击飞行)　<b>Shift</b> 潜行/下降　<b>E</b> 上车/骑乘<br>
     <b>左键</b> 挖掘/攻击　<b>右键</b> 放置/使用道具　<b>1–9 / 滚轮</b> 切换物品栏<br>
     <b>探索</b>：右上角<b>指南针</b>指向最近地标——朝它走，寻访金字塔·绿洲·奇观群系<br>
-    <span style="opacity:.7">走进不同群系会有天色与怪物变化，进游戏后随时会有提示 · <b>H</b> 查看完整帮助 · <b>O</b> 切换画质</span>
+    <span style="opacity:.7">走进不同群系会有天色与怪物变化，进游戏后随时会有提示 · <b>H</b> 查看完整帮助 · <b>O</b> 切换画质 · <b>V</b> 药水 · <b>X</b> 钓鱼 · 喂仙人掌驯服骆驼(E)</span>
   </div>
   <div id="legal">
     《沙海奇境 Sandsea》是一个独立的开源体素游戏，向 Minecraft 致敬。<br>
@@ -2306,6 +2312,17 @@ function makeShader(vsrc, fsrc, binds){
   }
   return p;
 }
+/* WebGL2: 把 GLSL 100 源码转成 GLSL 300 es, 并给指定 varying 加 centroid 插值。
+   目的: 离屏 MSAA 下, 只被部分覆盖的像素按"采样点所在位置"插值 UV, 不再外推到三角形之外去采图集相邻格子
+   (否则远处亚像素小方块会满屏彩色噪点)。WebGL1 仍用原 GLSL 100 源码, 行为不变。 */
+function glsl3(vs, fs, centroid){
+  const cen=v=>new RegExp("\\bvarying\\s+(\\w+)\\s+("+v+")\\b","g");
+  let v=vs, f=fs;
+  for(const n of centroid||[]){ v=v.replace(cen(n),"centroid varying $1 $2"); f=f.replace(cen(n),"centroid varying $1 $2"); }
+  v="#version 300 es\n"+v.replace(/\battribute\b/g,"in").replace(/\bvarying\b/g,"out");
+  f="#version 300 es\nout highp vec4 fragColor;\n"+f.replace(/\bvarying\b/g,"in").replace(/\btexture2D\s*\(/g,"texture(").replace(/\bgl_FragColor\b/g,"fragColor");
+  return [v,f];
+}
 // 主着色器(方块/粒子/生物)
 /* 光影管线(第 1 步):
    - aF 编码 "面朝向 + 天光": aF = face + 8*sky。face 0..5 = 方块六面, 6 = 十字植物, 7 = 旧式(生物/粒子, 明暗已烘进 aL);
@@ -2448,7 +2465,7 @@ const FS_PREC=`
 // 方块光颜色(线性空间, 暖橙烛光)与强度: 夜里强、黄昏中等、正午只剩一点(白天日光本身就亮)
 const BL_COL_GLSL="vec3(1.0, 0.72, 0.40)";
 const blockLightK=sunH=>2.4-2.05*smoothstep(-0.05,0.35,sunH);
-const mainProg = makeShader(`
+const _mainSrc = [`
   attribute vec3 aPos; attribute vec2 aUV; attribute float aL; attribute float aF;
   uniform mat4 uPV, uLightPV; uniform vec3 uOffset; uniform vec2 uUVOff; uniform vec3 uEye;
   uniform float uShadowBias, uWTime; uniform vec3 uWind, uWOrig;
@@ -2568,7 +2585,8 @@ const mainProg = makeShader(`
     float d = length(vRel);
     col = mix(col, fogColor(vRel/max(d, 0.001)), fogAmount(vRel, d, vSky));
     gl_FragColor = vec4(col, c.a);
-  }`, CHUNK_ATTRS);
+  }`];
+const mainProg = makeShader(...(IS_GL2 ? glsl3(_mainSrc[0], _mainSrc[1], ["vUV"]) : _mainSrc), CHUNK_ATTRS);   // WebGL2: GLSL 300 + centroid UV(配合离屏 MSAA)
 // 水面着色器: 只画区块的水层。aL = 该顶点处水深(格, 岸边角点更浅); aF 高位 cls = 沼泽(1) + 2*角点旁的岸格数(0..4)
 const waterProg = makeShader(`
   attribute vec3 aPos; attribute vec2 aUV; attribute float aL; attribute float aF;
@@ -4541,6 +4559,11 @@ const RECIPES=[
   {name:"🔨 塞特之锤", desc:"沙暴之神的重锤：下落越高伤害越大，高处砸下震飞周围敌人", cost:[[IRON_ORE,8],[GOLD_ORE,2]],
    ok(){ return !maceOwned; }, lockMsg:"已拥有塞特之锤",
    run(){ setMace(true); selectSlot(HOTBAR_ITEMS.indexOf("mace")); addXP(30); return "🔨 塞特之锤已锻成！(数字键 0) 爬高再砸下来"; }},
+  // 第五轮·云端: 沙漠药水(每次酿 2 瓶, 按 V 打开药水面板饮用)
+  {name:"🧪 酿造·耐热药水", desc:"仙人掌汁 + 盐晶：3 分钟不怕沙暴刮伤与火山灼烤", cost:[[CACTUS,3],[SALTCRYSTAL,1]], run(){ return brewPotion("heat"); }},
+  {name:"🧪 酿造·迅捷药水", desc:"仙人掌汁 + 金：90 秒移动速度 +35%", cost:[[CACTUS,2],[GOLD_ORE,1]], run(){ return brewPotion("swift"); }},
+  {name:"🧪 酿造·夜视药水", desc:"仙人掌汁 + 发光矿脉：3 分钟夜里看得清", cost:[[CACTUS,2],[GLOWVEIN,1]], run(){ return brewPotion("night"); }},
+  {name:"🧪 酿造·治疗药水", desc:"仙人掌汁 + 芦苇：立即回复 8 点生命", cost:[[CACTUS,2],[REEDS,2]], run(){ return brewPotion("heal"); }},
 ];
 /* 把方块塞进物品栏: 优先合并同类, 否则占用一个方块格 */
 function giveBlock(id,n){
@@ -4679,6 +4702,134 @@ function toggleCraft(){
   } else if(!softLock) enterPointerLock();
 }
 /* =========================================================
+   🧪 沙漠药水(第五轮·云端): 合成台酿造 → 药水单独计数 → V 打开面板按 1–4 饮用
+   耐热: 免沙暴刮伤/火山灼烤 · 迅捷: 移速 +35% · 夜视: 夜里提亮 · 治疗: 立即 +8 生命
+   ========================================================= */
+const POTIONS=[
+  {k:"heat",  n:"耐热药水", tag:"🔥", secs:180, d:"3 分钟不怕沙暴刮伤与火山灼烤"},
+  {k:"swift", n:"迅捷药水", tag:"💨", secs:90,  d:"90 秒移动速度 +35%"},
+  {k:"night", n:"夜视药水", tag:"🌙", secs:180, d:"3 分钟夜里看得清"},
+  {k:"heal",  n:"治疗药水", tag:"❤", secs:0,   d:"立即回复 8 点生命"}
+];
+const potions={heat:0, swift:0, night:0, heal:0};   // 库存
+const potionFx={heat:0, swift:0, night:0};           // 生效剩余秒数
+let potionOpen=false, potionCd=0;
+function brewPotion(k){ potions[k]=(potions[k]|0)+2; const P=POTIONS.find(p=>p.k===k); return "🧪 酿成 "+P.n+" x2（按 V 饮用，现有 "+potions[k]+" 瓶）"; }
+function drinkPotion(k){
+  const P=POTIONS.find(p=>p.k===k);
+  if(!P || dead) return false;
+  if(!(potions[k]>0)){ showName("🧪 没有"+P.n+" — 在合成台(B)酿造"); return false; }
+  if(potionCd>0) return false;
+  potions[k]--; potionCd=0.5;
+  if(k==="heal"){ hp=Math.min(maxHp,hp+8); updateHearts(); }
+  else potionFx[k]=Math.max(potionFx[k],P.secs);
+  showName(P.tag+" 喝下"+P.n+(P.secs?"（"+P.secs+"s）":"")+" · 剩 "+potions[k]+" 瓶");
+  sfxLevel && sfxLevel();
+  updateBuffHUD(); if(potionOpen) renderPotions();
+  return true;
+}
+function tickPotions(dt){
+  potionCd=Math.max(0,potionCd-dt);
+  let changed=false;
+  for(const k in potionFx) if(potionFx[k]>0){ potionFx[k]=Math.max(0,potionFx[k]-dt); changed=true; }
+  if(changed && Math.random()<dt*2) updateBuffHUD();
+}
+const potionSpeedMul=()=>potionFx.swift>0?1.35:1;
+const potionHeatProof=()=>potionFx.heat>0;
+const potionNightBoost=()=>potionFx.night>0 ? 1+0.9*(1-smoothstep(0.05,0.45,sunH)) : 1;   // 只在夜里/黄昏提亮, 白天不变
+function renderPotions(){
+  const info=document.getElementById("potionInfo"); if(!info) return;
+  const act=POTIONS.filter(P=>potionFx[P.k]>0).map(P=>P.tag+P.n+" "+Math.ceil(potionFx[P.k])+"s").join("　")||"无";
+  info.innerHTML="生效中："+act+"<br>酿造：打开合成台(B)，仙人掌汁 + 对应材料，每次 2 瓶";
+  document.getElementById("potionList").innerHTML=POTIONS.map((P,i)=>
+    '<div class="recipe'+(potions[P.k]>0?"":" locked")+'" data-k="'+P.k+'"><div><div class="rn">'+(i+1)+". "+P.tag+" "+P.n+'</div><div class="rd">'+P.d+'</div></div>'+
+    '<div class="rc">x'+(potions[P.k]|0)+'</div></div>').join("")
+    +'<div class="recipe'+(fishState.fish>0?"":" locked")+'" data-k="fish"><div><div class="rn">5. 🐟 烤鱼</div><div class="rd">钓来的尼罗河鲈鱼，恢复 5 点生命（X 钓鱼）</div></div><div class="rc">x'+fishState.fish+'</div></div>';
+  for(const el of document.querySelectorAll("#potionList .recipe")) el.onclick=()=>el.dataset.k==="fish"?eatFish():drinkPotion(el.dataset.k);
+}
+function togglePotions(){
+  if(craftOpen) toggleCraft();
+  if(enchOpen) toggleEnch();
+  potionOpen=!potionOpen;
+  document.getElementById("potionPanel").style.display=potionOpen?"flex":"none";
+  if(potionOpen){ renderPotions(); if(document.pointerLockElement) document.exitPointerLock(); }
+  else if(!softLock) enterPointerLock();
+}
+
+/* =========================================================
+   🎣 绿洲钓鱼(第五轮·云端): 对着水面按 X 抛竿 → 3~8 秒后浮标下沉(水花+提示) → 0.9 秒内再按 X 收竿
+   早按/晚按都会空竿; 绿洲村落/河道附近咬钩更快、宝物更多; 鱼可在药水面板(V)里吃掉回血
+   ========================================================= */
+const fishState={on:false, x:0, y:0, z:0, t:0, bite:0, window:0, caught:0, fish:0};
+const FISH_BITE_WIN=0.9;
+function fishWaterAhead(){           // 视线 12 格内第一格水面(遇实心方块中止)
+  const [dx,dy,dz]=lookDir(), ox=player.x, oy=player.y+(player.sneak?EYE-0.12:EYE), oz=player.z;
+  for(let t=1.2;t<=12;t+=0.25){
+    const x=ox+dx*t, y=oy+dy*t, z=oz+dz*t, id=getBlock(Math.floor(x),Math.floor(y),Math.floor(z));
+    if(id===WATER){ let wy=Math.floor(y); while(getBlock(Math.floor(x),wy+1,Math.floor(z))===WATER && wy<H-2) wy++; return [x,wy+0.9,z]; }
+    if(SOLID(id)) return null;
+  }
+  return null;
+}
+function fishRichWater(x,z){         // 绿洲村落/河道: 鱼多宝多
+  return !!nearStructure(["village","oasis"],48) || riverInfluence(Math.floor(x),Math.floor(z))>0;
+}
+function fishLoot(r, rich){          // 纯函数: [类别, 名称]; r∈[0,1)
+  const tr=rich?0.30:0.18;
+  if(r<tr){ const t=(r/tr); return t<0.4?["gold","金矿 x2"]:t<0.7?["relic","文物碎片"]:t<0.9?["gem","钻石"]:["crystal","水晶"]; }
+  if(r<tr+0.14) return ["junk", r<tr+0.07?"芦苇 x2":"睡莲"];
+  return ["fish","尼罗河鲈鱼"];
+}
+function castLine(){
+  const at=fishWaterAhead();
+  if(!at){ showName("🎣 对准 12 格内的水面再按 X"); return false; }
+  const rich=fishRichWater(at[0],at[2]);
+  Object.assign(fishState,{on:true, x:at[0], y:at[1], z:at[2], t:0, bite:(3+Math.random()*5)*(rich?0.7:1), window:0});
+  showName("🎣 抛竿…等浮标下沉再按 X"+(rich?"（这片水域鱼多）":""));
+  return true;
+}
+function reelIn(){
+  const S=fishState; S.on=false;
+  if(S.window<=0){ showName("🎣 收竿太"+(S.t<S.bite?"早":"晚")+"，什么也没钓到"); return null; }
+  const [cat,name]=fishLoot(Math.random(), fishRichWater(S.x,S.z));
+  if(cat==="fish") S.fish++;
+  else if(cat==="gold") giveBlock(GOLD_ORE,2);
+  else if(cat==="relic") npcState.relics++;
+  else if(cat==="gem") giveBlock(GEM_ORE,1);
+  else if(cat==="crystal") giveBlock(CRYSTAL,1);
+  else if(name==="睡莲") giveBlock(LILY,1); else giveBlock(REEDS,2);
+  S.caught++; addXP(cat==="fish"?4:cat==="junk"?1:8);
+  for(let i=0;i<12;i++) particles.push({x:S.x,y:S.y+0.1,z:S.z,vx:(Math.random()-.5)*3,vy:2+Math.random()*2,vz:(Math.random()-.5)*3,life:.5,size:.07,u:(BLOCKS[WATER].s%16)*TS,v:Math.floor(BLOCKS[WATER].s/16)*TV,l:1.2});
+  showName("🎣 钓到了 "+name+(cat==="fish"?"（鱼 x"+S.fish+"，按 V 可吃）":""));
+  sfxPickup && sfxPickup();
+  return cat;
+}
+function tickFishing(dt){
+  const S=fishState; if(!S.on) return;
+  if(dead || Math.hypot(player.x-S.x,player.z-S.z)>16){ S.on=false; showName("🎣 线断了"); return; }
+  S.t+=dt;
+  const bob=Math.sin(S.t*3)*0.04 - (S.window>0?0.25:0);
+  const rt=BLOCKS[ROSE].s;                                      // 红色浮标(复用玫瑰花瓣贴图)
+  particles.push({x:S.x,y:S.y+bob,z:S.z,vx:0,vy:0,vz:0,life:0.05,size:0.09,u:(rt%16)*TS+TS*0.4,v:Math.floor(rt/16)*TV+TV*0.3,l:1.2});
+  if(S.window>0){ S.window-=dt; if(S.window<=0){ S.on=false; showName("🎣 鱼溜走了…"); } return; }
+  if(S.t>=S.bite){
+    S.window=FISH_BITE_WIN;
+    for(let i=0;i<10;i++) particles.push({x:S.x,y:S.y,z:S.z,vx:(Math.random()-.5)*2,vy:1.5+Math.random(),vz:(Math.random()-.5)*2,life:.4,size:.06,u:(BLOCKS[WATER].s%16)*TS,v:Math.floor(BLOCKS[WATER].s/16)*TV,l:1.3});
+    showName("❗ 咬钩了！快按 X");
+    sfxHit && sfxHit();
+  }
+}
+function fishKey(){ if(fishState.on) return reelIn(); return castLine(); }
+function eatFish(){
+  if(!(fishState.fish>0)){ showName("🐟 没有鱼 — 对着水面按 X 钓鱼"); return false; }
+  if(eatCd>0) return false;
+  if(hp>=maxHp){ showName("生命值已满"); return false; }
+  eatCd=1.2; fishState.fish--; hp=Math.min(maxHp,hp+5); updateHearts(); sfxEat();
+  showName("🐟 烤鱼真香，恢复 5 点生命（剩 "+fishState.fish+" 条）"); if(potionOpen) renderPotions();
+  return true;
+}
+
+/* =========================================================
    NPC 人物系统 + 神谕祝福 + 沙漠考古  (全部为增量, 复用背包/合成/经验/地标)
    - 商队商人: 用沙漠材料/文物换货物与图纸
    - 神谕祭司: 献供品换祝福 buff 与预言
@@ -4715,6 +4866,7 @@ function updateBuffHUD(){
     if(djinnState.cd>0) bits.push("🪔 神灯冷却 "+Math.ceil(djinnState.cd)+"s · 按 L");
     else bits.push("🪔 神灯就绪 · 按 L");
   }
+  if(typeof potionFx!=="undefined") for(const P of POTIONS) if(potionFx[P.k]>0) bits.push(P.tag+" "+P.n+" "+Math.ceil(potionFx[P.k])+"s");   // 第五轮·云端
   if(bits.length){ el.style.display="block"; el.innerHTML=bits.join("<br>"); }
   else el.style.display="none";
 }
@@ -5101,6 +5253,33 @@ let locked=false, softLock=false, lastSpace=0, lastW=0;
 let mouseHeld=-1, actTimer=0, dragLook=false, dragMoved=0;
 /* ---------- 骑乘: 骑上悬浮摩托后直接接管飞行控制 ---------- */
 let riding=null;
+/* 🐫 骆驼驯服 + 冲刺跳跃(第五轮·云端): 野生骆驼旁按 E 喂仙人掌(每口 34%, 第 4 口必成) → 驯服后按 E 骑乘;
+   骑乘时按空格向前冲刺跳跃(冷却 2.75 秒), 能蹦上 1 格台阶、越过小沟; 驯服的骆驼不会因走远被清理 */
+const CAMEL_DASH_CD=2.75, CAMEL_DASH_DUR=0.55;
+const camelState={dashT:0, cd:0, tamed:0};
+function camelMountDef(){
+  if(!MOB_DEFS.camelTamed) MOB_DEFS.camelTamed=Object.assign({},MOB_DEFS.camel,{name:"骆驼(按E骑乘·空格冲刺)", mount:true, groundMount:true, camelMount:true, speed:5.8});
+  return MOB_DEFS.camelTamed;
+}
+function feedCamel(m){
+  if(!m || m.type!=="camel" || m.tamed) return false;
+  if(bagCount(CACTUS)<1){ showName("🐫 骆驼想吃仙人掌 — 带上仙人掌再按 E 喂它"); return false; }
+  bagTake(CACTUS,1); m.tameFed=(m.tameFed|0)+1;
+  const ok=m.tameFed>=4 || Math.random()<0.34;
+  for(let i=0;i<(ok?10:4);i++) particles.push({x:m.x+(Math.random()-.5)*.8,y:m.y+1.4+Math.random()*.5,z:m.z+(Math.random()-.5)*.8,vx:0,vy:1+Math.random(),vz:0,life:.7,size:.07,u:(BLOCKS[ROSE].s%16)*TS+TS*0.4,v:Math.floor(BLOCKS[ROSE].s/16)*TV+TV*0.3,l:1.3});
+  if(ok){ m.tamed=true; m.def=camelMountDef(); m.pause=false; camelState.tamed++; addXP(12); showName("🐫 驯服了骆驼！按 E 骑乘，骑行时按空格冲刺跳跃"); sfxLevel && sfxLevel(); }
+  else showName("🐫 骆驼嚼着仙人掌…再喂一口试试（已喂 "+m.tameFed+" 口）");
+  return true;
+}
+function camelDash(){
+  if(!riding || !riding.def.camelMount || camelState.cd>0 || camelState.dashT>0) return false;
+  camelState.dashT=CAMEL_DASH_DUR; camelState.cd=CAMEL_DASH_CD;
+  for(let i=0;i<10;i++) particles.push({x:player.x+(Math.random()-.5),y:player.y+0.1,z:player.z+(Math.random()-.5),vx:(Math.random()-.5)*2,vy:0.8+Math.random(),vz:(Math.random()-.5)*2,life:.5,size:.08,u:(BLOCKS[SAND].s%16)*TS+TS*0.3,v:Math.floor(BLOCKS[SAND].s/16)*TV+TV*0.3,l:1.1});
+  return true;
+}
+function tickCamel(dt){ camelState.cd=Math.max(0,camelState.cd-dt); camelState.dashT=Math.max(0,camelState.dashT-dt); }
+const camelDashHop=()=>camelState.dashT>0 ? Math.sin(Math.PI*(1-camelState.dashT/CAMEL_DASH_DUR))*1.6 : 0;
+const camelDashMul=()=>camelState.dashT>0 ? 2.3 : 1;
 function toggleRide(){
   if(riding){
     const wasGround=riding.def.car||riding.def.groundMount;
@@ -5124,9 +5303,16 @@ function toggleRide(){
       player.flying=false;
       player.x=best.x; player.y=best.y; player.z=best.z;
       showName(best.def.car ? "🚗 驾驶中 — W/S 油门/倒车 · A/D 转向 · E 下车"
+             : best.def.camelMount ? "🐫 骑骆驼 — W/S 前进/后退 · A/D 转向 · 空格冲刺跳跃 · E 下来"
                              : "🐴 骑乘中 — W/S 前进/后退 · A/D 转向 · E 下马");
     }
-  } else showName("附近没有可骑乘的载具/坐骑");
+  } else {
+    // 第五轮·云端: 附近有野生骆驼 → 喂仙人掌驯服
+    let wc=null, wd=4;
+    for(const m of mobs){ if(m && m.type==="camel" && !m.tamed){ const d=Math.hypot(m.x-player.x,m.y-player.y,m.z-player.z); if(d<wd){ wd=d; wc=m; } } }
+    if(wc) feedCamel(wc);
+    else showName("附近没有可骑乘的载具/坐骑");
+  }
 }
 // 每帧把载具贴在玩家脚下, 跟随视角/车头
 function updateRidden(dt){
@@ -5378,6 +5564,10 @@ document.addEventListener("keydown",e=>{
   if(e.code==="Escape" && npcPanelOpen){ closeNPCPanel(); return; }
   if(e.code==="Escape" && craftOpen){ toggleCraft(); return; }
   if(e.code==="Escape" && enchOpen){ toggleEnch(); return; }
+  if(e.code==="Escape" && potionOpen){ togglePotions(); return; }                 // 第五轮·云端
+  if(potionOpen && !e.repeat && e.code>="Digit1" && e.code<="Digit4"){ e.preventDefault(); drinkPotion(POTIONS[+e.code.slice(5)-1].k); return; }
+  if(potionOpen && !e.repeat && e.code==="Digit5"){ e.preventDefault(); eatFish(); return; }
+  if(e.code==="KeyV" && !e.repeat){ e.preventDefault(); if(potionOpen || (playing() && !dead)) togglePotions(); return; }   // 第五轮·云端: 药水面板
   const potEl=document.getElementById("pottery-panel"), sxEl=document.getElementById("sphinx-panel"), myEl=document.getElementById("mythic-panel"), lpEl=document.getElementById("lamp-panel");
   if(e.code==="Escape" && potEl && potEl.classList.contains("on")){ closePotteryPanel(); return; }
   if(e.code==="Escape" && myEl && myEl.classList.contains("on")){ closeMythicPanel(); return; }
@@ -5390,7 +5580,8 @@ document.addEventListener("keydown",e=>{
   if(!e.repeat){
     const now=performance.now();
     if(e.code==="Space"){
-      if(now-lastSpace<260 && !riding){ player.flying=!player.flying; player.vy=0; showName(player.flying?"飞行模式":"行走模式"); }
+      if(riding && riding.def.camelMount){ camelDash(); }                       // 第五轮·云端: 骆驼冲刺跳跃
+      else if(now-lastSpace<260 && !riding){ player.flying=!player.flying; player.vy=0; showName(player.flying?"飞行模式":"行走模式"); }
       lastSpace=now;
     }
     if(e.code==="KeyW"){ if(now-lastW<260) player.sprint=true; lastW=now; }
@@ -5400,6 +5591,7 @@ document.addEventListener("keydown",e=>{
     if(e.code==="KeyF"){ e.preventDefault(); if(npcPanelOpen) closeNPCPanel(); else if(talkNpc) openNPCPanel(); }
     if(e.code==="KeyB"){ e.preventDefault(); toggleCraft(); }
     if(e.code==="KeyJ"){ e.preventDefault(); toggleEnch(); }                  // 神庙附魔祭坛(第五轮·本地)
+    if(e.code==="KeyX"){ e.preventDefault(); fishKey(); }                     // 绿洲钓鱼(第五轮·云端)
     if(e.code==="KeyG" && !e.repeat){ e.preventDefault(); startArena(); }   // 斗兽场开战
     if(e.code==="KeyU" && !e.repeat){ e.preventDefault(); openVault(); }     // 封印宝库(花钥匙)
     if(e.code==="KeyR" && !e.repeat){ e.preventDefault(); openSphinxPanel(); } // 斯芬克斯答谜
@@ -5471,6 +5663,8 @@ newworldbtn.addEventListener("click",()=>{
   world.clear(); meshQueue.length=0; queued.clear();
   mobs.length=0; arrows.length=0; drops.length=0; particles.length=0;
   hp=maxHp=20; lvl=1; xp=0; armor=0; cores=0; kills=0; dayCount=1; dmgMul=1; dead=false; setSunblade(false); setMace(false); for(const k in enchState) enchState[k]=0;
+  for(const k in potions) potions[k]=0; for(const k in potionFx) potionFx[k]=0;   // 第五轮·云端
+  fishState.on=false; fishState.fish=0; fishState.caught=0;
   questIdx=0; questProg=0; questDone=false; _qWalkX=null; _qDriveX=null; bag.clear(); updateQuestHUD();
   document.getElementById("victory").style.display="none";
   _gcx=1e9; pcx=1e9; pcz=1e9;
@@ -6412,7 +6606,7 @@ function pushBox(ent, pt, rot, roll, spin){
     for(const i of [0,1,2,0,2,3]) entArr.push(quad[i][0],quad[i][1],quad[i][2],uv[i][0],uv[i][1],F.sh);
   }
 }
-function drawEntity(ent){
+function buildEntity(ent){               // 只生成顶点到 entArr(主绘制与阴影 pass 共用)
   entArr.length=0;
   const amp=clamp(Math.hypot(ent.vx||0,ent.vz||0)/2.2,0,1)*0.8;
   const parts = ent.held ? ent.def.parts.concat(ent.held) : ent.def.parts;
@@ -6432,6 +6626,9 @@ function drawEntity(ent){
     const spin = pt.rotor ? (ent.animT||0)*26 : 0;                     // 螺旋桨/旋翼旋转
     pushBox(ent,pt,rot,roll,spin);
   }
+}
+function drawEntity(ent){
+  buildEntity(ent);
   gl.bindBuffer(gl.ARRAY_BUFFER,entVbo);
   uploadDyn(entArr);
   bindMeshAttribs();
@@ -6754,7 +6951,7 @@ function updateMobs(dt){
   for(let i=mobs.length-1;i>=0;i--){
     const m=mobs[i], D=m.def;
     const dx=player.x-m.x, dz=player.z-m.z, dist=Math.hypot(dx,dz)||1e-6;
-    if(dist>72 || m.y<-20){ mobs.splice(i,1); continue; }
+    if((dist>72 && !m.tamed) || m.y<-20){ mobs.splice(i,1); continue; }   // 驯服的骆驼不因走远被清理
     m.hurtT=Math.max(0,m.hurtT-dt);
     m.atkCd=Math.max(0,m.atkCd-dt);
     m.swingT=Math.max(0,m.swingT-dt);
@@ -8517,20 +8714,21 @@ function chunkInFrustum(cx,cz){
 const GFX_NAMES=["低","中","高","极致"];
 const GFX_PRESETS=[
   // post: 后处理(仅 WebGL2)  bloom: 泛光  fxaa: 抗锯齿  heat: 正午热浪  dof: 远景柔化
-  // msaa: 离屏多重采样数。管线已支持(多重采样渲染缓冲 + blit 解析), 但默认关: mainProg 还是 GLSL 100, 没有 centroid 插值,
-  //       MSAA 下远处亚像素小方块面会在像素中心外推 UV, 采到图集相邻格子 → 沙地满是彩色噪点。改用 FXAA; 待主着色器换 GLSL 300 + centroid 再开。
+  // msaa: 离屏多重采样数(多重采样渲染缓冲 + blit 解析)。WebGL2 下 mainProg 已转 GLSL 300 且 UV 用 centroid 插值,
+  //       部分覆盖像素不再外推 UV 采到图集相邻格子, 所以高/极致开 4×(FXAA 同时降到 0.35 只补残余锯齿)。
   // clouds = 云噪声层数(3..5), cshadow = 地面云影开关
   {shadow:false, post:false, clouds:3, cshadow:0},                                                          // 低: 无阴影贴图、无后处理(直出画布)
   {shadow:true, size:1024, range:40, pcf:0, post:true, bloom:true, fxaa:true, clouds:4, cshadow:1},         // 中: + 泛光/调色/暗角/FXAA
-  {shadow:true, size:2048, range:56, pcf:1, post:true, bloom:true, fxaa:true, msaa:0, heat:true, clouds:5, cshadow:1, rays:12},   // 高(电脑默认): + 正午热浪 + 光束
-  {shadow:true, size:4096, range:80, pcf:1, post:true, bloom:true, fxaa:true, msaa:0, heat:true, dof:true, clouds:5, cshadow:1, rays:20}, // 极致: + 远景柔化
+  {shadow:true, size:2048, range:56, pcf:1, post:true, bloom:true, fxaa:true, msaa:4, heat:true, clouds:5, cshadow:1, rays:12, mobShadow:true},   // 高(电脑默认): + 正午热浪 + 光束
+  {shadow:true, size:4096, range:80, pcf:1, post:true, bloom:true, fxaa:true, msaa:4, heat:true, dof:true, clouds:5, cshadow:1, rays:20, mobShadow:true}, // 极致: + 远景柔化
 ];
 let gfxLevel=2;
 try{ const v=parseInt(localStorage.getItem("sandsea_gfx"),10); if(v>=0 && v<GFX_PRESETS.length) gfxLevel=v; }catch(e){}
 function setupShadow(){
   const P=GFX_PRESETS[gfxLevel];
   if(shadow.fbo){ gl.deleteFramebuffer(shadow.fbo); gl.deleteTexture(shadow.tex); shadow.fbo=shadow.tex=null; }
-  shadow.ok=false; shadow.dirty=true; shadow.range=P.range||0;
+  if(shadow.dynFbo){ gl.deleteFramebuffer(shadow.dynFbo); gl.deleteTexture(shadow.dynTex); shadow.dynFbo=shadow.dynTex=null; }
+  shadow.ok=false; shadow.dirty=true; shadow.range=P.range||0; shadow.useDyn=false; shadow.casters=0;
   if(!P.shadow || !HAS_DEPTH_TEX) return;
   const size=Math.min(P.size, gl.getParameter(gl.MAX_TEXTURE_SIZE));
   const tex=gl.createTexture();
@@ -8549,7 +8747,24 @@ function setupShadow(){
   gl.bindTexture(gl.TEXTURE_2D,atlasTex);
   if(!ok){ gl.deleteFramebuffer(fbo); gl.deleteTexture(tex); return; }   // 驱动不支持: 静默退回无阴影
   shadow.fbo=fbo; shadow.tex=tex; shadow.size=size; shadow.pcf=P.pcf; shadow.ok=true;
+  // 生物投影(高/极致, 仅 WebGL2): 地形阴影贴图保持"按需重画"的静态版; 每帧把它的深度 blit 到这张动态副本,
+  // 再把附近生物画进副本 → 生物有真影子, 却不必每帧重画全部地形
+  if(IS_GL2 && P.mobShadow){
+    const t2=gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D,t2);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.DEPTH_COMPONENT24,size,size,0,gl.DEPTH_COMPONENT,gl.UNSIGNED_INT,null);
+    for(const [k,v] of [[gl.TEXTURE_MIN_FILTER,gl.NEAREST],[gl.TEXTURE_MAG_FILTER,gl.NEAREST],[gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D,k,v);
+    const f2=gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER,f2);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.DEPTH_ATTACHMENT,gl.TEXTURE_2D,t2,0);
+    gl.drawBuffers([gl.NONE]); gl.readBuffer(gl.NONE);
+    const ok2=gl.checkFramebufferStatus(gl.FRAMEBUFFER)===gl.FRAMEBUFFER_COMPLETE;
+    gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+    gl.bindTexture(gl.TEXTURE_2D,atlasTex);
+    if(ok2){ shadow.dynFbo=f2; shadow.dynTex=t2; } else { gl.deleteFramebuffer(f2); gl.deleteTexture(t2); }
+  }
 }
+const shadowSampleTex=()=>shadow.ok ? (shadow.useDyn ? shadow.dynTex : shadow.tex) : null;
 setupShadow();
 /* =========================================================
    光影第 4 步: 后处理管线(仅 WebGL2; WebGL1/「低」档直接画到画布, 与原来完全一致)
@@ -8950,7 +9165,7 @@ function postEnd(now, uw, fogFar){
   gl.uniform1f(c.uDofNear,Math.min(110,fogFar*0.62)); gl.uniform1f(c.uDofFar,Math.max(fogFar*1.25,160));
   gl.uniform1f(c.uRayI,rayI);
   if(rayI>0.001 && _postCam.inv){
-    gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D,shadow.tex);
+    gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D,shadowSampleTex());
     gl.uniform1i(c.uShadowMap,4);
     gl.uniformMatrix4fv(c.uLightPV,false,shadow.lpv);
     gl.uniformMatrix4fv(c.uInvPV,false,_postCam.inv);
@@ -9082,6 +9297,54 @@ function renderShadowMap(L){
   gl.bindFramebuffer(gl.FRAMEBUFFER,sceneFBO);   // 回到本帧的场景目标(后处理 FBO 或画布)
 }
 
+// 生物投影: 每帧把静态地形阴影深度复制到动态副本, 再叠画阴影范围内的生物(沿光方向后撤 0.15 格, 免得生物自身出阴影痘)
+function mobShadowCasters(){
+  const out=[], R=shadow.range-2;
+  for(const m of mobs){
+    if(!m || m.burrowed || !m.def || !m.def.parts) continue;
+    if(Math.max(Math.abs(m.x-shadow.cx),Math.abs(m.z-shadow.cz))>R) continue;
+    out.push(m);
+  }
+  if(camMode>0 && typeof playerEnt!=="undefined" && playerEnt.def) out.push(playerEnt);
+  return out;
+}
+function renderMobShadows(L){
+  shadow.useDyn=false; shadow.casters=0;
+  if(!shadow.ok || !shadow.dynFbo) return;
+  const cs=mobShadowCasters();
+  if(!cs.length) return;
+  const S=shadow.size;
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER,shadow.fbo);
+  gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER,shadow.dynFbo);
+  gl.blitFramebuffer(0,0,S,S,0,0,S,S,gl.DEPTH_BUFFER_BIT,gl.NEAREST);
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER,null);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,shadow.dynFbo);
+  gl.viewport(0,0,S,S);
+  gl.colorMask(false,false,false,false);
+  gl.enable(gl.DEPTH_TEST); gl.depthMask(true); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D,null);
+  gl.useProgram(depthProg);
+  const k=0.15;
+  gl.uniformMatrix4fv(UD.uLPV,false,matMul(shadow.lpv,matTrans(-L[0]*k,-L[1]*k,-L[2]*k)));
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,atlasTex); gl.uniform1i(UD.uTex,0);
+  for(const a of [A_POS,A_UV,A_L]) gl.disableVertexAttribArray(a);
+  aFArray(false);
+  gl.enableVertexAttribArray(AD_POS); gl.enableVertexAttribArray(AD_UV);
+  gl.bindBuffer(gl.ARRAY_BUFFER,entVbo);
+  for(const e of cs){
+    buildEntity(e);
+    if(!entArr.length) continue;
+    uploadDyn(entArr);
+    gl.vertexAttribPointer(AD_POS,3,gl.FLOAT,false,24,0);
+    gl.vertexAttribPointer(AD_UV,2,gl.FLOAT,false,24,12);
+    gl.drawArrays(gl.TRIANGLES,0,entArr.length/6);
+  }
+  gl.disableVertexAttribArray(AD_POS); gl.disableVertexAttribArray(AD_UV);
+  gl.colorMask(true,true,true,true);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,sceneFBO);
+  shadow.useDyn=true; shadow.casters=cs.length;
+}
+
 let fov=70*Math.PI/180;
 const mix3=(a,b,t)=>[a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t];
 
@@ -9104,6 +9367,8 @@ function drawBlobShadows(pv, camX, camZ, fogNear, fogFar, sunI){
   const add=(e,w)=>{
     const d=Math.hypot(e.x-camX,e.z-camZ);
     if(d>40) return;
+    // 已画进阴影贴图的生物(高/极致, 阴影范围内)就不再叠软阴影团, 免得影子双重加深
+    if(shadow.useDyn && Math.max(Math.abs(e.x-shadow.cx),Math.abs(e.z-shadow.cz))<=shadow.range-2) return;
     const gy=blobGroundY(e.x,e.y,e.z); if(gy===null) return;
     const dh=Math.max(0,e.y-gy);
     let a=0.6*blobFade(dh)*vis*(1-smoothstep(28,40,d));
@@ -9139,6 +9404,7 @@ function render(now){
   postBegin(w,h);                           // 后处理: 场景先画进离屏 FBO(「低」档/WebGL1 直接画布)
   const LS=lightState();
   renderShadowMap(LS.light);                // 阴影贴图只在光源转动/玩家走远/区块变化时重画
+  renderMobShadows(LS.light);               // 高/极致: 生物每帧叠进阴影贴图的动态副本
   gl.viewport(0,0,w,h);
 
   // 昼夜
@@ -9296,7 +9562,7 @@ function render(now){
   gl.uniform3f(U.uWind,0.8*_sky.wind,Math.min(2,_sky.wind),0.45*_sky.wind);   // 风向偏东南; 雨/雷暴/沙暴依次更猛
   gl.uniform1f(U.uCloudShadow,uw?0:cloudShK);
   gl.uniform3f(U.uTint,1,1,1);
-  gl.uniform1f(U.uDay,daylight/baseDaylight);   // 昼夜明暗交给日光/天光颜色, 这里只剩天气/群系/闪电的曝光倍率
+  gl.uniform1f(U.uDay,daylight/baseDaylight*potionNightBoost());   // 夜视药水: 夜里提亮   // 昼夜明暗交给日光/天光颜色, 这里只剩天气/群系/闪电的曝光倍率
   gl.uniform3fv(U.uSunDir,LS.light);
   gl.uniform3fv(U.uSunCol,LS.sunCol);
   gl.uniform3fv(U.uAmbCol,LS.ambCol);
@@ -9309,7 +9575,7 @@ function render(now){
   gl.uniform1f(U.uShadowBias,shadow.ok?(2*shadow.range/shadow.size)*1.8+0.02:0);
   gl.uniformMatrix4fv(U.uLightPV,false,shadow.lpv);
   gl.activeTexture(gl.TEXTURE1);
-  gl.bindTexture(gl.TEXTURE_2D,shadow.ok?shadow.tex:null);
+  gl.bindTexture(gl.TEXTURE_2D,shadowSampleTex());
   gl.uniform1i(U.uShadow,1);
   gl.uniform3f(U.uOffset,0,0,0);
   gl.uniform2f(U.uUVOff,0,0);
@@ -9673,18 +9939,19 @@ function frame(now){
       player.z+=player.vz*dt; collideAxis(2);
     } else if(driving){
       /* 汽车驾驶: W/S 油门(前进/倒车), A/D 转向(左右打方向盘), 车身贴地行驶, 不能飞 */
-      const carSpd=riding.def.speed*(keys.KeyS&&!keys.KeyW?-0.5:1);
+      const carSpd=riding.def.speed*(keys.KeyS&&!keys.KeyW?-0.5:1)*(riding.def.camelMount?camelDashMul():1);   // 骆驼冲刺(第五轮·云端)
       const steer=2.0*dt*(keys.KeyD?1:0)*(keys.KeyW||keys.KeyS?1:0.6)
                 - 2.0*dt*(keys.KeyA?1:0)*(keys.KeyW||keys.KeyS?1:0.6);
       if(keys.KeyW||keys.KeyS) player.yaw += (keys.KeyS&&!keys.KeyW?-1:1)*steer;
-      const thr=(keys.KeyW?1:0)-(keys.KeyS?1:0);
+      const thr=(riding.def.camelMount&&camelState.dashT>0) ? 1 : (keys.KeyW?1:0)-(keys.KeyS?1:0);   // 冲刺时自动向前
       player.vx=Math.sin(player.yaw)*carSpd*Math.abs(thr)+player.kbx;
       player.vz=-Math.cos(player.yaw)*carSpd*Math.abs(thr)+player.kbz;
       const kbd0=Math.pow(0.01,dt); player.kbx*=kbd0; player.kbz*=kbd0;
       player.x+=player.vx*dt; player.z+=player.vz*dt;
       // 贴地: 车轮始终吸附地面高度, 而不是走跳跃/重力物理
       const gy2=groundY(Math.floor(player.x),Math.floor(player.z));
-      if(gy2>0){ player.y += (gy2-player.y)*Math.min(1,dt*10); player.vy=0; player.onGround=true; }
+      const hop=riding.def.camelMount?camelDashHop():0;   // 骆驼冲刺跳跃: 贴地高度上叠一段弧线
+      if(gy2>0){ player.y += (gy2+hop-player.y)*Math.min(1,dt*(hop>0?16:10)); player.vy=0; player.onGround=hop<=0; }
       else { player.vy-=28*dt; player.y+=player.vy*dt; }
       collideAxis(0); collideAxis(2);
       fallStart=null;
@@ -9692,6 +9959,7 @@ function frame(now){
     let spd = player.flying ? (player.sprint?18:10.5)
             : player.sneak ? 1.4
             : player.sprint ? 6.2 : 4.4;
+    if(!player.flying) spd*=potionSpeedMul();          // 第五轮·云端: 迅捷药水
     if(water && !player.flying) spd*=0.55;
     if(lava && !player.flying) spd*=0.32;              // 岩浆里寸步难行
     if(colaBuffT>0) spd*=1.35;                          // 可乐: 移动速度提升
@@ -9797,7 +10065,7 @@ function frame(now){
       if(water && burnT>0) burnT=0;                     // 跳水灭火
       // 黑沙火山: 地表暴露在高温下持续掉血, 泡水/进洞可躲避
       const curBio=biomeAt(Math.floor(player.x),Math.floor(player.z));
-      if(!water && !lava && player.y>WATER_Y && curBio===BIO_VOLCANO){
+      if(!water && !lava && player.y>WATER_Y && curBio===BIO_VOLCANO && !potionHeatProof()){   // 耐热药水: 免火山灼烤
         heatDmgT-=dt;
         if(heatDmgT<=0){ heatDmgT=2.4; damagePlayer(1,0,0); burnT=Math.max(burnT,0.4); }
         if(Math.random()<dt*4) particles.push({x:player.x+(Math.random()-.5)*.9,y:player.y+0.2+Math.random()*1.6,z:player.z+(Math.random()-.5)*.9,
@@ -9822,7 +10090,7 @@ function frame(now){
         else {
           sandDmgT-=dt;
           if(sandDmgT<=0){ sandDmgT=2.8;
-            if(!(typeof omenSandImmune==="function" && omenSandImmune())){
+            if(!(typeof omenSandImmune==="function" && omenSandImmune()) && !potionHeatProof()){   // 耐热药水: 免沙暴刮伤
               damagePlayer(1,0,0); showName("🌪 沙暴刮伤 — 找掩体或建筑躲进去");
             }
           }
@@ -9836,6 +10104,9 @@ function frame(now){
     tickBazaar(dt);
     tickExpedition(dt);
     tickUndeadNight(dt);
+    tickPotions(dt);                              // 第五轮·云端
+    tickFishing(dt);                              // 第五轮·云端
+    tickCamel(dt);                                // 第五轮·云端
     tickTitle();
     arrowCd=Math.max(0,arrowCd-dt);
     gunCd=Math.max(0,gunCd-dt);
@@ -9909,6 +10180,8 @@ function collectSave(){
     sunblade,                                    // 第五轮·本地: 拉之烈阳剑(老存档无此字段 → 铁剑)
     mace:maceOwned,                              // 第五轮·本地: 塞特之锤(老存档无此字段 → 没有)
     ench:Object.assign({},enchState),            // 第五轮·本地: 附魔词条(老存档无此字段 → 全 0)
+    potions:Object.assign({},potions),           // 第五轮·云端: 药水库存(老存档无此字段 → 全 0; 生效中的效果不存档)
+    fish:{ n:fishState.fish, caught:fishState.caught },   // 第五轮·云端: 钓鱼(老存档无此字段 → 0)
     questIdx, questId:(QUESTS[questIdx]||{}).id||null,
     questProg:+questProg.toFixed(1), questDone,
     bounty:{ idx:bountyIdx, prog:bountyProg, done:bountyDone },
@@ -9997,6 +10270,8 @@ function loadGame(){
   setSunblade(!!s.sunblade);
   setMace(!!s.mace);
   for(const D of ENCH_DEFS) enchState[D.k]=Math.max(0,Math.min(D.max,(s.ench&&s.ench[D.k])|0));
+  for(const P of POTIONS){ potions[P.k]=Math.max(0,(s.potions&&s.potions[P.k])|0); if(P.k in potionFx) potionFx[P.k]=0; }   // 第五轮·云端: 老存档无 potions → 全 0
+  fishState.on=false; fishState.fish=Math.max(0,(s.fish&&s.fish.n)|0); fishState.caught=Math.max(0,(s.fish&&s.fish.caught)|0);   // 第五轮·云端
   bag.clear(); if(s.bag) for(const k in s.bag) bag.set(+k, s.bag[k]);
   // 优先用 id 定位关卡(抗关卡表变动), 没有 id 的老存档才退回下标
   const qById = s.questId ? QUESTS.findIndex(q=>q.id===s.questId) : -1;
@@ -11159,6 +11434,10 @@ window.__game = {
   get weather(){ return { kind:weather, t:+weatherT.toFixed(1) }; },
   get night(){ return sunH<0.06; }, get hostiles(){ return mobs.filter(m=>m.def&&m.def.hostile&&!m.def.boss).length; },
   get trophies(){ return { got:[...trophies], total:TROPHY_TOTAL }; },
+  get potions(){ return { stock:Object.assign({},potions), fx:Object.assign({},potionFx) }; },   // 第五轮·云端
+  drinkPotion:(k)=>drinkPotion(k), brewPotion:(k)=>brewPotion(k),
+  get fishing(){ return Object.assign({},fishState); }, fishKey:()=>fishKey(),
+  get camel(){ return Object.assign({},camelState); }, feedCamel:(m)=>feedCamel(m), camelDash:()=>camelDash(),
   grantTrophy:(t)=>grantTrophy(t),
   claimLandmark(type,sx,sz){ const key=type+":"+(sx|0)+":"+(sz|0); landSeen.add(key); return [...landSeen]; },
   getBlock, setBlock, groundY, heightAt, biomeAt,
@@ -12098,6 +12377,24 @@ function selftest(){
          "gl2="+IS_GL2+" depthTex="+HAS_DEPTH_TEX+" ok="+shadow.ok+" size="+shadow.size);
       const g0=gfxLevel; setGfx(0); const offOk=!shadow.ok; setGfx(g0);
       const mainSrc=gl.getAttachedShaders(mainProg).map(sh=>gl.getShaderSource(sh)||"").join("\n");
+      ok("主着色器: WebGL2 用 GLSL 300 + centroid UV, 高/极致开 4× MSAA; WebGL1 保持 GLSL 100",
+         IS_GL2 ? (/^#version 300 es/.test(mainSrc.trim()) && /centroid in vec2 vUV/.test(mainSrc) && /centroid out vec2 vUV/.test(mainSrc) && GFX_PRESETS[2].msaa===4 && GFX_PRESETS[3].msaa===4 && !GFX_PRESETS[1].msaa)
+                : !/#version 300/.test(mainSrc), "gl2="+IS_GL2);
+      {
+        // 生物投影: 「高」档 WebGL2 建动态阴影副本; 附近有生物时本帧改采样副本; 「中」档没有副本
+        const g0m=gfxLevel; setGfx(2);
+        const hasDyn=!IS_GL2 || !shadow.ok || !!shadow.dynFbo;
+        const n0=mobs.length;
+        const cow={type:"pig", def:MOB_DEFS.pig, x:shadow.cx+2, y:player.y, z:shadow.cz+2, vx:0,vy:0,vz:0, yaw:0, animT:0, hp:10};
+        if(MOB_DEFS.pig) mobs.push(cow);
+        while(gl.getError()!==gl.NO_ERROR){}
+        renderMobShadows(lightState().light);
+        const err=gl.getError();
+        const used=!IS_GL2 || !shadow.ok || (shadow.useDyn && shadow.casters>=1 && shadowSampleTex()===shadow.dynTex);
+        mobs.length=n0; setGfx(1); const midNo=!shadow.dynFbo; setGfx(g0m);
+        ok("生物投影: 高/极致(WebGL2)每帧把生物叠进阴影贴图副本并改采样副本, 中档不建副本, 无 GL 错误",
+           hasDyn && used && midNo && err===gl.NO_ERROR, "dyn="+!!shadow.dynFbo+" used="+used+" err="+err);
+      }
       ok("沙面高光: 主着色器有沙粒闪光且按画质开关", U.uSandFx!==null && mainSrc.indexOf("sandK")>=0, "loc="+(U.uSandFx!==null));
       // 地标珍藏: 覆盖全部地标 / 同一地标只领一次 / 进存档 / 常驻效果
       {
@@ -12282,6 +12579,59 @@ function selftest(){
            poor && lv5 && spent && capped && mul && saved && legacyZero, "poor="+poor+" lv5="+lv5+" spent="+spent+" cap="+capped+" mul="+mul+" saved="+saved+" legacy="+legacyZero);
         ok("附魔效果: 火焰附加 II 点燃 4 秒、横扫之刃 III 溅射 45%(2.5 格外不中)、击退 II 加推力; 非近战武器不触发", fx && noWeapon,
            "n="+n+" nb="+nb.hp+" fr="+fr.hp+" burn="+t.sunBurn+" kbx="+t.kbx.toFixed(1)+" noWeapon="+noWeapon);
+      }
+      // 沙漠药水(第五轮·云端): 酿造 +2 / 饮用生效与扣库存 / 迅捷与耐热与夜视效果 / 治疗 / 空瓶拒绝 / 存档往返与老档归零
+      {
+        const pS=Object.assign({},potions), fS=Object.assign({},potionFx), hpP=hp, cdP=potionCd, sunP=sunH;
+        for(const k in potions) potions[k]=0; for(const k in potionFx) potionFx[k]=0;
+        brewPotion("swift"); const brewed=potions.swift===2;
+        potionCd=0; const d1=drinkPotion("swift"); const eff=potionFx.swift===90 && potions.swift===1 && potionSpeedMul()===1.35;
+        potionCd=0; brewPotion("heat"); drinkPotion("heat"); const heat=potionHeatProof();
+        potionCd=0; brewPotion("night"); drinkPotion("night"); sunH=-0.1; const nightB=potionNightBoost()>1.5; sunH=1; const dayB=potionNightBoost()===1; sunH=sunP;
+        potionCd=0; hp=Math.max(1,maxHp-10); const h0=hp; brewPotion("heal"); drinkPotion("heal"); const healed=hp===Math.min(maxHp,h0+8);
+        potionCd=0; potions.heal=0; const empty=drinkPotion("heal")===false;
+        const sv=collectSave(); const saved=sv.potions && sv.potions.swift===1 && sv.potions.heat===1;
+        const RC=RECIPES.filter(r=>/酿造/.test(r.name)).length;
+        Object.assign(potions,pS); Object.assign(potionFx,fS); hp=hpP; potionCd=cdP; updateHearts(); updateBuffHUD();
+        ok("沙漠药水: 合成台 4 种配方, 酿 2 瓶, 饮用生效扣库存, 迅捷/耐热/夜视(只夜里提亮)/治疗, 空瓶拒绝, 进存档",
+           RC===4 && brewed && d1 && eff && heat && nightB && dayB && healed && empty && saved, "rc="+RC+" eff="+eff+" night="+nightB+"/"+dayB+" heal="+healed+" saved="+saved);
+      }
+      // 绿洲钓鱼(第五轮·云端): 掉落表 / 早收空竿 / 咬钩窗口内收竿有收获 / 窗口过了鱼溜走 / 吃鱼回血 / 存档
+      {
+        const fS=Object.assign({},fishState), hpF=hp, eatF=eatCd, relF=npcState.relics, bagF=new Map(bag);
+        let cats={}; for(let i=0;i<200;i++){ const c=fishLoot(i/200,false)[0]; cats[c]=(cats[c]||0)+1; }
+        const richTr=[...Array(200)].map((_,i)=>fishLoot(i/200,true)[0]).filter(c=>c!=="fish"&&c!=="junk").length;
+        const lootOk=cats.fish>100 && cats.junk>0 && (cats.gold||0)+(cats.relic||0)+(cats.gem||0)+(cats.crystal||0)>0 && richTr>((cats.gold||0)+(cats.relic||0)+(cats.gem||0)+(cats.crystal||0));
+        Object.assign(fishState,{on:true,x:player.x+3,y:player.y,z:player.z,t:0,bite:2,window:0,fish:0,caught:0});
+        const early=reelIn()===null && !fishState.on;
+        Object.assign(fishState,{on:true,x:player.x+3,y:player.y,z:player.z,t:0,bite:1,window:0});
+        tickFishing(1.05); const bit=fishState.window>0;
+        const got=reelIn(); const caughtOk=!!got && fishState.caught===1;
+        Object.assign(fishState,{on:true,x:player.x+3,y:player.y,z:player.z,t:0,bite:1,window:0});
+        tickFishing(1.05); tickFishing(FISH_BITE_WIN+0.05); const escaped=!fishState.on;
+        fishState.fish=2; eatCd=0; hp=Math.max(1,maxHp-8); const h0=hp; const ate=eatFish() && hp===h0+5 && fishState.fish===1;
+        const sv=collectSave(); const saved=sv.fish && sv.fish.n===1 && sv.fish.caught===1;
+        particles.length=0;
+        Object.assign(fishState,fS); hp=hpF; eatCd=eatF; npcState.relics=relF; bag.clear(); for(const [k,v] of bagF) bag.set(k,v); updateHearts();
+        ok("绿洲钓鱼: 掉落表(鱼为主/杂物/宝物, 富饶水域宝物更多), 早收空竿, 咬钩窗口内收竿有收获, 过窗鱼溜走, 吃鱼 +5, 进存档",
+           lootOk && early && bit && caughtOk && escaped && ate && saved, "loot="+JSON.stringify(cats)+" rich="+richTr+" bit="+bit+" got="+got+" esc="+escaped+" ate="+ate);
+      }
+      // 骆驼驯服(第五轮·云端): 没仙人掌拒绝 / 喂到第 4 口必驯服 / 驯服后变坐骑 / 骑乘冲刺: 冷却、加速、弧线高度 / 驯服骆驼不被远距清理
+      {
+        const bagC=new Map(bag), rideC=riding, cS=Object.assign({},camelState), n0=mobs.length;
+        const cm={type:"camel", def:MOB_DEFS.camel, x:player.x+2, y:player.y, z:player.z, vx:0,vy:0,vz:0,kbx:0,kbz:0,yaw:0,tgtYaw:0,hp:18,hurtT:0,animT:0,t:0,atkCd:0,burnT:0,swingT:0,groanT:0,fleeT:0,onGround:true,pause:false,burning:false,held:null};
+        mobs.push(cm);
+        bag.delete(CACTUS); const noFood=feedCamel(cm)===false && !cm.tamed;
+        bag.set(CACTUS,10); for(let i=0;i<4 && !cm.tamed;i++) feedCamel(cm);
+        const tamed=cm.tamed && cm.def.mount && cm.def.groundMount && cm.def.camelMount && cm.tameFed<=4 && bagCount(CACTUS)>=6;
+        riding=cm; camelState.cd=0; camelState.dashT=0;
+        const d1=camelDash(), mul=camelDashMul(), d2=camelDash();
+        tickCamel(CAMEL_DASH_DUR/2); const hopMid=camelDashHop();
+        tickCamel(CAMEL_DASH_DUR); const hopEnd=camelDashHop();
+        const dashOk=d1 && !d2 && mul>2 && hopMid>1.4 && hopEnd===0 && camelState.cd>0;
+        riding=rideC; mobs.length=n0; Object.assign(camelState,cS); bag.clear(); for(const [k,v] of bagC) bag.set(k,v); particles.length=0;
+        ok("骆驼驯服: 没仙人掌拒绝, 喂食最多 4 口必驯服并变坐骑, 骑乘空格冲刺(加速+弧线跳跃+冷却)",
+           noFood && tamed && dashOk && MOB_DEFS.camel.mount!==true, "noFood="+noFood+" tamed="+tamed+" dash="+d1+"/"+d2+" hop="+hopMid.toFixed(2));
       }
       ok("材质: 逐块旋转——松沙陷坑与沙子同模式(伪装不露馅), 沙纹只转180°, 草地四向", UV_ROT[LOOSESAND*2]===UV_ROT[SAND*2] && UV_ROT[LOOSESAND*2+1]===UV_ROT[SAND*2+1] && UV_ROT[SAND*2]===1 && UV_ROT[GRASS*2]===2,
          "sand="+UV_ROT[SAND*2]+" loose="+UV_ROT[LOOSESAND*2]);
