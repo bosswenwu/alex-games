@@ -1686,12 +1686,12 @@ function findVillageSpawn(){
   }
   return false;
 }
-// 棕榈: 原木树干在 60% 高处向 (lx,lz) 歪一格(带拐角块), 顶部 8 向下垂棕榈叶
+// 棕榈: 原木树干在 60% 高处向 (lx,lz) 歪一格(同高并排的拐膝), 顶部 8 向下垂棕榈叶
 function drawPalm(put,px,base,pz,th,lx,lz){
   let tx=px, tz=pz;
   const bend=Math.ceil(th*0.6);
   for(let k=1;k<=th;k++){
-    if(k===bend && (lx||lz)){ put(tx+lx,base+k-1,tz+lz,PALM_LOG,true); tx+=lx; tz+=lz; }
+    if(k===bend && (lx||lz)){ put(tx,base+k,tz,PALM_LOG,true); tx+=lx; tz+=lz; }   // 拐膝: 同一高度并排两块, 不再在下一段底下留"树桩"
     put(tx,base+k,tz,PALM_LOG,true);
   }
   const ty=base+th;
@@ -1704,10 +1704,10 @@ function drawPalm(put,px,base,pz,th,lx,lz){
     put(tx+dx,ty+1,tz+dz,PALM_LEAF,false); put(tx+dx*2,ty,tz+dz*2,PALM_LEAF,false);
   }
 }
-// 石板路: 圆石为主, 夹杂石头/苔石/砂砾/砂岩碎块, 像被踩了很多年的老街
+// 石板路: 圆石为主, 夹杂砂砾/苔石/石头, 像被踩了很多年的老街
 function vilPathBlock(X,Z){
   const r=hash2(X*7+3,Z*5-1);
-  return r<0.44?COBBLE:(r<0.62?STONE:(r<0.78?MOSSY:(r<0.9?GRAVEL:SANDSTONE)));
+  return r<0.70?COBBLE:(r<0.84?GRAVEL:(r<0.94?MOSSY:STONE));        // 不再夹砂岩: 奶白方块在路面上太跳
 }
 function villagePlan(s){
   const ck=ckey(s.x,s.z), cached=_vilPlanCache.get(ck);
@@ -1741,13 +1741,17 @@ function villagePlan(s){
         if(Math.hypot(X-(x0+lx*t),Z-(z0+lz*t))<=w){ const c=get(X,Z); if(keep && keep.indexOf(c)>=0) continue; set(X,Z,v); }
       }
   };
-  // 2) 房屋: 沿环路外侧均匀分布, 正门朝向水塘(朝向吸附到四个正方向)
-  const n=4+Math.floor(rnd(5,6)*4);                  // 4~7 栋
-  const a0=rnd(7,8)*TAU, step=TAU/n, dist=Math.round(15+n*0.4);
+  // 2) 房屋: mS 个等分槽位(6/8), 主城门(gates[0])正对某个正方向 c, 副城门在正对面 → 两条城门路都是笔直的轴向路, 拱门正好对齐。
+  //    与主城门相邻的两个槽位让给"主街": 两栋沿街木筋屋夹着主街、门朝街心; 其余槽位放环湖屋(正门朝水塘), 偶尔空一个做空地。
+  const mS=rnd(5,6)<0.45?6:8, step=TAU/mS;
+  const c=Math.floor(rnd(7,8)*4)*(Math.PI/2);                       // 主城门方向(正东/南/西/北之一)
+  const dist=mS===6?16:18;
   const flip=rnd(9,9)<0.5?0:1;
+  const skip=rnd(11,4)<0.35 ? 1+Math.floor(rnd(12,5)*(mS-2)) : -1;  // 空槽
   const houses=[];
-  for(let i=0;i<n;i++){
-    const a=a0+i*step+(rnd(10+i,3)-0.5)*0.25;
+  for(let i=1;i<=mS-2;i++){
+    if(i===skip) continue;
+    const a=c+(i+0.5)*step+(rnd(10+i,3)-0.5)*0.12;
     const cx=Math.round(x+Math.cos(a)*dist), cz=Math.round(z+Math.sin(a)*dist);
     const dx=x-cx, dz=z-cz;
     let fx=0, fz=0;
@@ -1757,34 +1761,49 @@ function villagePlan(s){
     houses.push({a,kind,fx,fz,D,hw,ox:cx+fx*half,oz:cz+fz*half,cx,cz,
                  v1:rnd(20+i,5), v2:rnd(40+i,7), tall:rnd(30+i,6)<0.55});
   }
-  const toW=(H,u,v)=>[H.ox-H.fz*u-v*H.fx, H.oz+H.fx*u-v*H.fz];   // 局部(u 横, v 进深; v=0 为朝水塘的正面) → 世界
-  // 3) 入户小路: 门前平台 → 径直连到环路
+  // 主街: 方向 g(指向城外), 横向 p; 街面 5 格宽(|o|≤2), 两侧各留一格路肩(|o|=3)放路灯/门阶, 屋正面在 |o|=4
+  const gX=Math.round(Math.cos(c)), gZ=Math.round(Math.sin(c)), pX=-gZ, pZ=gX;
+  const ST_R=17, ST_O=4, ST_HALF=2;
+  const street={gx:gX,gz:gZ,px:pX,pz:pZ,r0:Math.ceil(VIL_RING),r1:VIL_WALL-1,half:ST_HALF};
+  for(const sd of [-1,1]){
+    const fx=-sd*pX, fz=-sd*pZ;                                     // 门朝街心
+    const ox=x+gX*ST_R+sd*pX*ST_O, oz=z+gZ*ST_R+sd*pZ*ST_O;
+    houses.push({a:c,kind:"timber",fx,fz,D:7,hw:3,ox,oz,cx:ox+sd*pX*3,cz:oz+sd*pZ*3,street:true,
+                 v1:rnd(120+sd,5), v2:rnd(130+sd,7)*0.7, tall:false});   // v2<0.7 → 两栋都是陶瓦顶
+  }
+  const toW=(H,u,v)=>[H.ox-H.fz*u-v*H.fx, H.oz+H.fx*u-v*H.fz];   // 局部(u 横, v 进深; v=0 为正门墙) → 世界
+  // 3) 入户小路: 门前平台 → 径直连到环路(沿街屋的门阶直接落在主街上)
   for(const H of houses){
     const [p1x,p1z]=toW(H,0,-1), [p2x,p2z]=toW(H,0,-2);
-    const ddx=p2x-x, ddz=p2z-z, dl=Math.hypot(ddx,ddz)||1;
     seg(p1x,p1z,p2x,p2z,1.0,2,[3]);
+    if(H.street) continue;
+    const ddx=p2x-x, ddz=p2z-z, dl=Math.hypot(ddx,ddz)||1;
     seg(p2x,p2z,x+ddx/dl*VIL_RING,z+ddz/dl*VIL_RING,0.9,2,[3]);
   }
-  // 4) 房屋之间的空隙角: 两个城门(大致相对) / 集市摊 / 水井 / 其余做菜园小景
-  const gaps=[]; for(let i=0;i<n;i++) gaps.push(a0+(i+0.5)*step);
-  const gi2=n>>1, gateIdx=[0,gi2], marketIdx=1, wellIdx=(gi2+1)%n;
+  // 4) 槽位之间的空隙角: gaps[0]=主城门(主街) / gaps[mS/2]=副城门 / 集市摊 / 水井 / 其余做菜园小景
+  const gaps=[]; for(let i=0;i<mS;i++) gaps.push(c+i*step);
+  const gateIdx=[0,mS>>1], marketIdx=1, wellIdx=(mS>>1)+1;
   const gates=[];
   for(const gi of gateIdx){
-    const a=gaps[gi], ca=Math.cos(a), sa=Math.sin(a);
+    const a=gaps[gi], ca=Math.round(Math.cos(a)), sa=Math.round(Math.sin(a));   // 轴向: 光栅化成笔直的路
     seg(x+ca*VIL_RING,z+sa*VIL_RING,x+ca*(N-1),z+sa*(N-1),1.3,2,[3]);
-    const along=Math.abs(ca)>=Math.abs(sa);
-    gates.push({a,px:Math.round(x+ca*VIL_WALL),pz:Math.round(z+sa*VIL_WALL),
-                qx:along?0:1, qz:along?1:0});                        // q = 拱门横跨方向
+    if(gi===0) seg(x+ca*VIL_RING,z+sa*VIL_RING,x+ca*street.r1,z+sa*street.r1,ST_HALF+0.2,2,[3]);   // 主街加宽到 5 格
+    gates.push({a,px:x+ca*VIL_WALL,pz:z+sa*VIL_WALL,
+                qx:Math.abs(sa), qz:Math.abs(ca)});                   // q = 拱门横跨方向(与路垂直)
+  }
+  for(let r=street.r0;r<=street.r1;r++) for(const sd of [-3,3]){      // 主街路肩: 沙地换成草皮
+    const X=x+gX*r+pX*sd, Z=z+gZ*r+pZ*sd; if(get(X,Z)===0) set(X,Z,1);
   }
   const reserve=(X0,Z0,X1,Z1)=>{ for(let X=X0;X<=X1;X++) for(let Z=Z0;Z<=Z1;Z++) set(X,Z,4); };
   for(const H of houses)
     for(let u=-H.hw;u<=H.hw;u++) for(let v=0;v<H.D;v++){ const [X,Z]=toW(H,u,v); set(X,Z,4); }
   const facing=(px,pz)=>{ const dx=x-px, dz=z-pz; return Math.abs(dx)>=Math.abs(dz)?[dx>=0?1:-1,0]:[0,dz>=0?1:-1]; };
-  const RF=n>=6?12:12.5;
+  const RF=12, RM=13.5;                                              // 水井/菜园半径; 集市退到环路外侧, 摊位不压环路
   let market, well; const gardens=[];
   {
-    const a=gaps[marketIdx], mx=Math.round(x+Math.cos(a)*RF), mz=Math.round(z+Math.sin(a)*RF);
-    const [fx,fz]=facing(mx,mz);
+    const sh=mS===6?1:0;                                               // 6 槽时往主街方向挪一格, 让出隔壁环湖屋的墙角
+    const a=gaps[marketIdx], mx=Math.round(x+Math.cos(a)*RM)+gX*sh, mz=Math.round(z+Math.sin(a)*RM)+gZ*sh;
+    const fx=-pX, fz=-pZ;                                            // 摊位一律面朝主街轴线: 长边沿主街方向, 不会顶到隔壁环湖屋
     market={ox:mx+fx,oz:mz+fz,fx,fz,D:3,hw:4};
     for(let u=-4;u<=4;u++) for(let v=-1;v<=2;v++){ const [X,Z]=toW(market,u,v); set(X,Z,4); }
   }
@@ -1793,10 +1812,15 @@ function villagePlan(s){
     seg(wx,wz,x+Math.cos(a)*VIL_RING,z+Math.sin(a)*VIL_RING,0.8,2,[3,4]);   // 井边小路
     well={x:wx,z:wz}; reserve(wx-2,wz-2,wx+2,wz+2);
   }
-  for(let i=0;i<n;i++){
+  const frontCells=new Set();
+  for(const H of houses) for(let u=-H.hw-1;u<=H.hw+1;u++) for(let v=-3;v<H.D;v++){ const [X,Z]=toW(H,u,v); frontCells.add(X+","+Z); }
+  for(let i=0;i<mS;i++){
     if(i===marketIdx||i===wellIdx||gateIdx.indexOf(i)>=0) continue;
     const a=gaps[i];
-    gardens.push({x:Math.round(x+Math.cos(a)*(RF+1)),z:Math.round(z+Math.sin(a)*(RF+1)),kind:(i+flip)%2});
+    const G={x:Math.round(x+Math.cos(a)*(RF+1)),z:Math.round(z+Math.sin(a)*(RF+1)),kind:(i+flip)%2};
+    let clash=false;                                                   // 菜园不能压住房子或门前小路(否则门口被草垛堵死)
+    for(let X=G.x-2;X<=G.x+2 && !clash;X++) for(let Z=G.z-2;Z<=G.z+2;Z++) if(frontCells.has(X+","+Z)){ clash=true; break; }
+    if(!clash) gardens.push(G);
   }
   for(const G of gardens) reserve(G.x-2,G.z-2,G.x+2,G.z+2);
   // 5) 栈桥: 从集市一侧的岸边伸进水塘
@@ -1818,22 +1842,26 @@ function villagePlan(s){
   };
   const lamps=[];
   const addLamp=(X,Z)=>{ if(free(X,Z,0,[0,1])){ lamps.push([X,Z]); occ.add(okey(X,Z)); return true; } return false; };
-  for(const ga of gaps){                                               // 环路外沿, 每个空隙角一盏
+  for(const r of [ST_R-5, ST_R+5]) for(const sd of [-3,3])   // 主街两侧路肩: 约每 5 格一对路灯(避开沿街屋门阶)
+    addLamp(x+gX*r+pX*sd, z+gZ*r+pZ*sd);
+  for(const ga of gaps){                                              // 环路外沿, 每个空隙角一盏
     for(const off of [0.22,-0.22,0.4,-0.4]){
       if(addLamp(Math.round(x+Math.cos(ga+off)*(VIL_RING+1.8)),Math.round(z+Math.sin(ga+off)*(VIL_RING+1.8)))) break;
     }
   }
-  for(const H of houses){                                              // 每户门边一盏
+  for(const H of houses){                                              // 每户门边一盏(沿街屋由主街路灯照着)
+    if(H.street) continue;
     const [X,Z]=toW(H,H.hw+1,-1);
     if(!addLamp(X,Z)){ const [X2,Z2]=toW(H,-H.hw-1,-1); addLamp(X2,Z2); }
   }
   const palms=[];
-  const addPalm=(X,Z,th,ok,inward)=>{
+  const addPalm=(X,Z,th,ok,inward,lean)=>{
     if(Math.hypot(X-x,Z-z)>VIL_RP) return false;
     const c=get(X,Z); if(c!==0 && c!==1) return false;
     if(!free(X,Z,1,ok)) return false;
     let dx=X-x, dz=Z-z; if(inward){ dx=-dx; dz=-dz; }                  // 水边的棕榈探向水面, 其余朝外歪
-    const lx=Math.abs(dx)>=Math.abs(dz)?(dx>=0?1:-1):0, lz=lx?0:(dz>=0?1:-1);
+    let lx=Math.abs(dx)>=Math.abs(dz)?(dx>=0?1:-1):0, lz=lx?0:(dz>=0?1:-1);
+    if(lean){ lx=lean[0]; lz=lean[1]; }
     palms.push({x:X,z:Z,th,lx,lz});
     for(let a=-1;a<=1;a++) for(let b=-1;b<=1;b++) occ.add(okey(X+a,Z+b));
     return true;
@@ -1843,15 +1871,16 @@ function villagePlan(s){
     const a=pa0+j*TAU/mp+(rnd(60+j,3)-0.5)*0.4, r=pondR(a)+1.6;
     addPalm(Math.round(x+Math.cos(a)*r),Math.round(z+Math.sin(a)*r),5+Math.floor(rnd(70+j,4)*3),[0,1,3],true);
   }
-  for(const G of gates){                                               // 城门外两侧迎客棕榈
-    const ca=Math.cos(G.a), sa=Math.sin(G.a);
-    for(const o of [-6,6]) addPalm(Math.round(x+ca*(VIL_WALL+0.9)-sa*o),Math.round(z+sa*(VIL_WALL+0.9)+ca*o),6,[0,1,2]);
+  for(const G of gates){                                               // 城门外两侧迎客棕榈: 向路外侧歪, 树冠给拱门镶边而不是压在路上
+    const ca=Math.round(Math.cos(G.a)), sa=Math.round(Math.sin(G.a));
+    for(const o of [-7,7]){ const sd=Math.sign(o); addPalm(x+ca*(VIL_WALL+1)-sa*o, z+sa*(VIL_WALL+1)+ca*o, 6, [0,1,2], false, [-sa*sd, ca*sd]); }
   }
   for(let j=0;j<6;j++){                                                // 房前屋后零星几棵
     const a=rnd(80+j,5)*TAU, r=VIL_RING+3+rnd(90+j,6)*(VIL_WALL-VIL_RING-5);
     addPalm(Math.round(x+Math.cos(a)*r),Math.round(z+Math.sin(a)*r),4+Math.floor(rnd(95+j,7)*3),[0,1]);
   }
-  const plan={x,z,pondR,N,S,g,get,houses,toW,gates,market,well,gardens,dock,dockEnd,lamps,palms};
+  const dockSet=new Set(dock.map(([X,Z])=>okey(X,Z)));
+  const plan={x,z,pondR,N,S,g,get,houses,toW,gates,street,market,well,gardens,dock,dockEnd,dockSet,lamps,palms};
   if(_vilPlanCache.size>32) _vilPlanCache.clear();
   _vilPlanCache.set(ck,plan);
   return plan;
@@ -1918,7 +1947,7 @@ function drawVillage(s,put){
       }
       MP(c-1,1,h+1,PLANKS); MP(c+1,1,h+1,PLANKS); MP(c,1,h+1,DARKPLANK);   // 柜台
       MP(c-1,1,h+2,si?HAY:PUMPKIN); MP(c+1,1,h+2,si?PUMPKIN:GOLD_ORE);
-      MP(c,2,h+1,HAY); MP(c,1,h+3,LANTERN);
+      if(si) MP(c,2,h+1,HAY); MP(c,1,h+3,LANTERN);                   // 左摊柜台后空出一格, 给摊主站(VIL_TRADER_SPOT)
     }
   }
   // ---- 5) 水井: 苔石井圈 + 两根木柱 + 陶瓦小顶 + 吊灯 ----
@@ -1964,7 +1993,7 @@ function drawVillage(s,put){
     for(const o of [-2,2]){ for(let y=h+1;y<=h+4;y++) A(o,y,hash2(G.px+o*3,G.pz+y)<0.6?MOSSY:COBBLE); A(o,h+6,LANTERN); }
     A(-1,h+4,MOSSY); A(1,h+4,MOSSY);
     for(let o=-2;o<=2;o++) A(o,h+5,o===0?SANDSTONE:COBBLE);
-    A(0,h+4,LANTERN);
+    A(0,h+4,SANDSTONE);                                                // 拱顶石(原先是一盏灯笼, 把拱门口堵成发光方块)
   }
   // ---- 9) 棕榈 ----
   for(const T of P.palms) drawPalm(put,T.x,h,T.z,T.th,T.lx,T.lz);
@@ -1978,6 +2007,7 @@ function drawVillage(s,put){
   for(let X=x-VIL_RP;X<=x+VIL_RP;X++) for(let Z=z-VIL_RP;Z<=z+VIL_RP;Z++){
     const dx=X-x, dz=Z-z, d=Math.hypot(dx,dz); if(d>VIL_WALL-1) continue;
     const c=get(X,Z), r=hash2(X*13+5,Z*11-3);
+    if(P.dockSet.has(X+","+Z)) continue;                               // 栈桥木板上不长草/不漂睡莲
     if(c===3){
       if(d<P.pondR(Math.atan2(dz,dx))-1 && r<0.10) put(X,h+1,Z,LILY,false);
       continue;
@@ -1985,8 +2015,8 @@ function drawVillage(s,put){
     if(c!==1 && c!==0) continue;
     const shore = get(X+1,Z)===3||get(X-1,Z)===3||get(X,Z+1)===3||get(X,Z-1)===3;
     if(c===1){
-      if(shore && r<0.55){ put(X,h+1,Z,TALLGRASS,false); if(r<0.22) put(X,h+2,Z,TALLGRASS,false); }   // 芦苇(两格高)
-      else if(r<0.20) put(X,h+1,Z,TALLGRASS,false);
+      if(shore && r<0.40) put(X,h+1,Z,REEDS,false);                    // 水边芦苇(一格 REEDS, 不再叠两格高的"野草")
+      else if(r<0.10) put(X,h+1,Z,TALLGRASS,false);
       else if(r<0.245) put(X,h+1,Z,ROSE,false);
       else if(r<0.29) put(X,h+1,Z,DAISY,false);
       else if(r<0.305 && !shore) put(X,h+1,Z,LEAVES,false);            // 小灌木
@@ -2019,7 +2049,7 @@ function drawVillageHouse(P,H,h,put){
     const [cA,cB]=H.v2<0.5?[WOOL,BRICK]:[WOOL,HAY];                    // 条纹遮阳篷
     for(let u=-1;u<=1;u++){ Q(u,-1,h+4,(u&1)?cA:cB); Q(u,-2,h+3,(u&1)?cB:cA); }
     Q(-2,-1,h+1,CLAY); Q(-2,-1,h+2,ROSE,false);                          // 门口陶盆花
-    Q(0,2,h+4,LANTERN);                                                  // 室内灯
+    Q(0,D-2,h+5,LANTERN);                                                // 嵌在屋顶里的吸顶灯: 屋里亮, 正午从窗外看不见发光方块
     if(H.tall){                                                          // 退台二层
       for(let u=-2;u<=2;u++) for(let v=3;v<D;v++) for(let y=h+6;y<=h+8;y++) Q(u,v,y,AIR);
       for(let y=h+6;y<=h+8;y++) shell(y,wall,-2,2,3,D-1);
@@ -2052,7 +2082,7 @@ function drawVillageHouse(P,H,h,put){
     Q(0,0,h+2,AIR); Q(0,0,h+3,AIR); Q(0,-1,h+1,COBBLE);                 // 门 + 台阶
     for(const u of [-2,2]){ Q(u,0,h+3,WINDOW_WOOD); Q(u,D-1,h+3,WINDOW_WOOD); Q(u,0,h+5,WINDOW_WOOD); Q(u,0,h+6,WINDOW_WOOD); }   // 一层小窗 + 二层高窗
     for(const v of [1,D-2]) for(const u of [-hw,hw]){ Q(u,v,h+3,WINDOW_WOOD); Q(u,v,h+5,WINDOW_WOOD); Q(u,v,h+6,WINDOW_WOOD); }
-    for(const u of [-2,2]){ Q(u,-1,h+2,LEAVES); Q(u,-1,h+3,(u<0)===(H.v1<0.5)?ROSE:DAISY,false); }   // 窗下花箱
+    for(const u of [-2,2]){ Q(u,-1,h+1,LEAVES); Q(u,-1,h+2,(u<0)===(H.v1<0.5)?ROSE:DAISY,false); }   // 窗下落地花丛(贴地, 不再悬空)
     // 山墙朝街的坡屋顶(屋脊沿进深方向), 前后各挑出一格
     for(let k=0;k<=hw+1;k++){
       const y=h+8+k, e=hw+1-k;
@@ -2062,7 +2092,7 @@ function drawVillageHouse(P,H,h,put){
     Q(0,0,h+9,GLASS); Q(0,0,h+10,DARKPLANK);                            // 阁楼窗
     for(let y=h+8;y<=h+12;y++) Q(2,D-2,y,BRICK);                        // 砖烟囱
     Q(2,D-2,h+13,COBBLE);
-    Q(0,mid,h+6,LANTERN);                                                // 室内吊灯(夜里从窗里透光)
+    Q(-2,D-2,h+1,LANTERN);                                               // 屋角地炉灯: 嵌在地板里, 街上视线从窗口往上看不到, 夜里照亮屋内
   }
 }
 
@@ -4510,12 +4540,104 @@ function spawnNPC(role,minD,maxD){
   return false;
 }
 function countNPC(role){ let n=0; for(const m of mobs) if(m.npcRole===role) n++; return n; }
+/* ---- 绿洲村落的村民: 在有意义的地点(各户门口/集市/水井/栈桥)出生, 沿环路在这些地点之间走动, 黄昏回家("进屋"消失);
+   商人固定站在集市左摊柜台后。所有地点都来自 villagePlan, 与村落施工同源, 不会再刷到平屋顶或灯柱顶上。 ---- */
+function villageWaypoints(P){
+  const out=[], cx=P.x, cz=P.z;
+  const add=(X,Z,kind,home)=>out.push({x:X,z:Z,kind,home:!!home,ang:Math.atan2(Z+0.5-cz,X+0.5-cx)});
+  for(const H of P.houses){ const [X,Z]=P.toW(H,0,-2); add(X,Z,"door",true); }       // 门前一格(门阶外)
+  for(const u of [-2,0,2]){ const [X,Z]=P.toW(P.market,u,-1); add(X,Z,"market"); }  // 摊位前的檐下
+  { const {x:wx,z:wz}=P.well, dx=cx-wx, dz=cz-wz;                                      // 井台朝村心的一侧
+    const sx=Math.abs(dx)>=Math.abs(dz)?Math.sign(dx):0, sz=sx?0:Math.sign(dz);
+    add(wx+2*sx,wz+2*sz,"well"); }
+  if(P.dock.length>=4){ const [X,Z]=P.dock[P.dock.length-4]; add(X,Z,"dock"); }        // 栈桥上(避开尽头灯柱)
+  return out;
+}
+function villageTraderSpot(P){ return P.toW(P.market,-2,2); }                         // 左摊柜台后(drawVillage 空出的那格)
+// 某地点能不能站人: 脚下实心、身体两格不是实心(真实区块数据)
+function vilStandable(X,y,Z){
+  if(!world.has(key(X>>4,Z>>4))) return false;
+  return SOLID(getBlock(X,y-1,Z)) && !SOLID(getBlock(X,y,Z)) && !SOLID(getBlock(X,y+1,Z));
+}
+function nearVillageStruct(range){ return nearStructure(["village"], range||VIL_N+26); }
+function newVillagerMob(x,y,z,extra){
+  const def=MOB_DEFS.villager;
+  return Object.assign({type:"villager", def, x, y, z, vx:0,vy:0,vz:0, kbx:0,kbz:0,
+    yaw:Math.random()*6.283, tgtYaw:0, hp:def.hp, maxHp:def.hp, hurtT:0, animT:0, t:0,
+    atkCd:0, burnT:0, swingT:0, groanT:0, fleeT:0,
+    onGround:false, pause:false, burning:false, held:null}, extra||{});
+}
+function spawnVillageVillager(vs){
+  const P=villagePlan(vs), W=villageWaypoints(P), h=vs.h;
+  const homes=W.filter(w=>w.home);
+  for(let tr=0;tr<8;tr++){
+    const w=W[Math.floor(Math.random()*W.length)];
+    const d=Math.hypot(w.x+0.5-player.x, w.z+0.5-player.z);
+    if(d<4 || d>56) continue;
+    if(!vilStandable(w.x,h+1,w.z)) continue;
+    let crowd=false; for(const m of mobs) if(m.type==="villager" && Math.hypot(m.x-w.x-0.5,m.z-w.z-0.5)<1.5) crowd=true;
+    if(crowd) continue;
+    const home=w.home?w:homes[Math.floor(Math.random()*homes.length)];
+    mobs.push(newVillagerMob(w.x+0.5, h+1, w.z+0.5,
+      {vil:{cx:vs.x, cz:vs.z, h, W, home, at:w, path:null, pi:0, legT:0, wait:1+Math.random()*4, goHome:false}}));
+    return true;
+  }
+  return false;
+}
+function spawnVillageTrader(vs){
+  const P=villagePlan(vs), [X,Z]=villageTraderSpot(P), y=vs.h+1;
+  if(!vilStandable(X,y,Z)) return false;
+  const M=P.market, yaw=Math.atan2(M.fx,-M.fz);                                        // 面朝集市前方(村心)
+  mobs.push(newVillagerMob(X+0.5, y, Z+0.5, {pause:true, yaw, tgtYaw:yaw, pinned:true,
+    npcRole:"trader", npcName:NPC_ROLES.trader.name}));
+  return true;
+}
+// 路线: (离开沿街屋门口等) → 环路上当前角度的点 → 沿环路弧线 → 目标所在角度 → 目标点。环路外侧的门/摊/井都有直路连到环路。
+function vilRoute(V,fx,fz,to){
+  const R=VIL_RING, pts=[];
+  const a0=Math.atan2(fz-V.cz,fx-V.cx);
+  let da=to.ang-a0; while(da>Math.PI) da-=2*Math.PI; while(da<-Math.PI) da+=2*Math.PI;
+  const n=Math.max(1,Math.ceil(Math.abs(da)/0.35));
+  for(let k=0;k<=n;k++){ const a=a0+da*k/n; pts.push([V.cx+0.5+Math.cos(a)*R, V.cz+0.5+Math.sin(a)*R]); }
+  pts.push([to.x+0.5, to.z+0.5]);
+  return pts;
+}
+// 村民转向: 返回本帧速度; 返回 -1 表示"到家进屋"(调用方移除)
+function villagerSteer(m,dt){
+  const V=m.vil, D=m.def;
+  if(!V.goHome && sunH<0.12){ V.goHome=true; V.path=vilRoute(V,m.x,m.z,V.home); V.pi=0; V.legT=0; V.wait=0; }
+  if(!V.path){
+    V.wait-=dt;
+    if(V.wait>0){                                                   // 在地点逗留: 偶尔东张西望
+      if(m.t<=0){ m.t=1.5+Math.random()*2.5; m.tgtYaw=m.yaw+(Math.random()-0.5)*2.4; }
+      return 0;
+    }
+    let to=V.W[Math.floor(Math.random()*V.W.length)];
+    if(to===V.at) to=V.W[(V.W.indexOf(to)+1)%V.W.length];
+    V.path=vilRoute(V,m.x,m.z,to); V.pi=0; V.legT=0; V.dest=to;
+  }
+  const [tx,tz]=V.path[V.pi], dx=tx-m.x, dz=tz-m.z, d=Math.hypot(dx,dz);
+  V.legT+=dt;
+  if(d<(V.pi===V.path.length-1?0.6:1.2) || V.legT>12){
+    V.pi++; V.legT=0;
+    if(V.pi>=V.path.length){
+      V.path=null;
+      if(V.goHome) return -1;
+      V.at=V.dest; V.wait=4+Math.random()*9;
+      return 0;
+    }
+  }
+  m.tgtYaw=Math.atan2(dx,-dz);
+  return D.speed*0.5;
+}
 function maintainNPCs(dt){
   if(!worldGenReady) return;
   npcSpawnT-=dt; if(npcSpawnT>0) return;
   npcSpawnT=4;
   // 商人: 世界任意地点最多 1 个, 靠近集市/商队残骸更近
   if(countNPC("trader")===0){
+    const vs=nearVillageStruct();                                     // 绿洲村落: 商人守在集市摊位上
+    if(vs && spawnVillageTrader(vs)) return;
     const near=nearStructure(["bazaar","caravan","oasis","village"],40);
     spawnNPC("trader", near?10:18, near?18:30);
   }
@@ -6440,6 +6562,10 @@ function updateMobs(dt){
       }
     } else {                                       // 被动生物
       if(m.fleeT>0){ m.fleeT-=dt; speed=D.speed*1.7; }
+      else if(m.vil){                              // 村落村民: 沿环路在门口/集市/水井/栈桥之间走动, 黄昏回家
+        speed=villagerSteer(m,dt);
+        if(speed<0){ mobs.splice(i,1); continue; }
+      }
       else {
         if(m.t<=0){ m.t=1.5+Math.random()*4; m.pause=Math.random()<0.5; m.tgtYaw=Math.random()*6.283; }
         if(!m.pause) speed=D.speed*0.5;
@@ -6849,7 +6975,11 @@ function trySpawns(dt){
   if(fish<8 && Math.random()<0.5) spawnMob("fish",6,26);
   // 村民: 附近有村屋/农田时才出现
   let vil=0; for(const m of mobs) if(m.type==="villager") vil++;
-  if(!night && vil<5 && Math.random()<0.45 && nearVillage()) spawnMob("villager",6,22);
+  if(!night && vil<5 && Math.random()<0.45){
+    const vs=nearVillageStruct();
+    if(vs) spawnVillageVillager(vs);                                  // 绿洲村落: 只在门口/集市/水井/栈桥出生
+    else if(nearVillage()) spawnMob("villager",6,22);
+  }
   if(!night && dayCount>=3 && zc<2 && Math.random()<0.06) spawnMob("slime",18,40);
   if(!night && dayCount>=5 && zc<2 && Math.random()<0.04) spawnMob("mech",24,44);
 }
@@ -10399,7 +10529,7 @@ function selftest(){
         ok("村落安全区: 村墙内不刷普通敌对怪", safeIn && safeOut && spawned===0 && inside===0, "in="+safeIn+" out="+safeOut+" spawned="+spawned);
         const P=villagePlan(vs);
         const kinds=new Set(P.houses.map(H=>H.kind));
-        ok("村落有 4~7 栋房屋且泥砖屋/木筋屋混搭", P.houses.length>=4 && P.houses.length<=7 && kinds.has("adobe") && kinds.has("timber"),
+        ok("村落有 5~8 栋房屋且泥砖屋/木筋屋混搭", P.houses.length>=5 && P.houses.length<=8 && kinds.has("adobe") && kinds.has("timber"),
            "houses="+P.houses.length+" kinds="+[...kinds].join("/"));
         ok("村落选址避开河道且在沙漠/台地", villageSiteOK(vs.x,vs.z,vs.h) && (vs.bio===BIO_DESERT||vs.bio===BIO_MESA), "bio="+vs.bio);
         const cnt={}; let sig=0;
@@ -10407,7 +10537,7 @@ function selftest(){
           drawStructure(vs,(X,Y,Z,id)=>{ cnt[id]=(cnt[id]||0)+1; sig=(sig*31+X*7+Y*13+Z*17+id)|0; });
         }catch(e){ vErr=e.message; }
         const c=id=>cnt[id]||0;
-        ok("村落生成无异常, 有水塘/睡莲/芦苇", !vErr && c(WATER)>=40 && c(LILY)>0 && c(TALLGRASS)>=20, vErr||("水="+c(WATER)+" 睡莲="+c(LILY)+" 高草="+c(TALLGRASS)));
+        ok("村落生成无异常, 有水塘/睡莲/芦苇", !vErr && c(WATER)>=40 && c(LILY)>0 && c(REEDS)>0 && c(TALLGRASS)+c(REEDS)>=20, vErr||("水="+c(WATER)+" 睡莲="+c(LILY)+" 芦苇="+c(REEDS)+" 高草="+c(TALLGRASS)));
         ok("村落有路灯(≥8 盏灯笼)与石板路", c(LANTERN)>=8 && c(COBBLE)>=60 && P.lamps.length>=4, "灯笼="+c(LANTERN)+" 圆石="+c(COBBLE)+" 路灯="+P.lamps.length);
         ok("村屋有窗/灰泥或泥砖墙/陶瓦或木屋顶", (c(GLASS)+c(WINDOW_WOOD))>=P.houses.length*4 && (c(CLAY)+c(CAVECALC)+c(WOOL)+c(PLASTER)+c(PLASTER_ROSE)+c(PLASTER_WHITE))>=100 && (c(ROOFTILE)+c(DARKPLANK))>=40,
            "窗="+(c(GLASS)+c(WINDOW_WOOD))+" 墙="+(c(CLAY)+c(CAVECALC)+c(WOOL)+c(PLASTER)+c(PLASTER_ROSE)+c(PLASTER_WHITE))+" 顶="+(c(ROOFTILE)+c(DARKPLANK)));
@@ -10421,6 +10551,79 @@ function selftest(){
         const H0=P.houses[0], [lx,lz]=P.toW(H0,0,0);
         const wantY=vs.h+(H0.kind==="adobe"?3:4);
         ok("区块里第一栋房子的门楣横梁到位", at(lx,wantY,lz)===DARKPLANK, H0.kind+" id="+at(lx,wantY,lz)+" @"+lx+","+wantY+","+lz);
+        // 1d. 第二轮村落修正: 城门轴向对齐 / 主街两侧沿街屋+路灯 / 拱门口无灯笼 / 花丛不悬空 / 棕榈无树桩 / 栈桥无草 / 村民在地点出生
+        {
+          const HPI=Math.PI/2, hv=vs.h, CK=new Map();
+          const at2=(X,Y,Z)=>{ const cx=Math.floor(X/CS), cz=Math.floor(Z/CS), k=cx+","+cz;
+            let arr=CK.get(k); if(!arr){ arr=ensureData(cx,cz).blocks; CK.set(k,arr); } return arr[((X-cx*CS)*CS+(Z-cz*CS))*H+Y]; };
+          const G0=P.gates[0], G1=P.gates[1];
+          const card=a=>Math.abs(a/HPI-Math.round(a/HPI))<1e-9;
+          ok("城门吸附到正方向且两门正对", card(G0.a) && card(G1.a) && Math.abs(Math.cos(G1.a-G0.a)+1)<1e-9, "a0="+G0.a.toFixed(3)+" a1="+G1.a.toFixed(3));
+          const St=P.street; let straight=true;
+          for(let r=St.r0;r<=St.r1;r++) for(let o=-St.half;o<=St.half;o++) if(P.get(vs.x+St.gx*r+St.px*o, vs.z+St.gz*r+St.pz*o)!==2) straight=false;
+          for(let r=VIL_WALL;r<=VIL_WALL+4;r++) for(let o=-1;o<=1;o++) if(P.get(vs.x+St.gx*r+St.px*o, vs.z+St.gz*r+St.pz*o)!==2) straight=false;
+          ok("主街是笔直的 5 格宽石板路, 出城段 3 格正穿拱门", straight && G0.px===vs.x+St.gx*VIL_WALL && G0.pz===vs.z+St.gz*VIL_WALL, "gate@"+G0.px+","+G0.pz);
+          const SH=P.houses.filter(H=>H.street);
+          const shOK=SH.length===2 && SH.every(H=>{
+            const lat=(H.ox-vs.x)*St.px+(H.oz-vs.z)*St.pz, sd=Math.sign(lat);
+            return Math.abs(lat)===4 && H.fx===-sd*St.px && H.fz===-sd*St.pz && H.kind==="timber";
+          }) && Math.sign((SH[0].ox-vs.x)*St.px+(SH[0].oz-vs.z)*St.pz)!==Math.sign((SH[1].ox-vs.x)*St.px+(SH[1].oz-vs.z)*St.pz);
+          ok("主街两侧各一栋沿街木筋屋, 正面离街心 4 格、门朝街", shOK, SH.map(H=>H.ox+","+H.oz+" f"+H.fx+","+H.fz).join(" | "));
+          const stLamps=P.lamps.filter(([X,Z])=>{ const r=(X-vs.x)*St.gx+(Z-vs.z)*St.gz, o=(X-vs.x)*St.px+(Z-vs.z)*St.pz; return Math.abs(o)===3 && r>=St.r0 && r<=St.r1; });
+          ok("主街两侧路肩有成对路灯(≥4 盏, 间距≈5)", stLamps.length>=4, "lamps="+stLamps.map(q=>q.join(",")).join(" "));
+          let archBad=[];
+          for(const G of P.gates) for(let o=-1;o<=1;o++) for(let y=hv+1;y<=hv+4;y++){
+            const id=at2(G.px+G.qx*o,y,G.pz+G.qz*o);
+            if(id===LANTERN || (y<=hv+3 && SOLID(id))) archBad.push(o+"/"+(y-hv)+"="+id);
+          }
+          ok("拱门口 3×3 通畅且拱顶不再塞发光灯笼", archBad.length===0, archBad.join(" ")||"ok");
+          let boxBad=[];
+          for(const H of P.houses) if(H.kind==="timber") for(const u of [-2,2]){
+            const [X,Z]=P.toW(H,u,-1);
+            if(at2(X,hv+1,Z)!==LEAVES || !PLANT(at2(X,hv+2,Z)) || at2(X,hv+3,Z)===LEAVES) boxBad.push(X+","+Z);
+          }
+          ok("木筋屋窗下花丛贴地(不再悬空)", boxBad.length===0, boxBad.join(" ")||"ok");
+          let floatP=0, dockG=0, stump=[], dockAt=[];
+          for(let X=vs.x-VIL_WALL;X<=vs.x+VIL_WALL;X++) for(let Z=vs.z-VIL_WALL;Z<=vs.z+VIL_WALL;Z++){
+            for(let y=hv+1;y<=hv+3;y++){ const id=at2(X,y,Z); if(PLANT(id) && id!==LILY && !SOLID(at2(X,y-1,Z))) floatP++; }
+            if(P.dockSet.has(X+","+Z) && PLANT(at2(X,hv+1,Z))){ dockG++; dockAt.push(X+","+Z+"="+at2(X,hv+1,Z)+"/"+at2(X,hv,Z)); }
+          }
+          for(const T of P.palms) if(T.lx||T.lz){ const bend=Math.ceil(T.th*0.6); if(at2(T.x+T.lx,hv+bend-1,T.z+T.lz)===PALM_LOG) stump.push(T.x+","+T.z); }
+          ok("村里花草都长在实心方块上 / 栈桥木板上没有草", floatP===0 && dockG===0, "悬空="+floatP+" 栈桥草="+dockG+" "+dockAt.join(" "));
+          ok("棕榈拐膝同高并排, 树干旁没有树桩", stump.length===0, stump.join(" ")||("palms="+P.palms.length));
+          let lanWin=[];                                              // 室内灯不在任何窗户的正对视线上(同行/同列且同高)
+          for(const H of P.houses){
+            const LY=H.kind==="adobe"?hv+5:hv+1, [lu,lv]=H.kind==="adobe"?[0,H.D-2]:[-2,H.D-2], [LX,LZ]=P.toW(H,lu,lv);
+            if(at2(LX,LY,LZ)!==LANTERN) lanWin.push("missing@"+LX+","+LY+","+LZ);
+            for(let u=-H.hw;u<=H.hw;u++) for(let v=0;v<H.D;v++){ const [X,Z]=P.toW(H,u,v); if(at2(X,LY,Z)===GLASS) lanWin.push("glass-row@"+X+","+Z); }
+          }
+          ok("室内灯嵌进屋顶/地板, 与窗户不同高(正午不从窗里发光)", lanWin.length===0, lanWin.slice(0,4).join(" ")||"ok");
+          const W=villageWaypoints(P), [tX,tZ]=villageTraderSpot(P);
+          const stand=(X,Z)=>SOLID(at2(X,hv,Z)) && !SOLID(at2(X,hv+1,Z)) && !SOLID(at2(X,hv+2,Z));
+          const badW=W.filter(w=>!stand(w.x,w.z)).map(w=>w.kind+"@"+w.x+","+w.z);
+          ok("村民地点(门口/集市/水井/栈桥)与摊主位都能站人", badW.length===0 && stand(tX,tZ) && W.some(w=>w.kind==="market") && W.some(w=>w.kind==="well") && W.filter(w=>w.kind==="door").length===P.houses.length,
+             badW.join(" ")||("wps="+W.length));
+          // 真的刷几个村民/摊主: 都落在地面(h+1)的地点上, 不在屋顶或灯柱顶
+          const bk={x:player.x,y:player.y,z:player.z}, mob0=mobs.length, sh0=sunH;
+          player.x=vs.x+0.5; player.z=vs.z+0.5; player.y=hv+1;
+          let spawned=0; for(let k=0;k<12;k++) if(spawnVillageVillager(vs)) spawned++;
+          const vms=mobs.slice(mob0).filter(m=>m.vil);
+          const onWp=vms.every(m=>m.y===hv+1 && W.some(w=>Math.abs(w.x+0.5-m.x)<1e-6 && Math.abs(w.z+0.5-m.z)<1e-6));
+          ok("村落村民只在地点出生(脚在地面 h+1, 不上屋顶)", spawned>=3 && onWp, "spawned="+spawned+" ys="+vms.map(m=>m.y-hv).join(","));
+          const tOK=spawnVillageTrader(vs), tr=mobs[mobs.length-1];
+          ok("商人固定在集市摊位柜台后", tOK && tr.npcRole==="trader" && tr.pinned && Math.floor(tr.x)===tX && Math.floor(tr.z)===tZ, tOK?(tr.x+","+tr.z):"spawn failed");
+          let steerOK=false, homeOK=false;
+          if(vms.length){
+            const m=vms[0]; m.vil.wait=0; sunH=0.8;
+            const sp=villagerSteer(m,0.1); steerOK=sp>0 && m.vil.path && m.vil.path.length>=2;
+            sunH=0.05; villagerSteer(m,0.1);
+            const last=m.vil.path&&m.vil.path[m.vil.path.length-1];
+            homeOK=m.vil.goHome && !!last && Math.abs(last[0]-(m.vil.home.x+0.5))<1e-6 && Math.abs(last[1]-(m.vil.home.z+0.5))<1e-6;
+          }
+          sunH=sh0;
+          ok("村民沿环路去下一个地点, 黄昏改道回家", steerOK && homeOK, "steer="+steerOK+" home="+homeOK);
+          mobs.length=mob0; player.x=bk.x; player.y=bk.y; player.z=bk.z;
+        }
       }
     }
 
