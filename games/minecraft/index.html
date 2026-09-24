@@ -346,7 +346,7 @@
     <b>W A S D</b> 移动　<b>空格</b> 跳跃(双击飞行)　<b>Shift</b> 潜行/下降　<b>E</b> 上车/骑乘<br>
     <b>左键</b> 挖掘/攻击　<b>右键</b> 放置/使用道具　<b>1–9 / 滚轮</b> 切换物品栏<br>
     <b>探索</b>：右上角<b>指南针</b>指向最近地标——朝它走，寻访金字塔·绿洲·奇观群系<br>
-    <span style="opacity:.7">走进不同群系会有天色与怪物变化，进游戏后随时会有提示 · <b>H</b> 查看完整帮助 · <b>O</b> 切换画质 · <b>V</b> 药水</span>
+    <span style="opacity:.7">走进不同群系会有天色与怪物变化，进游戏后随时会有提示 · <b>H</b> 查看完整帮助 · <b>O</b> 切换画质 · <b>V</b> 药水 · <b>X</b> 钓鱼</span>
   </div>
   <div id="legal">
     《沙海奇境 Sandsea》是一个独立的开源体素游戏，向 Minecraft 致敬。<br>
@@ -4743,8 +4743,9 @@ function renderPotions(){
   info.innerHTML="生效中："+act+"<br>酿造：打开合成台(B)，仙人掌汁 + 对应材料，每次 2 瓶";
   document.getElementById("potionList").innerHTML=POTIONS.map((P,i)=>
     '<div class="recipe'+(potions[P.k]>0?"":" locked")+'" data-k="'+P.k+'"><div><div class="rn">'+(i+1)+". "+P.tag+" "+P.n+'</div><div class="rd">'+P.d+'</div></div>'+
-    '<div class="rc">x'+(potions[P.k]|0)+'</div></div>').join("");
-  for(const el of document.querySelectorAll("#potionList .recipe")) el.onclick=()=>drinkPotion(el.dataset.k);
+    '<div class="rc">x'+(potions[P.k]|0)+'</div></div>').join("")
+    +'<div class="recipe'+(fishState.fish>0?"":" locked")+'" data-k="fish"><div><div class="rn">5. 🐟 烤鱼</div><div class="rd">钓来的尼罗河鲈鱼，恢复 5 点生命（X 钓鱼）</div></div><div class="rc">x'+fishState.fish+'</div></div>';
+  for(const el of document.querySelectorAll("#potionList .recipe")) el.onclick=()=>el.dataset.k==="fish"?eatFish():drinkPotion(el.dataset.k);
 }
 function togglePotions(){
   if(craftOpen) toggleCraft();
@@ -4753,6 +4754,79 @@ function togglePotions(){
   document.getElementById("potionPanel").style.display=potionOpen?"flex":"none";
   if(potionOpen){ renderPotions(); if(document.pointerLockElement) document.exitPointerLock(); }
   else if(!softLock) enterPointerLock();
+}
+
+/* =========================================================
+   🎣 绿洲钓鱼(第五轮·云端): 对着水面按 X 抛竿 → 3~8 秒后浮标下沉(水花+提示) → 0.9 秒内再按 X 收竿
+   早按/晚按都会空竿; 绿洲村落/河道附近咬钩更快、宝物更多; 鱼可在药水面板(V)里吃掉回血
+   ========================================================= */
+const fishState={on:false, x:0, y:0, z:0, t:0, bite:0, window:0, caught:0, fish:0};
+const FISH_BITE_WIN=0.9;
+function fishWaterAhead(){           // 视线 12 格内第一格水面(遇实心方块中止)
+  const [dx,dy,dz]=lookDir(), ox=player.x, oy=player.y+(player.sneak?EYE-0.12:EYE), oz=player.z;
+  for(let t=1.2;t<=12;t+=0.25){
+    const x=ox+dx*t, y=oy+dy*t, z=oz+dz*t, id=getBlock(Math.floor(x),Math.floor(y),Math.floor(z));
+    if(id===WATER){ let wy=Math.floor(y); while(getBlock(Math.floor(x),wy+1,Math.floor(z))===WATER && wy<H-2) wy++; return [x,wy+0.9,z]; }
+    if(SOLID(id)) return null;
+  }
+  return null;
+}
+function fishRichWater(x,z){         // 绿洲村落/河道: 鱼多宝多
+  return !!nearStructure(["village","oasis"],48) || riverInfluence(Math.floor(x),Math.floor(z))>0;
+}
+function fishLoot(r, rich){          // 纯函数: [类别, 名称]; r∈[0,1)
+  const tr=rich?0.30:0.18;
+  if(r<tr){ const t=(r/tr); return t<0.4?["gold","金矿 x2"]:t<0.7?["relic","文物碎片"]:t<0.9?["gem","钻石"]:["crystal","水晶"]; }
+  if(r<tr+0.14) return ["junk", r<tr+0.07?"芦苇 x2":"睡莲"];
+  return ["fish","尼罗河鲈鱼"];
+}
+function castLine(){
+  const at=fishWaterAhead();
+  if(!at){ showName("🎣 对准 12 格内的水面再按 X"); return false; }
+  const rich=fishRichWater(at[0],at[2]);
+  Object.assign(fishState,{on:true, x:at[0], y:at[1], z:at[2], t:0, bite:(3+Math.random()*5)*(rich?0.7:1), window:0});
+  showName("🎣 抛竿…等浮标下沉再按 X"+(rich?"（这片水域鱼多）":""));
+  return true;
+}
+function reelIn(){
+  const S=fishState; S.on=false;
+  if(S.window<=0){ showName("🎣 收竿太"+(S.t<S.bite?"早":"晚")+"，什么也没钓到"); return null; }
+  const [cat,name]=fishLoot(Math.random(), fishRichWater(S.x,S.z));
+  if(cat==="fish") S.fish++;
+  else if(cat==="gold") giveBlock(GOLD_ORE,2);
+  else if(cat==="relic") npcState.relics++;
+  else if(cat==="gem") giveBlock(GEM_ORE,1);
+  else if(cat==="crystal") giveBlock(CRYSTAL,1);
+  else if(name==="睡莲") giveBlock(LILY,1); else giveBlock(REEDS,2);
+  S.caught++; addXP(cat==="fish"?4:cat==="junk"?1:8);
+  for(let i=0;i<12;i++) particles.push({x:S.x,y:S.y+0.1,z:S.z,vx:(Math.random()-.5)*3,vy:2+Math.random()*2,vz:(Math.random()-.5)*3,life:.5,size:.07,u:(BLOCKS[WATER].s%16)*TS,v:Math.floor(BLOCKS[WATER].s/16)*TV,l:1.2});
+  showName("🎣 钓到了 "+name+(cat==="fish"?"（鱼 x"+S.fish+"，按 V 可吃）":""));
+  sfxPickup && sfxPickup();
+  return cat;
+}
+function tickFishing(dt){
+  const S=fishState; if(!S.on) return;
+  if(dead || Math.hypot(player.x-S.x,player.z-S.z)>16){ S.on=false; showName("🎣 线断了"); return; }
+  S.t+=dt;
+  const bob=Math.sin(S.t*3)*0.04 - (S.window>0?0.25:0);
+  const rt=BLOCKS[ROSE].s;                                      // 红色浮标(复用玫瑰花瓣贴图)
+  particles.push({x:S.x,y:S.y+bob,z:S.z,vx:0,vy:0,vz:0,life:0.05,size:0.09,u:(rt%16)*TS+TS*0.4,v:Math.floor(rt/16)*TV+TV*0.3,l:1.2});
+  if(S.window>0){ S.window-=dt; if(S.window<=0){ S.on=false; showName("🎣 鱼溜走了…"); } return; }
+  if(S.t>=S.bite){
+    S.window=FISH_BITE_WIN;
+    for(let i=0;i<10;i++) particles.push({x:S.x,y:S.y,z:S.z,vx:(Math.random()-.5)*2,vy:1.5+Math.random(),vz:(Math.random()-.5)*2,life:.4,size:.06,u:(BLOCKS[WATER].s%16)*TS,v:Math.floor(BLOCKS[WATER].s/16)*TV,l:1.3});
+    showName("❗ 咬钩了！快按 X");
+    sfxHit && sfxHit();
+  }
+}
+function fishKey(){ if(fishState.on) return reelIn(); return castLine(); }
+function eatFish(){
+  if(!(fishState.fish>0)){ showName("🐟 没有鱼 — 对着水面按 X 钓鱼"); return false; }
+  if(eatCd>0) return false;
+  if(hp>=maxHp){ showName("生命值已满"); return false; }
+  eatCd=1.2; fishState.fish--; hp=Math.min(maxHp,hp+5); updateHearts(); sfxEat();
+  showName("🐟 烤鱼真香，恢复 5 点生命（剩 "+fishState.fish+" 条）"); if(potionOpen) renderPotions();
+  return true;
 }
 
 /* =========================================================
@@ -5458,6 +5532,7 @@ document.addEventListener("keydown",e=>{
   if(e.code==="Escape" && enchOpen){ toggleEnch(); return; }
   if(e.code==="Escape" && potionOpen){ togglePotions(); return; }                 // 第五轮·云端
   if(potionOpen && !e.repeat && e.code>="Digit1" && e.code<="Digit4"){ e.preventDefault(); drinkPotion(POTIONS[+e.code.slice(5)-1].k); return; }
+  if(potionOpen && !e.repeat && e.code==="Digit5"){ e.preventDefault(); eatFish(); return; }
   if(e.code==="KeyV" && !e.repeat){ e.preventDefault(); if(potionOpen || (playing() && !dead)) togglePotions(); return; }   // 第五轮·云端: 药水面板
   const potEl=document.getElementById("pottery-panel"), sxEl=document.getElementById("sphinx-panel"), myEl=document.getElementById("mythic-panel"), lpEl=document.getElementById("lamp-panel");
   if(e.code==="Escape" && potEl && potEl.classList.contains("on")){ closePotteryPanel(); return; }
@@ -5481,6 +5556,7 @@ document.addEventListener("keydown",e=>{
     if(e.code==="KeyF"){ e.preventDefault(); if(npcPanelOpen) closeNPCPanel(); else if(talkNpc) openNPCPanel(); }
     if(e.code==="KeyB"){ e.preventDefault(); toggleCraft(); }
     if(e.code==="KeyJ"){ e.preventDefault(); toggleEnch(); }                  // 神庙附魔祭坛(第五轮·本地)
+    if(e.code==="KeyX"){ e.preventDefault(); fishKey(); }                     // 绿洲钓鱼(第五轮·云端)
     if(e.code==="KeyG" && !e.repeat){ e.preventDefault(); startArena(); }   // 斗兽场开战
     if(e.code==="KeyU" && !e.repeat){ e.preventDefault(); openVault(); }     // 封印宝库(花钥匙)
     if(e.code==="KeyR" && !e.repeat){ e.preventDefault(); openSphinxPanel(); } // 斯芬克斯答谜
@@ -5553,6 +5629,7 @@ newworldbtn.addEventListener("click",()=>{
   mobs.length=0; arrows.length=0; drops.length=0; particles.length=0;
   hp=maxHp=20; lvl=1; xp=0; armor=0; cores=0; kills=0; dayCount=1; dmgMul=1; dead=false; setSunblade(false); setMace(false); for(const k in enchState) enchState[k]=0;
   for(const k in potions) potions[k]=0; for(const k in potionFx) potionFx[k]=0;   // 第五轮·云端
+  fishState.on=false; fishState.fish=0; fishState.caught=0;
   questIdx=0; questProg=0; questDone=false; _qWalkX=null; _qDriveX=null; bag.clear(); updateQuestHUD();
   document.getElementById("victory").style.display="none";
   _gcx=1e9; pcx=1e9; pcz=1e9;
@@ -9992,6 +10069,7 @@ function frame(now){
     tickExpedition(dt);
     tickUndeadNight(dt);
     tickPotions(dt);                              // 第五轮·云端
+    tickFishing(dt);                              // 第五轮·云端
     tickTitle();
     arrowCd=Math.max(0,arrowCd-dt);
     gunCd=Math.max(0,gunCd-dt);
@@ -10066,6 +10144,7 @@ function collectSave(){
     mace:maceOwned,                              // 第五轮·本地: 塞特之锤(老存档无此字段 → 没有)
     ench:Object.assign({},enchState),            // 第五轮·本地: 附魔词条(老存档无此字段 → 全 0)
     potions:Object.assign({},potions),           // 第五轮·云端: 药水库存(老存档无此字段 → 全 0; 生效中的效果不存档)
+    fish:{ n:fishState.fish, caught:fishState.caught },   // 第五轮·云端: 钓鱼(老存档无此字段 → 0)
     questIdx, questId:(QUESTS[questIdx]||{}).id||null,
     questProg:+questProg.toFixed(1), questDone,
     bounty:{ idx:bountyIdx, prog:bountyProg, done:bountyDone },
@@ -10155,6 +10234,7 @@ function loadGame(){
   setMace(!!s.mace);
   for(const D of ENCH_DEFS) enchState[D.k]=Math.max(0,Math.min(D.max,(s.ench&&s.ench[D.k])|0));
   for(const P of POTIONS){ potions[P.k]=Math.max(0,(s.potions&&s.potions[P.k])|0); if(P.k in potionFx) potionFx[P.k]=0; }   // 第五轮·云端: 老存档无 potions → 全 0
+  fishState.on=false; fishState.fish=Math.max(0,(s.fish&&s.fish.n)|0); fishState.caught=Math.max(0,(s.fish&&s.fish.caught)|0);   // 第五轮·云端
   bag.clear(); if(s.bag) for(const k in s.bag) bag.set(+k, s.bag[k]);
   // 优先用 id 定位关卡(抗关卡表变动), 没有 id 的老存档才退回下标
   const qById = s.questId ? QUESTS.findIndex(q=>q.id===s.questId) : -1;
@@ -11319,6 +11399,7 @@ window.__game = {
   get trophies(){ return { got:[...trophies], total:TROPHY_TOTAL }; },
   get potions(){ return { stock:Object.assign({},potions), fx:Object.assign({},potionFx) }; },   // 第五轮·云端
   drinkPotion:(k)=>drinkPotion(k), brewPotion:(k)=>brewPotion(k),
+  get fishing(){ return Object.assign({},fishState); }, fishKey:()=>fishKey(),
   grantTrophy:(t)=>grantTrophy(t),
   claimLandmark(type,sx,sz){ const key=type+":"+(sx|0)+":"+(sz|0); landSeen.add(key); return [...landSeen]; },
   getBlock, setBlock, groundY, heightAt, biomeAt,
@@ -12476,6 +12557,26 @@ function selftest(){
         Object.assign(potions,pS); Object.assign(potionFx,fS); hp=hpP; potionCd=cdP; updateHearts(); updateBuffHUD();
         ok("沙漠药水: 合成台 4 种配方, 酿 2 瓶, 饮用生效扣库存, 迅捷/耐热/夜视(只夜里提亮)/治疗, 空瓶拒绝, 进存档",
            RC===4 && brewed && d1 && eff && heat && nightB && dayB && healed && empty && saved, "rc="+RC+" eff="+eff+" night="+nightB+"/"+dayB+" heal="+healed+" saved="+saved);
+      }
+      // 绿洲钓鱼(第五轮·云端): 掉落表 / 早收空竿 / 咬钩窗口内收竿有收获 / 窗口过了鱼溜走 / 吃鱼回血 / 存档
+      {
+        const fS=Object.assign({},fishState), hpF=hp, eatF=eatCd, relF=npcState.relics, bagF=new Map(bag);
+        let cats={}; for(let i=0;i<200;i++){ const c=fishLoot(i/200,false)[0]; cats[c]=(cats[c]||0)+1; }
+        const richTr=[...Array(200)].map((_,i)=>fishLoot(i/200,true)[0]).filter(c=>c!=="fish"&&c!=="junk").length;
+        const lootOk=cats.fish>100 && cats.junk>0 && (cats.gold||0)+(cats.relic||0)+(cats.gem||0)+(cats.crystal||0)>0 && richTr>((cats.gold||0)+(cats.relic||0)+(cats.gem||0)+(cats.crystal||0));
+        Object.assign(fishState,{on:true,x:player.x+3,y:player.y,z:player.z,t:0,bite:2,window:0,fish:0,caught:0});
+        const early=reelIn()===null && !fishState.on;
+        Object.assign(fishState,{on:true,x:player.x+3,y:player.y,z:player.z,t:0,bite:1,window:0});
+        tickFishing(1.05); const bit=fishState.window>0;
+        const got=reelIn(); const caughtOk=!!got && fishState.caught===1;
+        Object.assign(fishState,{on:true,x:player.x+3,y:player.y,z:player.z,t:0,bite:1,window:0});
+        tickFishing(1.05); tickFishing(FISH_BITE_WIN+0.05); const escaped=!fishState.on;
+        fishState.fish=2; eatCd=0; hp=Math.max(1,maxHp-8); const h0=hp; const ate=eatFish() && hp===h0+5 && fishState.fish===1;
+        const sv=collectSave(); const saved=sv.fish && sv.fish.n===1 && sv.fish.caught===1;
+        particles.length=0;
+        Object.assign(fishState,fS); hp=hpF; eatCd=eatF; npcState.relics=relF; bag.clear(); for(const [k,v] of bagF) bag.set(k,v); updateHearts();
+        ok("绿洲钓鱼: 掉落表(鱼为主/杂物/宝物, 富饶水域宝物更多), 早收空竿, 咬钩窗口内收竿有收获, 过窗鱼溜走, 吃鱼 +5, 进存档",
+           lootOk && early && bit && caughtOk && escaped && ate && saved, "loot="+JSON.stringify(cats)+" rich="+richTr+" bit="+bit+" got="+got+" esc="+escaped+" ate="+ate);
       }
       ok("材质: 逐块旋转——松沙陷坑与沙子同模式(伪装不露馅), 沙纹只转180°, 草地四向", UV_ROT[LOOSESAND*2]===UV_ROT[SAND*2] && UV_ROT[LOOSESAND*2+1]===UV_ROT[SAND*2+1] && UV_ROT[SAND*2]===1 && UV_ROT[GRASS*2]===2,
          "sand="+UV_ROT[SAND*2]+" loose="+UV_ROT[LOOSESAND*2]);
