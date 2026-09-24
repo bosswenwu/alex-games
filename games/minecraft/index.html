@@ -6232,7 +6232,7 @@ function pushBox(ent, pt, rot, roll, spin){
     for(const i of [0,1,2,0,2,3]) entArr.push(quad[i][0],quad[i][1],quad[i][2],uv[i][0],uv[i][1],F.sh);
   }
 }
-function drawEntity(ent){
+function buildEntity(ent){               // 只生成顶点到 entArr(主绘制与阴影 pass 共用)
   entArr.length=0;
   const amp=clamp(Math.hypot(ent.vx||0,ent.vz||0)/2.2,0,1)*0.8;
   const parts = ent.held ? ent.def.parts.concat(ent.held) : ent.def.parts;
@@ -6252,6 +6252,9 @@ function drawEntity(ent){
     const spin = pt.rotor ? (ent.animT||0)*26 : 0;                     // 螺旋桨/旋翼旋转
     pushBox(ent,pt,rot,roll,spin);
   }
+}
+function drawEntity(ent){
+  buildEntity(ent);
   gl.bindBuffer(gl.ARRAY_BUFFER,entVbo);
   uploadDyn(entArr);
   bindMeshAttribs();
@@ -8193,15 +8196,16 @@ const GFX_PRESETS=[
   // clouds = 云噪声层数(3..5), cshadow = 地面云影开关
   {shadow:false, post:false, clouds:3, cshadow:0},                                                          // 低: 无阴影贴图、无后处理(直出画布)
   {shadow:true, size:1024, range:40, pcf:0, post:true, bloom:true, fxaa:true, clouds:4, cshadow:1},         // 中: + 泛光/调色/暗角/FXAA
-  {shadow:true, size:2048, range:56, pcf:1, post:true, bloom:true, fxaa:true, msaa:4, heat:true, clouds:5, cshadow:1, rays:12},   // 高(电脑默认): + 正午热浪 + 光束
-  {shadow:true, size:4096, range:80, pcf:1, post:true, bloom:true, fxaa:true, msaa:4, heat:true, dof:true, clouds:5, cshadow:1, rays:20}, // 极致: + 远景柔化
+  {shadow:true, size:2048, range:56, pcf:1, post:true, bloom:true, fxaa:true, msaa:4, heat:true, clouds:5, cshadow:1, rays:12, mobShadow:true},   // 高(电脑默认): + 正午热浪 + 光束
+  {shadow:true, size:4096, range:80, pcf:1, post:true, bloom:true, fxaa:true, msaa:4, heat:true, dof:true, clouds:5, cshadow:1, rays:20, mobShadow:true}, // 极致: + 远景柔化
 ];
 let gfxLevel=2;
 try{ const v=parseInt(localStorage.getItem("sandsea_gfx"),10); if(v>=0 && v<GFX_PRESETS.length) gfxLevel=v; }catch(e){}
 function setupShadow(){
   const P=GFX_PRESETS[gfxLevel];
   if(shadow.fbo){ gl.deleteFramebuffer(shadow.fbo); gl.deleteTexture(shadow.tex); shadow.fbo=shadow.tex=null; }
-  shadow.ok=false; shadow.dirty=true; shadow.range=P.range||0;
+  if(shadow.dynFbo){ gl.deleteFramebuffer(shadow.dynFbo); gl.deleteTexture(shadow.dynTex); shadow.dynFbo=shadow.dynTex=null; }
+  shadow.ok=false; shadow.dirty=true; shadow.range=P.range||0; shadow.useDyn=false; shadow.casters=0;
   if(!P.shadow || !HAS_DEPTH_TEX) return;
   const size=Math.min(P.size, gl.getParameter(gl.MAX_TEXTURE_SIZE));
   const tex=gl.createTexture();
@@ -8220,7 +8224,24 @@ function setupShadow(){
   gl.bindTexture(gl.TEXTURE_2D,atlasTex);
   if(!ok){ gl.deleteFramebuffer(fbo); gl.deleteTexture(tex); return; }   // 驱动不支持: 静默退回无阴影
   shadow.fbo=fbo; shadow.tex=tex; shadow.size=size; shadow.pcf=P.pcf; shadow.ok=true;
+  // 生物投影(高/极致, 仅 WebGL2): 地形阴影贴图保持"按需重画"的静态版; 每帧把它的深度 blit 到这张动态副本,
+  // 再把附近生物画进副本 → 生物有真影子, 却不必每帧重画全部地形
+  if(IS_GL2 && P.mobShadow){
+    const t2=gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D,t2);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.DEPTH_COMPONENT24,size,size,0,gl.DEPTH_COMPONENT,gl.UNSIGNED_INT,null);
+    for(const [k,v] of [[gl.TEXTURE_MIN_FILTER,gl.NEAREST],[gl.TEXTURE_MAG_FILTER,gl.NEAREST],[gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D,k,v);
+    const f2=gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER,f2);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.DEPTH_ATTACHMENT,gl.TEXTURE_2D,t2,0);
+    gl.drawBuffers([gl.NONE]); gl.readBuffer(gl.NONE);
+    const ok2=gl.checkFramebufferStatus(gl.FRAMEBUFFER)===gl.FRAMEBUFFER_COMPLETE;
+    gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+    gl.bindTexture(gl.TEXTURE_2D,atlasTex);
+    if(ok2){ shadow.dynFbo=f2; shadow.dynTex=t2; } else { gl.deleteFramebuffer(f2); gl.deleteTexture(t2); }
+  }
 }
+const shadowSampleTex=()=>shadow.ok ? (shadow.useDyn ? shadow.dynTex : shadow.tex) : null;
 setupShadow();
 /* =========================================================
    光影第 4 步: 后处理管线(仅 WebGL2; WebGL1/「低」档直接画到画布, 与原来完全一致)
@@ -8621,7 +8642,7 @@ function postEnd(now, uw, fogFar){
   gl.uniform1f(c.uDofNear,Math.min(110,fogFar*0.62)); gl.uniform1f(c.uDofFar,Math.max(fogFar*1.25,160));
   gl.uniform1f(c.uRayI,rayI);
   if(rayI>0.001 && _postCam.inv){
-    gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D,shadow.tex);
+    gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D,shadowSampleTex());
     gl.uniform1i(c.uShadowMap,4);
     gl.uniformMatrix4fv(c.uLightPV,false,shadow.lpv);
     gl.uniformMatrix4fv(c.uInvPV,false,_postCam.inv);
@@ -8753,6 +8774,54 @@ function renderShadowMap(L){
   gl.bindFramebuffer(gl.FRAMEBUFFER,sceneFBO);   // 回到本帧的场景目标(后处理 FBO 或画布)
 }
 
+// 生物投影: 每帧把静态地形阴影深度复制到动态副本, 再叠画阴影范围内的生物(沿光方向后撤 0.15 格, 免得生物自身出阴影痘)
+function mobShadowCasters(){
+  const out=[], R=shadow.range-2;
+  for(const m of mobs){
+    if(!m || m.burrowed || !m.def || !m.def.parts) continue;
+    if(Math.max(Math.abs(m.x-shadow.cx),Math.abs(m.z-shadow.cz))>R) continue;
+    out.push(m);
+  }
+  if(camMode>0 && typeof playerEnt!=="undefined" && playerEnt.def) out.push(playerEnt);
+  return out;
+}
+function renderMobShadows(L){
+  shadow.useDyn=false; shadow.casters=0;
+  if(!shadow.ok || !shadow.dynFbo) return;
+  const cs=mobShadowCasters();
+  if(!cs.length) return;
+  const S=shadow.size;
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER,shadow.fbo);
+  gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER,shadow.dynFbo);
+  gl.blitFramebuffer(0,0,S,S,0,0,S,S,gl.DEPTH_BUFFER_BIT,gl.NEAREST);
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER,null);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,shadow.dynFbo);
+  gl.viewport(0,0,S,S);
+  gl.colorMask(false,false,false,false);
+  gl.enable(gl.DEPTH_TEST); gl.depthMask(true); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D,null);
+  gl.useProgram(depthProg);
+  const k=0.15;
+  gl.uniformMatrix4fv(UD.uLPV,false,matMul(shadow.lpv,matTrans(-L[0]*k,-L[1]*k,-L[2]*k)));
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,atlasTex); gl.uniform1i(UD.uTex,0);
+  for(const a of [A_POS,A_UV,A_L]) gl.disableVertexAttribArray(a);
+  aFArray(false);
+  gl.enableVertexAttribArray(AD_POS); gl.enableVertexAttribArray(AD_UV);
+  gl.bindBuffer(gl.ARRAY_BUFFER,entVbo);
+  for(const e of cs){
+    buildEntity(e);
+    if(!entArr.length) continue;
+    uploadDyn(entArr);
+    gl.vertexAttribPointer(AD_POS,3,gl.FLOAT,false,24,0);
+    gl.vertexAttribPointer(AD_UV,2,gl.FLOAT,false,24,12);
+    gl.drawArrays(gl.TRIANGLES,0,entArr.length/6);
+  }
+  gl.disableVertexAttribArray(AD_POS); gl.disableVertexAttribArray(AD_UV);
+  gl.colorMask(true,true,true,true);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,sceneFBO);
+  shadow.useDyn=true; shadow.casters=cs.length;
+}
+
 let fov=70*Math.PI/180;
 const mix3=(a,b,t)=>[a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t];
 
@@ -8775,6 +8844,8 @@ function drawBlobShadows(pv, camX, camZ, fogNear, fogFar, sunI){
   const add=(e,w)=>{
     const d=Math.hypot(e.x-camX,e.z-camZ);
     if(d>40) return;
+    // 已画进阴影贴图的生物(高/极致, 阴影范围内)就不再叠软阴影团, 免得影子双重加深
+    if(shadow.useDyn && Math.max(Math.abs(e.x-shadow.cx),Math.abs(e.z-shadow.cz))<=shadow.range-2) return;
     const gy=blobGroundY(e.x,e.y,e.z); if(gy===null) return;
     const dh=Math.max(0,e.y-gy);
     let a=0.6*blobFade(dh)*vis*(1-smoothstep(28,40,d));
@@ -8810,6 +8881,7 @@ function render(now){
   postBegin(w,h);                           // 后处理: 场景先画进离屏 FBO(「低」档/WebGL1 直接画布)
   const LS=lightState();
   renderShadowMap(LS.light);                // 阴影贴图只在光源转动/玩家走远/区块变化时重画
+  renderMobShadows(LS.light);               // 高/极致: 生物每帧叠进阴影贴图的动态副本
   gl.viewport(0,0,w,h);
 
   // 昼夜
@@ -8980,7 +9052,7 @@ function render(now){
   gl.uniform1f(U.uShadowBias,shadow.ok?(2*shadow.range/shadow.size)*1.8+0.02:0);
   gl.uniformMatrix4fv(U.uLightPV,false,shadow.lpv);
   gl.activeTexture(gl.TEXTURE1);
-  gl.bindTexture(gl.TEXTURE_2D,shadow.ok?shadow.tex:null);
+  gl.bindTexture(gl.TEXTURE_2D,shadowSampleTex());
   gl.uniform1i(U.uShadow,1);
   gl.uniform3f(U.uOffset,0,0,0);
   gl.uniform2f(U.uUVOff,0,0);
@@ -11694,6 +11766,21 @@ function selftest(){
       ok("主着色器: WebGL2 用 GLSL 300 + centroid UV, 高/极致开 4× MSAA; WebGL1 保持 GLSL 100",
          IS_GL2 ? (/^#version 300 es/.test(mainSrc.trim()) && /centroid in vec2 vUV/.test(mainSrc) && /centroid out vec2 vUV/.test(mainSrc) && GFX_PRESETS[2].msaa===4 && GFX_PRESETS[3].msaa===4 && !GFX_PRESETS[1].msaa)
                 : !/#version 300/.test(mainSrc), "gl2="+IS_GL2);
+      {
+        // 生物投影: 「高」档 WebGL2 建动态阴影副本; 附近有生物时本帧改采样副本; 「中」档没有副本
+        const g0m=gfxLevel; setGfx(2);
+        const hasDyn=!IS_GL2 || !shadow.ok || !!shadow.dynFbo;
+        const n0=mobs.length;
+        const cow={type:"pig", def:MOB_DEFS.pig, x:shadow.cx+2, y:player.y, z:shadow.cz+2, vx:0,vy:0,vz:0, yaw:0, animT:0, hp:10};
+        if(MOB_DEFS.pig) mobs.push(cow);
+        while(gl.getError()!==gl.NO_ERROR){}
+        renderMobShadows(lightState().light);
+        const err=gl.getError();
+        const used=!IS_GL2 || !shadow.ok || (shadow.useDyn && shadow.casters>=1 && shadowSampleTex()===shadow.dynTex);
+        mobs.length=n0; setGfx(1); const midNo=!shadow.dynFbo; setGfx(g0m);
+        ok("生物投影: 高/极致(WebGL2)每帧把生物叠进阴影贴图副本并改采样副本, 中档不建副本, 无 GL 错误",
+           hasDyn && used && midNo && err===gl.NO_ERROR, "dyn="+!!shadow.dynFbo+" used="+used+" err="+err);
+      }
       ok("沙面高光: 主着色器有沙粒闪光且按画质开关", U.uSandFx!==null && mainSrc.indexOf("sandK")>=0, "loc="+(U.uSandFx!==null));
       // 地标珍藏: 覆盖全部地标 / 同一地标只领一次 / 进存档 / 常驻效果
       {
