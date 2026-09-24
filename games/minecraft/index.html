@@ -3389,6 +3389,20 @@ function windrockSide(ti,k){
 }
 windrockSide(99,0); windrockSide(266,1); windrockSide(267,2); windrockSide(268,3);
 const WR_SIDE=[268,267,266,99];                                           // 按 y&3 取片: 片 0 在最上
+// 台地陶土(恶地式分色条纹): 同一套"120px 条带柱切 4 片"机制, 陶土暖色调、起伏更柔、无沙漠漆
+const CLAY_STRATA=txPal("#b5694a #c98e6a #9e5a42 #d9b597 #a8603f #8c5a4a #e2c3a2 #c47a52");
+const CL_BANDS=(()=>{ txSeed(7713); const B=[]; let y=0; while(y<120){ const t=3+Math.floor(txRnd()*8); B.push([y,Math.floor(txRnd()*CLAY_STRATA.length)]); y+=t; } return B; })();
+function clayBand(ti,k){
+  txLit(ti,(x,y)=>txFbm(x,y,2,10,3,1792)*0.25+txFbm(x,y,4,4,2,1795)*0.12,(x,y,h,s)=>{
+    const yy=txW(y+30*k+Math.round((txVN(x/TX_V*2,0.5,2,1,1791)-0.5)*3),120);
+    let bi=0; while(bi+1<CL_BANDS.length && CL_BANDS[bi+1][0]<=yy) bi++;
+    const c=CLAY_STRATA[CL_BANDS[bi][1]];
+    const scr=txW(yy-CL_BANDS[bi][0],120)===0?0.92:1;                    // 层界发丝暗线
+    return txMul(c,clamp((0.92+h*0.18+s*0.8+(txH(x,y,1794)-0.5)*0.05)*scr,0.7,1.15));
+  },1.0,false,0.03);
+}
+clayBand(271,0); clayBand(272,1); clayBand(273,2); clayBand(274,3);
+const CL_SIDE=[274,273,272,271];
 txPut(122,(x,y)=>{                                                        // 岩浆: 流动亮流 + 暗色结壳
   const n=txFbm(x+txFbm(x,y,3,3,2,1221)*8,y,3,3,3,1222);
   const w=txWorley(x+.5,y+.5,4,4,1223,1);
@@ -3932,7 +3946,9 @@ function buildChunkMesh(c){
         const nid=gb(wx+d[0], y+d[1], wz+d[2]);
         if(nid!==AIR && OPAQUE(nid)) continue;
         if(nid===id && id!==LEAVES && id!==PALM_LEAF) continue;
-        const tile = f===2?def.t : f===3?def.b : id===WINDROCK?WR_SIDE[y&3] : def.s;
+        // 岩层按世界 y 取片, 再按列加 0~2 格的噪声偏移(恶地式): 条纹沿崖壁起伏, 不是一圈圈死板的环
+        const bandOff=(f!==2 && f!==3 && (id===CLAY||id===WINDROCK)) ? Math.min(2,Math.max(0,Math.floor(fbm2(wx*0.021+313.3, wz*0.021-71.9, 2)*3))) : 0;
+        const tile = f===2?def.t : f===3?def.b : id===WINDROCK?WR_SIDE[(y+bandOff)&3] : id===CLAY?CL_SIDE[(y+bandOff)&3] : def.s;
         const u0=(tile%16)*TS, v0=Math.floor(tile/16)*TV;
         const V=isW?wV:oV, I=isW?wI:oI;
         // 本面的贴图朝向: rot(0..3 个 90°) + mir(左右镜像)
@@ -11481,8 +11497,14 @@ function selftest(){
               && vs.every(v=>{ const y=Math.floor(v*1024+1e-6); return y>=py+1 && y<=py+31; }); };
         for(const id in BLOCKS){ const B=BLOCKS[id]; for(const t of [B.t,B.b,B.s]) if(!(t>=0 && t<16*TX_ROWS) || !inTile(t)) bad+=id+":"+t+" "; }
         for(const t of WR_SIDE) if(!inTile(t)) bad+="WR:"+t+" ";
+        for(const t of CL_SIDE) if(!inTile(t)) bad+="CL:"+t+" ";
         if(!inTile(511)) bad+="511 ";
         ok("图集: 全部方块贴图编号 < 512 且 UV 内缩后不越出本格(横/纵各 1 texel 护边)", !bad, bad||"ok");
+        { const ax=atlasCv.getContext("2d"); let opaque=true, distinct=new Set();
+          for(const t of CL_SIDE){ const d=ax.getImageData((t%16)*32+1,Math.floor(t/16)*32+1,30,30).data;
+            for(let i=3;i<d.length;i+=4) if(d[i]<255){ opaque=false; break; }
+            distinct.add(d[0]+","+d[1]+","+d[2]+"|"+d[30*15*4]+","+d[30*15*4+1]); }
+          ok("台地陶土: 4 片分色条纹贴图已画(不透明、各片不同), 顶面仍用原陶土格", CL_SIDE.length===4 && opaque && distinct.size>=3 && BLOCKS[CLAY].t===81, "distinct="+distinct.size); }
       }
       { // 新贴图槽 256-270 确实画了东西(不透明块满覆盖, 棕榈叶/芦苇有镂空)
         const alphaFrac=(t)=>{ const d=actx.getImageData((t%16)*32+1,Math.floor(t/16)*32+1,30,30).data; let a=0; for(let i=3;i<d.length;i+=4) if(d[i]>=128) a++; return a/900; };
