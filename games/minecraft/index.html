@@ -295,7 +295,7 @@
 <div id="fullhelp">
   <div class="fh-card">
     <div class="fh-title">完整帮助 · 按 <b>H</b> 或点此关闭</div>
-    <b>F1</b> 拍照模式　<b>F2</b> 截图　<b>F5</b> 第三人称　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成(可熔铸☀拉之烈阳剑)　<b>Esc</b> 暂停　<b>T</b> 编年史　<b>P</b> 陶片图鉴　<b>K</b> 神话遗物　<b>U</b> 开宝库　<b>R</b> 答斯芬克斯　<b>L</b> 神灯许愿<br>
+    <b>F1</b> 拍照模式　<b>F2</b> 截图　<b>F5</b> 第三人称　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成(可熔铸☀拉之烈阳剑、🔨塞特之锤)　<b>0</b> 第10格　<b>Esc</b> 暂停　<b>T</b> 编年史　<b>P</b> 陶片图鉴　<b>K</b> 神话遗物　<b>U</b> 开宝库　<b>R</b> 答斯芬克斯　<b>L</b> 神灯许愿<br>
     <b>物品栏</b>：1烟花 2钩爪 3可乐 4铁剑 5机关枪 6火箭筒 7弓 8=TNT(右键放·左键点燃) 9弹跳板<br>
     <b>2 钩爪</b>甩向准星把你拉过去；<b>3 可乐</b>回血+加速；<b>9 弹跳板</b>踩上去高高弹飞不摔伤<br>
     击杀获得<b>经验</b>升级(提升生命与伤害)。白天长、夜晚短而亮，敌人只是点缀<br>
@@ -4531,6 +4531,10 @@ const RECIPES=[
   {name:"☀ 拉之烈阳剑", desc:"太阳神之刃：伤害 16、命中灼烧、第 3 连击烈阳横扫", cost:[[GOLD_ORE,6],[GEM_ORE,2]],
    ok(){ return !sunblade; }, lockMsg:"已拥有拉之烈阳剑",
    run(){ setSunblade(true); selectSlot(HOTBAR_ITEMS.indexOf("sword")); addXP(30); return "☀ 铁剑熔铸为 拉之烈阳剑！(4 号栏)"; }},
+  // 第五轮·本地: 塞特之锤(重锤, 物品栏第 10 格)
+  {name:"🔨 塞特之锤", desc:"沙暴之神的重锤：下落越高伤害越大，高处砸下震飞周围敌人", cost:[[IRON_ORE,8],[GOLD_ORE,2]],
+   ok(){ return !maceOwned; }, lockMsg:"已拥有塞特之锤",
+   run(){ setMace(true); selectSlot(HOTBAR_ITEMS.indexOf("mace")); addXP(30); return "🔨 塞特之锤已锻成！(数字键 0) 爬高再砸下来"; }},
 ];
 /* 把方块塞进物品栏: 优先合并同类, 否则占用一个方块格 */
 function giveBlock(id,n){
@@ -5314,6 +5318,7 @@ document.addEventListener("keydown",e=>{
     }
     if(e.code==="KeyW"){ if(now-lastW<260) player.sprint=true; lastW=now; }
     if(e.code>="Digit1"&&e.code<="Digit9") selectSlot(+e.code.slice(5)-1);
+    if(e.code==="Digit0" && HOTBAR_ITEMS.length>9) selectSlot(9);   // 第 10 格(塞特之锤)
     if(e.code==="KeyE") toggleRide();
     if(e.code==="KeyF"){ e.preventDefault(); if(npcPanelOpen) closeNPCPanel(); else if(talkNpc) openNPCPanel(); }
     if(e.code==="KeyB"){ e.preventDefault(); toggleCraft(); }
@@ -5387,7 +5392,7 @@ newworldbtn.addEventListener("click",()=>{
   for(const [,c] of world) if(c.mesh) destroyMesh(c.mesh);
   world.clear(); meshQueue.length=0; queued.clear();
   mobs.length=0; arrows.length=0; drops.length=0; particles.length=0;
-  hp=maxHp=20; lvl=1; xp=0; armor=0; cores=0; kills=0; dayCount=1; dmgMul=1; dead=false; setSunblade(false);
+  hp=maxHp=20; lvl=1; xp=0; armor=0; cores=0; kills=0; dayCount=1; dmgMul=1; dead=false; setSunblade(false); setMace(false);
   questIdx=0; questProg=0; questDone=false; _qWalkX=null; _qDriveX=null; bag.clear(); updateQuestHUD();
   document.getElementById("victory").style.display="none";
   _gcx=1e9; pcx=1e9; pcz=1e9;
@@ -5471,7 +5476,16 @@ function doBreak(){
   if(held==="gun"){ fireGun(); return; }
   if(held==="rpg"){ fireRocket(); return; }
   if(held==="flame"){ fireFlame(); return; }
-  swingT=0.3; triggerViewSwing();
+  if(held==="mace"){                                   // 塞特之锤: 慢速重击, 下落越高越痛
+    if(maceCd>0) return;
+    maceCd=MACE_CD; swingT=0.3; triggerViewSwing();
+    const dirM=currentAim(), rmM=raycastMob(4.2, dirM);
+    if(rmM){
+      const mightMul=(blessKind==="might"&&blessT>0)?1.35:1, omenMul=(typeof omenMeleeMul==="function")?omenMeleeMul():1;
+      maceStrike(rmM.m, dirM, dmgMul*mightMul*omenMul, maceFall());
+      return;
+    }
+  } else { swingT=0.3; triggerViewSwing(); }
   const dir=currentAim();
   const isSword = held==="sword";
   // 优先攻击瞄准方向的生物(步进射线已含遮挡判定)
@@ -6253,6 +6267,8 @@ function heldParts(key, anchor){
   switch(key){
     case "sword": return [ at([0,-12.5*P,-1*P], [0.5*P,0.5*P,2*P],  60),    // 剑柄
                            at([0,-12.5*P,-6*P], [0.4*P,1.6*P,4.5*P],59) ];  // 剑刃(前伸)
+    case "mace":  return [ at([0,-12.5*P,-2.5*P], [0.5*P,0.5*P,3.5*P], 60),  // 锤柄(第五轮·本地)
+                           at([0,-12.5*P,-6.5*P], [1.4*P,1.4*P,1.4*P],148) ]; // 钢锤头
     case "flame":
     case "gun":   return [ at([0,-12*P,-2*P],  [1.1*P,1.4*P,4.5*P], 61),    // 枪身
                            at([0,-12*P,-8*P],  [0.5*P,0.5*P,3*P],   61),    // 枪管
@@ -7411,7 +7427,27 @@ const ICON_SUNBLADE=pixIcon([
 "................",
 "................"],
 {s:[242,134,34], x:[255,232,128], r:[176,56,20], g:[228,180,60], R:[216,40,28], h:[86,52,30], P:[228,180,60]});
+// 塞特之锤(第五轮·本地, 对标 Minecraft 1.21 重锤 Mace): 铁锤头嵌松石 + 金箍木柄
+const ICON_MACE=pixIcon([
+"...........k....",
+".........kkkkk..",
+"........kHHHHHk.",
+".......kkHhhhHkk",
+"........kHhThHk.",
+"........kHhhhHk.",
+".......kkHHHHHkk",
+"........gkkkkk..",
+".......ww.......",
+"......ww........",
+".....gw.........",
+"....ww..........",
+"...ww...........",
+"..ww............",
+".gg.............",
+"................"],
+{k:[52,52,60], H:[150,156,168], h:[198,204,214], T:[58,172,160], g:[228,180,60], w:[120,78,40]});
 const ITEMS={
+  mace:{name:"塞特之锤", icon:ICON_MACE},
   sword:{name:"铁剑", icon:ICON_SWORD},
   flame:{name:"喷火器 (按住左键)", icon:ICON_FLAME},
   gun:  {name:"机关枪 (左键扫射)", icon:ICON_GUN},
@@ -7473,6 +7509,48 @@ function sunbladeTrail(dir){                           // 挥剑火焰轨迹: �
     particles.push({x:player.x+Math.cos(a)*r, y:ey+dir[1]*r+0.35-i*0.05, z:player.z+Math.sin(a)*r,
       vx:0, vy:2.5, vz:0, life:.22+Math.random()*.12, size:.055, u:15*TS+Math.random()*TS*.6, v:Math.random()*TV*.6, l:2.4});
   }
+}
+/* ---- 🔨 塞特之锤 (第五轮·本地, 对标 Minecraft 重锤) ----
+   按 B 合成(铁矿石×8 + 金矿石×2), 物品栏末尾追加第 10 格(数字键 0)。挥锤较慢(0.6 秒一击)。
+   伤害随下落高度暴涨: 地面 9; 下落前 3 格每格 +6, 第 3~8 格每格 +3, 再往上每格 +1.5(上限 120)。
+   下落 ≥1.5 格时命中 = 「塞特震地」: 抵消本次摔落伤害并微微弹起, 目标周围 3.5 格的其他敌人吃 4 成伤害 + 击飞, 地面扬起沙浪。
+   搭配弹跳板/钩爪爬高再砸下来。 */
+let maceOwned=false, maceCd=0;
+const MACE_CD=0.6, MACE_SMASH_MIN=1.5, MACE_AOE_R=3.5;
+function maceDamage(fall){
+  const f=Math.max(0,fall);
+  return Math.min(120, 9 + 6*Math.min(f,3) + 3*Math.min(Math.max(f-3,0),5) + 1.5*Math.max(f-8,0));
+}
+function setMace(on){
+  maceOwned=!!on;
+  const i=HOTBAR_ITEMS.indexOf("mace");
+  if(maceOwned && i<0) HOTBAR_ITEMS.push("mace");
+  if(!maceOwned && i>=0){ HOTBAR_ITEMS.splice(i,1); if(selSlot>=HOTBAR_ITEMS.length) selSlot=0; }
+  if(document.getElementById("hotbar").childElementCount){ rebuildHotbar(); drawViewmodel(); }
+}
+function maceFall(){ return (fallStart!==null && !player.onGround) ? Math.max(0,fallStart-player.y) : 0; }
+function maceStrike(m,dir,mul,fall){                   // doBreak 里瞄到生物后调用; 返回 {dmg, smash, aoe}
+  const dmg=Math.round(maceDamage(fall)*mul), smash=fall>=MACE_SMASH_MIN;
+  const d=Math.hypot(m.x-player.x,m.z-player.z)||1e-6;
+  hurtMob(m, dmg, (m.x-player.x)/d*(smash?14:9), (m.z-player.z)/d*(smash?14:9));
+  let aoe=0;
+  if(smash){
+    fallStart=null; player.vy=Math.max(player.vy,5.5);  // 抵消摔落 + 反弹
+    for(const o of mobs.slice()){
+      if(o===m || o.hp<=0 || !o.def.hostile) continue;
+      const dx=o.x-m.x, dz=o.z-m.z, dd=Math.hypot(dx,dz);
+      if(dd>MACE_AOE_R || Math.abs(o.y-m.y)>2.5) continue;
+      const k=dd>1e-3?1/dd:0;
+      hurtMob(o, Math.round(dmg*0.4), dx*k*16, dz*k*16, true); o.vy=Math.max(o.vy,7);
+      aoe++;
+    }
+    for(let i=0;i<36;i++){ const a=i/36*6.283, r=0.6+Math.random()*MACE_AOE_R;   // 沙浪: 以目标为圆心向外扬尘
+      particles.push({x:m.x+Math.cos(a)*r, y:m.y+0.15, z:m.z+Math.sin(a)*r, vx:Math.cos(a)*3.5, vy:2.5+Math.random()*2.5, vz:Math.sin(a)*3.5,
+        life:.5+Math.random()*.3, size:.1, u:(4%16)*TS+Math.random()*TS*.7, v:Math.floor(4/16)*TV+Math.random()*TV*.7, l:1.0}); }
+    sfxExplode && sfxExplode();
+    showName("🔨 塞特震地！下落 "+fall.toFixed(1)+" 格 · "+dmg+" 伤害"+(aoe?" · 震飞 "+aoe+" 个":""));
+  }
+  return {dmg,smash,aoe};
 }
 function tickSunburn(dt){                              // 在 updateMobs 之后调用: AI 每帧先清 burning, 这里再点亮火色
   for(let i=mobs.length-1;i>=0;i--){
@@ -8005,6 +8083,8 @@ function drawViewmodel(){
     if(sunblade){ x.save(); x.shadowColor="rgba(255,150,40,0.95)"; x.shadowBlur=22; }   // 烈阳剑: 剑身橙光晕
     drawHeld(ITEMS[it].icon, 7.4, -0.30, 0.26, 0.70);  // 握剑柄(图标左下)
     if(sunblade) x.restore();
+  } else if(it==="mace"){
+    drawHeld(ITEMS[it].icon, 7.2, -0.28, 0.22, 0.78);  // 握锤柄下段
   } else if(it==="gun" || it==="flame"){
     drawHeld(ITEMS[it].icon, 7.0, -0.06, 0.30, 0.72);  // 握枪把
   } else if(it==="rpg"){
@@ -9605,6 +9685,7 @@ function frame(now){
     // 生物 & 生存
     updateMobs(dt);
     tickSunburn(dt);
+    if(maceCd>0) maceCd-=dt;
     trySpawns(dt);
     updateBossBar();                                                            // Boss 血条实时刷新
     updateBountyHUD();                                                          // 悬赏进度实时刷新
@@ -9746,6 +9827,7 @@ function collectSave(){
     bag:(function(){ const o={}; for(const [k,v] of bag) o[k]=v; return o; })(),
     dmgMul:+dmgMul.toFixed(3),
     sunblade,                                    // 第五轮·本地: 拉之烈阳剑(老存档无此字段 → 铁剑)
+    mace:maceOwned,                              // 第五轮·本地: 塞特之锤(老存档无此字段 → 没有)
     questIdx, questId:(QUESTS[questIdx]||{}).id||null,
     questProg:+questProg.toFixed(1), questDone,
     bounty:{ idx:bountyIdx, prog:bountyProg, done:bountyDone },
@@ -9832,6 +9914,7 @@ function loadGame(){
   if(["sand","storm","rain","clear"].includes(s.weather)){ weather=s.weather; weatherT = weather==="clear" ? (240+Math.random()*120) : (8+Math.random()*12); }   // 修复: 存档没存 weatherT, 读档后给风暴短时收尾, 避免沙暴"一直持续"
   if(s.dmgMul) dmgMul=s.dmgMul;
   setSunblade(!!s.sunblade);
+  setMace(!!s.mace);
   bag.clear(); if(s.bag) for(const k in s.bag) bag.set(+k, s.bag[k]);
   // 优先用 id 定位关卡(抗关卡表变动), 没有 id 的老存档才退回下标
   const qById = s.questId ? QUESTS.findIndex(q=>q.id===s.questId) : -1;
@@ -12063,6 +12146,31 @@ function selftest(){
         mobs.length=0; for(const m of mobsS) mobs.push(m); player.y=pyS; sunCombo.n=0;
         ok("烈阳剑: 第 3 连击烈阳横扫只扫前方 100°·4.8 格内敌人(身后/远处不中), 超 1.2 秒连击重置, 灼烧每 0.5 秒 2 点、4 秒熄灭",
            sweep && reset && burn1 && burnEnd, "r="+[r1,r2,r3]+" side="+side.hp+" back="+back.hp+" front="+front.hp+" reset="+reset+" burn="+burn1+"/"+burnEnd);
+      }
+      // ---- 第五轮·本地: 塞特之锤 ----
+      {
+        const curve=maceDamage(0)===9 && maceDamage(3)===27 && maceDamage(8)===42 && maceDamage(10)===45 && maceDamage(1e4)===120 && maceDamage(-2)===9;
+        const own0=maceOwned, n0=HOTBAR_ITEMS.length;
+        setMace(true); const add=HOTBAR_ITEMS.length===n0+(own0?0:1) && HOTBAR_ITEMS[9]==="mace" && collectSave().mace===true;
+        const rec=RECIPES.find(r=>r.name.indexOf("塞特之锤")>=0), gated=!!rec && rec.ok()===false;
+        setMace(false); const rem=HOTBAR_ITEMS.indexOf("mace")<0 && HOTBAR_ITEMS.length===9 && collectSave().mace===false && rec.ok()===true;
+        setMace(own0);
+        ok("塞特之锤: 伤害曲线(地面9/3格27/8格42/上限120), 合成后追加第10格、拥有挡重复合成、存档往返", curve && add && gated && rem, "curve="+curve+" add="+add+" gated="+gated+" rem="+rem);
+      }
+      {
+        const mobsS=mobs.slice(); mobs.length=0; const pyS=player.y, pvS=player.vy, fsS=fallStart, ogS=player.onGround; player.y=120;
+        const mk=(dx,dz)=>({type:"legionary",def:MOB_DEFS.legionary,x:player.x+dx,y:player.y,z:player.z+dz,
+          vx:0,vy:0,vz:0,kbx:0,kbz:0,yaw:0,tgtYaw:0,hp:500,hurtT:0,animT:0,t:0,atkCd:0,burnT:0,swingT:0,
+          groanT:0,fleeT:0,onGround:true,pause:false,burning:false,held:null,alertT:0});
+        const t=mk(2,0), nb=mk(4,0), fr=mk(8,0); mobs.push(t,nb,fr);
+        fallStart=player.y+5; player.onGround=false; player.vy=-12;
+        const f=maceFall(), r=maceStrike(t,[1,0,0],1,f);
+        const smash=Math.abs(f-5)<1e-6 && r.smash && r.dmg===33 && t.hp===467 && nb.hp===487 && fr.hp===500 && r.aoe===1 && fallStart===null && player.vy>=5.5;
+        fallStart=null; player.onGround=true;
+        const g=maceStrike(t,[1,0,0],1,maceFall()), ground=!g.smash && g.dmg===9 && t.hp===458 && nb.hp===487;
+        mobs.length=0; for(const m of mobsS) mobs.push(m); player.y=pyS; player.vy=pvS; fallStart=fsS; player.onGround=ogS;
+        ok("塞特之锤: 下落 5 格重击 33 伤害并震地(周围 3.5 格吃 4 成、远处不中), 抵消摔落并反弹; 站地面只有 9 伤害不震地",
+           smash && ground, "f="+f.toFixed(2)+" dmg="+r.dmg+" t="+t.hp+" nb="+nb.hp+" fr="+fr.hp+" aoe="+r.aoe+" ground="+ground);
       }
       ok("材质: 逐块旋转——松沙陷坑与沙子同模式(伪装不露馅), 沙纹只转180°, 草地四向", UV_ROT[LOOSESAND*2]===UV_ROT[SAND*2] && UV_ROT[LOOSESAND*2+1]===UV_ROT[SAND*2+1] && UV_ROT[SAND*2]===1 && UV_ROT[GRASS*2]===2,
          "sand="+UV_ROT[SAND*2]+" loose="+UV_ROT[LOOSESAND*2]);
