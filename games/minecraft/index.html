@@ -19,7 +19,7 @@
   #cross::before, #cross::after { content:""; position:absolute; background:#ddd; }
   #cross::before { left:50%; top:0; width:2px; height:100%; transform:translateX(-50%); }
   #cross::after  { top:50%; left:0; height:2px; width:100%; transform:translateY(-50%); }
-  #craftPanel { position:absolute; inset:0; margin:auto; width:min(760px,92vw); max-height:82vh;
+  #craftPanel, #enchPanel { position:absolute; inset:0; margin:auto; width:min(760px,92vw); max-height:82vh;
     display:none; flex-direction:column; gap:10px; padding:16px 18px; z-index:40;
     background:rgba(18,16,26,.95); border:2px solid #6b5a3a; border-radius:10px;
     color:#f0e6d2; font-size:13px; overflow:auto; box-shadow:0 12px 48px rgba(0,0,0,.6); }
@@ -32,7 +32,8 @@
     background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.12); }
   .bagCell b { color:#ffd98a; font-weight:bold; }
   .bagEmpty { color:#7d7264; font-style:italic; }
-  #recipeList { display:flex; flex-direction:column; gap:6px; }
+  #enchInfo { color:#c9b184; line-height:1.7; }
+  #recipeList, #enchList { display:flex; flex-direction:column; gap:6px; }
   .recipe { display:flex; justify-content:space-between; align-items:center; gap:12px;
     padding:8px 10px; border-radius:6px; background:rgba(255,255,255,.05);
     border:1px solid rgba(255,255,255,.10); cursor:pointer; }
@@ -228,6 +229,11 @@
   <div id="bagWrap"><div id="bagTitle">背包</div><div id="bagGrid"></div></div>
   <div id="recipeWrap"><div id="bagTitle">配方（点击合成）</div><div id="recipeList"></div></div>
 </div>
+<div id="enchPanel">
+  <div id="craftHead">✨ 神庙附魔祭坛<span id="craftHint">按 J / Esc 关闭</span></div>
+  <div id="enchInfo"></div>
+  <div id="enchList"></div>
+</div>
 <div id="npcPanel">
   <div id="npcHead"><span id="npcTitle">NPC</span><span id="craftHint">按 F / Esc 关闭</span></div>
   <div id="npcGreet"></div>
@@ -295,7 +301,7 @@
 <div id="fullhelp">
   <div class="fh-card">
     <div class="fh-title">完整帮助 · 按 <b>H</b> 或点此关闭</div>
-    <b>F1</b> 拍照模式　<b>F2</b> 截图　<b>F5</b> 第三人称　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成(可熔铸☀拉之烈阳剑、🔨塞特之锤)　<b>0</b> 第10格　<b>Esc</b> 暂停　<b>T</b> 编年史　<b>P</b> 陶片图鉴　<b>K</b> 神话遗物　<b>U</b> 开宝库　<b>R</b> 答斯芬克斯　<b>L</b> 神灯许愿<br>
+    <b>F1</b> 拍照模式　<b>F2</b> 截图　<b>F5</b> 第三人称　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成(可熔铸☀拉之烈阳剑、🔨塞特之锤)　<b>0</b> 第10格　<b>J</b> 附魔祭坛(献文物)　<b>Esc</b> 暂停　<b>T</b> 编年史　<b>P</b> 陶片图鉴　<b>K</b> 神话遗物　<b>U</b> 开宝库　<b>R</b> 答斯芬克斯　<b>L</b> 神灯许愿<br>
     <b>物品栏</b>：1烟花 2钩爪 3可乐 4铁剑 5机关枪 6火箭筒 7弓 8=TNT(右键放·左键点燃) 9弹跳板<br>
     <b>2 钩爪</b>甩向准星把你拉过去；<b>3 可乐</b>回血+加速；<b>9 弹跳板</b>踩上去高高弹飞不摔伤<br>
     击杀获得<b>经验</b>升级(提升生命与伤害)。白天长、夜晚短而亮，敌人只是点缀<br>
@@ -4593,7 +4599,77 @@ function renderCraft(){
   for(const el of document.querySelectorAll("#recipeList .recipe"))
     el.onclick=()=>doCraft(+el.dataset.i);
 }
+/* ---- ✨ 神庙附魔祭坛 (第五轮·本地) ----
+   按 J 打开。向神庙献祭文物碎片(考古出土) + 金矿石, 给近战武器(剑/锤)加永久词条。
+   不花经验等级: 本作等级直接决定攻击与血量上限, 花掉等于变弱; 改用文物, 让"考古 → 附魔 → 更能打"连成一条循环。
+   第 n 级花费: 文物碎片 2n + 金矿石 n。 */
+const ENCH_DEFS=[
+  {k:"sharp", n:"锋利",     max:5, d:l=>"近战伤害 +"+(l*10)+"%"},
+  {k:"fire",  n:"火焰附加", max:2, d:l=>"近战命中点燃 "+(l*2)+" 秒"},
+  {k:"sweep", n:"横扫之刃", max:3, d:l=>"目标周围 2.5 格的敌人受 "+[0,25,35,45][l]+"% 溅射"},
+  {k:"kb",    n:"击退",     max:2, d:l=>"击退 +"+(l*50)+"%"},
+];
+const enchState={sharp:0, fire:0, sweep:0, kb:0};
+const ROMAN=["","I","II","III","IV","V"];
+let enchOpen=false;
+function enchCost(lv){ return {relics:2*lv, gold:lv}; }        // 升到第 lv 级的花费
+function canEnchant(k){
+  const D=ENCH_DEFS.find(e=>e.k===k), lv=enchState[k]+1;
+  if(!D || lv>D.max) return false;
+  const c=enchCost(lv); return npcState.relics>=c.relics && bagCount(GOLD_ORE)>=c.gold;
+}
+function doEnchant(k){
+  const D=ENCH_DEFS.find(e=>e.k===k); if(!D) return false;
+  const lv=enchState[k]+1;
+  if(lv>D.max){ showName("✨ "+D.n+" 已满级"); return false; }
+  const c=enchCost(lv);
+  if(!canEnchant(k)){ showName("⚠ 献祭不足：需要 文物碎片 x"+c.relics+"、金矿石 x"+c.gold+"（考古刷沙砾可出文物）"); return false; }
+  npcState.relics-=c.relics; bagTake(GOLD_ORE,c.gold);
+  enchState[k]=lv; addXP(10*lv); sfxLevel && sfxLevel();
+  showName("✨ 武器附魔："+D.n+" "+ROMAN[lv]+" — "+D.d(lv));
+  if(enchOpen) renderEnch();
+  return true;
+}
+function enchMeleeMul(held){ return (held==="sword"||held==="mace") ? 1+0.1*enchState.sharp : 1; }
+function enchOnHit(m,dmg,held){                       // 近战命中后: 火焰附加 / 横扫之刃 / 击退
+  if(held!=="sword" && held!=="mace") return 0;
+  if(enchState.fire>0 && m.hp>0){ m.sunBurn=Math.max(m.sunBurn||0, 2*enchState.fire); if(!(m.sunTick>0)) m.sunTick=0.5; }
+  const dx0=m.x-player.x, dz0=m.z-player.z, d0=Math.hypot(dx0,dz0)||1e-6;
+  if(enchState.kb>0){ m.kbx+=dx0/d0*5*enchState.kb; m.kbz+=dz0/d0*5*enchState.kb; }
+  let n=0;
+  if(enchState.sweep>0){
+    const pct=[0,0.25,0.35,0.45][enchState.sweep];
+    for(const o of mobs.slice()){
+      if(o===m || o.hp<=0 || !o.def.hostile) continue;
+      const dx=o.x-m.x, dz=o.z-m.z, dd=Math.hypot(dx,dz);
+      if(dd>2.5 || Math.abs(o.y-m.y)>2) continue;
+      hurtMob(o, Math.max(1,Math.round(dmg*pct)), dx/(dd||1)*4, dz/(dd||1)*4, true); n++;
+    }
+  }
+  return n;
+}
+function renderEnch(){
+  const info=document.getElementById("enchInfo"); if(!info) return;
+  const cur=ENCH_DEFS.filter(D=>enchState[D.k]>0).map(D=>D.n+" "+ROMAN[enchState[D.k]]).join("、")||"无";
+  info.innerHTML="献祭：🏺 文物碎片 <b>x"+npcState.relics+"</b>　金矿石 <b>x"+bagCount(GOLD_ORE)+"</b><br>当前词条（对剑与塞特之锤生效）："+cur;
+  document.getElementById("enchList").innerHTML=ENCH_DEFS.map(D=>{
+    const lv=enchState[D.k], full=lv>=D.max, c=enchCost(lv+1);
+    const cost=full?"已满级":((npcState.relics>=c.relics?"":"⚠ ")+"文物 "+npcState.relics+"/"+c.relics+"　"+(bagCount(GOLD_ORE)>=c.gold?"":"⚠ ")+"金 "+bagCount(GOLD_ORE)+"/"+c.gold);
+    return '<div class="recipe'+(canEnchant(D.k)?"":" locked")+'" data-k="'+D.k+'">'+
+      '<div><div class="rn">'+D.n+" "+(ROMAN[lv]||"—")+(full?"":" → "+ROMAN[lv+1])+'</div><div class="rd">'+D.d(full?lv:lv+1)+'</div></div>'+
+      '<div class="rc">'+cost+'</div></div>';
+  }).join("");
+  for(const el of document.querySelectorAll("#enchList .recipe")) el.onclick=()=>doEnchant(el.dataset.k);
+}
+function toggleEnch(){
+  if(craftOpen) toggleCraft();
+  enchOpen=!enchOpen;
+  document.getElementById("enchPanel").style.display=enchOpen?"flex":"none";
+  if(enchOpen){ renderEnch(); if(document.pointerLockElement) document.exitPointerLock(); }
+  else if(!softLock) enterPointerLock();
+}
 function toggleCraft(){
+  if(enchOpen) toggleEnch();
   craftOpen=!craftOpen;
   const p=document.getElementById("craftPanel");
   p.style.display = craftOpen ? "flex" : "none";
@@ -5301,6 +5377,7 @@ document.addEventListener("keydown",e=>{
   }
   if(e.code==="Escape" && npcPanelOpen){ closeNPCPanel(); return; }
   if(e.code==="Escape" && craftOpen){ toggleCraft(); return; }
+  if(e.code==="Escape" && enchOpen){ toggleEnch(); return; }
   const potEl=document.getElementById("pottery-panel"), sxEl=document.getElementById("sphinx-panel"), myEl=document.getElementById("mythic-panel"), lpEl=document.getElementById("lamp-panel");
   if(e.code==="Escape" && potEl && potEl.classList.contains("on")){ closePotteryPanel(); return; }
   if(e.code==="Escape" && myEl && myEl.classList.contains("on")){ closeMythicPanel(); return; }
@@ -5322,6 +5399,7 @@ document.addEventListener("keydown",e=>{
     if(e.code==="KeyE") toggleRide();
     if(e.code==="KeyF"){ e.preventDefault(); if(npcPanelOpen) closeNPCPanel(); else if(talkNpc) openNPCPanel(); }
     if(e.code==="KeyB"){ e.preventDefault(); toggleCraft(); }
+    if(e.code==="KeyJ"){ e.preventDefault(); toggleEnch(); }                  // 神庙附魔祭坛(第五轮·本地)
     if(e.code==="KeyG" && !e.repeat){ e.preventDefault(); startArena(); }   // 斗兽场开战
     if(e.code==="KeyU" && !e.repeat){ e.preventDefault(); openVault(); }     // 封印宝库(花钥匙)
     if(e.code==="KeyR" && !e.repeat){ e.preventDefault(); openSphinxPanel(); } // 斯芬克斯答谜
@@ -5392,7 +5470,7 @@ newworldbtn.addEventListener("click",()=>{
   for(const [,c] of world) if(c.mesh) destroyMesh(c.mesh);
   world.clear(); meshQueue.length=0; queued.clear();
   mobs.length=0; arrows.length=0; drops.length=0; particles.length=0;
-  hp=maxHp=20; lvl=1; xp=0; armor=0; cores=0; kills=0; dayCount=1; dmgMul=1; dead=false; setSunblade(false); setMace(false);
+  hp=maxHp=20; lvl=1; xp=0; armor=0; cores=0; kills=0; dayCount=1; dmgMul=1; dead=false; setSunblade(false); setMace(false); for(const k in enchState) enchState[k]=0;
   questIdx=0; questProg=0; questDone=false; _qWalkX=null; _qDriveX=null; bag.clear(); updateQuestHUD();
   document.getElementById("victory").style.display="none";
   _gcx=1e9; pcx=1e9; pcz=1e9;
@@ -5482,7 +5560,8 @@ function doBreak(){
     const dirM=currentAim(), rmM=raycastMob(4.2, dirM);
     if(rmM){
       const mightMul=(blessKind==="might"&&blessT>0)?1.35:1, omenMul=(typeof omenMeleeMul==="function")?omenMeleeMul():1;
-      maceStrike(rmM.m, dirM, dmgMul*mightMul*omenMul, maceFall());
+      const mr=maceStrike(rmM.m, dirM, dmgMul*mightMul*omenMul*enchMeleeMul("mace"), maceFall());
+      enchOnHit(rmM.m, mr.dmg, "mace");
       return;
     }
   } else { swingT=0.3; triggerViewSwing(); }
@@ -5494,9 +5573,10 @@ function doBreak(){
     const mightMul=(blessKind==="might"&&blessT>0)?1.35:1;   // 战意祝福: 近战增伤
     const omenMul=(typeof omenMeleeMul==="function")?omenMeleeMul():1;   // 连锁: 马尔斯天象 → 近战更狠
     const d=Math.hypot(rm.m.x-player.x, rm.m.z-player.z)||1e-6;
-    const sun=isSword&&sunblade;
-    hurtMob(rm.m, Math.round((sun?16:isSword?12:5)*dmgMul*mightMul*omenMul), (rm.m.x-player.x)/d*(isSword?10:8), (rm.m.z-player.z)/d*(isSword?10:8));
-    if(sun) sunbladeHit(rm.m, dir, dmgMul*mightMul*omenMul);
+    const sun=isSword&&sunblade, eMul=enchMeleeMul(held), hitDmg=Math.round((sun?16:isSword?12:5)*dmgMul*mightMul*omenMul*eMul);
+    hurtMob(rm.m, hitDmg, (rm.m.x-player.x)/d*(isSword?10:8), (rm.m.z-player.z)/d*(isSword?10:8));
+    enchOnHit(rm.m, hitDmg, held);
+    if(sun) sunbladeHit(rm.m, dir, dmgMul*mightMul*omenMul*eMul);
     return;
   }
   if(isSword && sunblade) sunbladeTrail(dir);
@@ -9828,6 +9908,7 @@ function collectSave(){
     dmgMul:+dmgMul.toFixed(3),
     sunblade,                                    // 第五轮·本地: 拉之烈阳剑(老存档无此字段 → 铁剑)
     mace:maceOwned,                              // 第五轮·本地: 塞特之锤(老存档无此字段 → 没有)
+    ench:Object.assign({},enchState),            // 第五轮·本地: 附魔词条(老存档无此字段 → 全 0)
     questIdx, questId:(QUESTS[questIdx]||{}).id||null,
     questProg:+questProg.toFixed(1), questDone,
     bounty:{ idx:bountyIdx, prog:bountyProg, done:bountyDone },
@@ -9915,6 +9996,7 @@ function loadGame(){
   if(s.dmgMul) dmgMul=s.dmgMul;
   setSunblade(!!s.sunblade);
   setMace(!!s.mace);
+  for(const D of ENCH_DEFS) enchState[D.k]=Math.max(0,Math.min(D.max,(s.ench&&s.ench[D.k])|0));
   bag.clear(); if(s.bag) for(const k in s.bag) bag.set(+k, s.bag[k]);
   // 优先用 id 定位关卡(抗关卡表变动), 没有 id 的老存档才退回下标
   const qById = s.questId ? QUESTS.findIndex(q=>q.id===s.questId) : -1;
@@ -12171,6 +12253,35 @@ function selftest(){
         mobs.length=0; for(const m of mobsS) mobs.push(m); player.y=pyS; player.vy=pvS; fallStart=fsS; player.onGround=ogS;
         ok("塞特之锤: 下落 5 格重击 33 伤害并震地(周围 3.5 格吃 4 成、远处不中), 抵消摔落并反弹; 站地面只有 9 伤害不震地",
            smash && ground, "f="+f.toFixed(2)+" dmg="+r.dmg+" t="+t.hp+" nb="+nb.hp+" fr="+fr.hp+" aoe="+r.aoe+" ground="+ground);
+      }
+      // ---- 第五轮·本地: 神庙附魔祭坛 ----
+      {
+        const eS=Object.assign({},enchState), relS=npcState.relics, bagS=new Map(bag);
+        for(const k in enchState) enchState[k]=0;
+        npcState.relics=0; bag.set(GOLD_ORE,0);
+        const poor=doEnchant("sharp")===false && enchState.sharp===0;
+        npcState.relics=30; bag.set(GOLD_ORE,20);
+        let lv5=true; for(let i=0;i<5;i++) if(!doEnchant("sharp")) lv5=false;
+        const spent=npcState.relics===0 && bagCount(GOLD_ORE)===5 && enchState.sharp===5, capped=doEnchant("sharp")===false && enchState.sharp===5;
+        const mul=Math.abs(enchMeleeMul("sword")-1.5)<1e-9 && Math.abs(enchMeleeMul("mace")-1.5)<1e-9 && enchMeleeMul(TNT)===1;
+        enchState.fire=2; enchState.sweep=3; enchState.kb=2;
+        const sv=collectSave(), saved=sv.ench && sv.ench.sharp===5 && sv.ench.sweep===3;
+        const mobsS=mobs.slice(); mobs.length=0; const pyS=player.y; player.y=120;
+        const mk=(dx,dz)=>({type:"legionary",def:MOB_DEFS.legionary,x:player.x+dx,y:player.y,z:player.z+dz,
+          vx:0,vy:0,vz:0,kbx:0,kbz:0,yaw:0,tgtYaw:0,hp:500,hurtT:0,animT:0,t:0,atkCd:0,burnT:0,swingT:0,
+          groanT:0,fleeT:0,onGround:true,pause:false,burning:false,held:null,alertT:0});
+        const t=mk(2,0), nb=mk(3.5,1), fr=mk(6,0); mobs.push(t,nb,fr);
+        const n=enchOnHit(t,40,"sword");
+        const fx=n===1 && nb.hp===500-18 && fr.hp===500 && t.sunBurn===4 && t.kbx>=10 && !(fr.sunBurn>0);
+        const noWeapon=enchOnHit(fr,40,TNT)===0 && fr.hp===500;
+        mobs.length=0; for(const m of mobsS) mobs.push(m); player.y=pyS;
+        { const legacy=Object.assign({},sv); delete legacy.ench; for(const D of ENCH_DEFS) enchState[D.k]=Math.max(0,Math.min(D.max,(legacy.ench&&legacy.ench[D.k])|0)); }
+        const legacyZero=Object.values(enchState).every(v=>v===0);
+        Object.assign(enchState,eS); npcState.relics=relS; bag.clear(); for(const [k,v] of bagS) bag.set(k,v);
+        ok("附魔祭坛: 献祭不足被挡; 锋利 I→V 共花文物 30 + 金 15, 满级封顶; 伤害 x1.5 只对剑/锤; 存档往返, 老存档全 0",
+           poor && lv5 && spent && capped && mul && saved && legacyZero, "poor="+poor+" lv5="+lv5+" spent="+spent+" cap="+capped+" mul="+mul+" saved="+saved+" legacy="+legacyZero);
+        ok("附魔效果: 火焰附加 II 点燃 4 秒、横扫之刃 III 溅射 45%(2.5 格外不中)、击退 II 加推力; 非近战武器不触发", fx && noWeapon,
+           "n="+n+" nb="+nb.hp+" fr="+fr.hp+" burn="+t.sunBurn+" kbx="+t.kbx.toFixed(1)+" noWeapon="+noWeapon);
       }
       ok("材质: 逐块旋转——松沙陷坑与沙子同模式(伪装不露馅), 沙纹只转180°, 草地四向", UV_ROT[LOOSESAND*2]===UV_ROT[SAND*2] && UV_ROT[LOOSESAND*2+1]===UV_ROT[SAND*2+1] && UV_ROT[SAND*2]===1 && UV_ROT[GRASS*2]===2,
          "sand="+UV_ROT[SAND*2]+" loose="+UV_ROT[LOOSESAND*2]);
