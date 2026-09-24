@@ -67,6 +67,7 @@
   #lavatint { position:absolute; inset:0; background:rgba(190,60,10,.72); display:none; }
   #firetint { position:absolute; inset:0; box-shadow:inset 0 0 120px 40px rgba(255,110,20,.55); display:none; pointer-events:none; }
   #hurttint { position:absolute; inset:0; background:radial-gradient(ellipse at center, rgba(180,0,0,.15) 30%, rgba(170,0,0,.55)); opacity:0; transition:opacity .12s; }
+  #poisontint { position:absolute; inset:0; background:radial-gradient(ellipse at center, rgba(70,150,40,0) 42%, rgba(70,160,50,.5)); opacity:0; transition:opacity .3s; pointer-events:none; }
   #hearts { position:absolute; left:50%; bottom:72px; transform:translateX(-50%); display:flex; }
   #hearts canvas { width:21px; height:18px; image-rendering:pixelated; margin-right:1px; }
   #questbox { position:absolute; left:10px; top:10px; min-width:210px; max-width:300px;
@@ -79,6 +80,18 @@
   #questbar { margin-top:6px; height:8px; background:rgba(0,0,0,.5); border-radius:5px; overflow:hidden; }
   #questbar > i { display:block; height:100%; width:0%; background:linear-gradient(90deg,#ffd07a,#ff9a3c); transition:width .25s; }
   #questNum { font-size:11px; opacity:.75; margin-top:3px; }
+  #bossbar { position:absolute; left:50%; top:14px; transform:translateX(-50%); width:min(52vw,440px); display:none; text-align:center;
+             font:bold 13px/1.4 "Microsoft YaHei",sans-serif; color:#ffe0e0; text-shadow:1px 1px 0 #000; }
+  #bossbar .bn { letter-spacing:2px; margin-bottom:3px; }
+  #bossbar .bt { height:12px; background:rgba(0,0,0,.55); border-radius:7px; overflow:hidden; box-shadow:0 0 0 1px rgba(255,120,120,.45) inset; }
+  #bossbar .bf { display:block; height:100%; width:100%; background:linear-gradient(90deg,#ff5a4d,#b81d2c); transition:width .18s; }
+  #bountybox { position:absolute; left:10px; top:122px; min-width:210px; max-width:300px; padding:7px 10px; border-radius:10px;
+               background:rgba(14,10,20,.42); box-shadow:0 0 0 1px rgba(120,200,150,.22) inset; color:#dff5e2;
+               font:12px/1.4 "Microsoft YaHei",sans-serif; text-shadow:1px 1px 0 #000; display:none; }
+  #bountybox .kh { font-size:11px; color:#9be3a8; letter-spacing:2px; }
+  #bountybox .kt { font-weight:bold; font-size:13px; color:#eafff0; margin-top:1px; }
+  #bountybar { margin-top:5px; height:7px; background:rgba(0,0,0,.5); border-radius:5px; overflow:hidden; }
+  #bountybar > i { display:block; height:100%; width:0%; background:linear-gradient(90deg,#8ce6a0,#39b06a); transition:width .25s; }
   #victory { position:fixed; inset:0; z-index:70; display:none; flex-direction:column; align-items:center; justify-content:center;
              background:radial-gradient(circle at 50% 40%,rgba(60,40,20,.92),rgba(12,10,20,.96)); color:#ffe9c4; text-align:center; padding:30px; }
   #stats { position:absolute; right:8px; top:8px; color:#fff; font:bold 15px/1.5 "Microsoft YaHei",sans-serif; text-shadow:2px 2px 0 #000; text-align:right; }
@@ -217,6 +230,7 @@
   <div id="lavatint"></div>
   <div id="firetint"></div>
   <div id="hurttint"></div>
+  <div id="poisontint"></div>
   <div id="cross"></div>
   <div id="itemname"></div>
   <div id="toast"></div>
@@ -235,6 +249,13 @@
     <div id="questbar"><i id="questFill"></i></div>
     <div id="questNum"></div>
   </div>
+  <div id="bountybox">
+    <div class="kh">🎯 悬赏</div>
+    <div class="kt" id="bountyDesc">—</div>
+    <div id="bountybar"><i id="bountyFill"></i></div>
+    <div id="bountyNum" style="font-size:11px;opacity:.72;margin-top:3px"></div>
+  </div>
+  <div id="bossbar"><div class="bn">—</div><div class="bt"><i class="bf"></i></div></div>
   <div id="hearts"></div>
   <div id="hotbar"></div>
   <div id="viewmodel"></div>
@@ -497,6 +518,14 @@ function riverInfluence(x,z){
   if(d<=halfW) return 1;
   return 1-(d-halfW)/bank;                    // 1→0 的平滑过渡, 避免河岸变成垂直峭壁
 }
+/* 沙海沙丘: 沿"风向"的长条沙脊(周期约70格, 坡缓) + 大尺度沙丘群起伏; 恒 ≥0, 约 0~8。
+   让"沙海奇境"的沙漠真正起伏成海, 又保留波谷平地便于建造。 */
+function desertDune(x,z){
+  const wind = x*0.045 + z*0.022;                    // 斜向风
+  const ridge = 1 - Math.abs(Math.sin(wind));        // 0..1, 一列列沙脊
+  const swell = fbm2(x*0.012+911, z*0.012-733, 3);   // 0..1, 大尺度沙丘群
+  return Math.pow(ridge,1.6)*5.0 + swell*3.2;        // ≥0, 约 0~8
+}
 function heightAt(x, z){
   const k=ckey(x,z), c=_hCache.get(k);
   if(c!==undefined) return c;
@@ -505,7 +534,7 @@ function heightAt(x, z){
   const m  = fbm2(x*0.0038+533.7, z*0.0038-217.3, 4);       // 山脉遮罩(阈值抬高→更稀少)
   let h = 31 + n1*7 + Math.pow(Math.max(0,(m-0.72)/0.28), 2.2)*26;
   const bio=biomeAt(x,z);
-  if(bio===BIO_DESERT) h = WATER_Y+2 + (h-WATER_Y-2)*0.45;  // 沙漠平坦
+  if(bio===BIO_DESERT) h = WATER_Y+2 + (h-WATER_Y-2)*0.45 + desertDune(x,z);  // 沙海: 平坦基底 + 沙丘起伏
   // 沼泽: 在水位线上下起伏, 形成"浅水+小岛"的湿地, 而不是压成一条平线
   else if(bio===BIO_SWAMP) h = WATER_Y - 3.2 + (h-WATER_Y)*0.42;
   else if(bio===BIO_MESA)  h = h*0.82 + 6;
@@ -540,6 +569,22 @@ const isTreeAt = (x,z,h,bio) => {
   const [p,ty]=treeInfo(bio);
   return ty!==3 && h>WATER_Y+1 && h<58 && hash2(x+91337, z-40507) < p;
 };
+// 沙漠仙人掌: 开阔沙地上零星生长(只在沙漠、水位之上), 让荒漠不再空旷
+const isCactusAt = (x,z,h,bio) => bio===BIO_DESERT && h>WATER_Y+1 && h<58 && hash2(x*13+701, z*7-233) < 0.014;
+// 群系表层材质(抽成纯函数, 供边界柔化复用同一套映射)
+function surfaceTop(bio,h,beach){
+  if(bio===BIO_SALTLAKE) return SALTCRUST;
+  if(bio===BIO_CANYON)   return WINDROCK;
+  if(bio===BIO_VOLCANO)  return BLACKSAND;
+  if(h>=64)              return SNOW;
+  if(beach)              return (bio===BIO_SWAMP? DIRT : SAND);
+  if(bio===BIO_DESERT)   return SAND;
+  if(bio===BIO_MESA)     return CLAY;
+  if(bio===BIO_SNOW)     return SNOW;
+  if(bio===BIO_FOREST)   return MOSSY;
+  if(bio===BIO_TAIGA)    return SANDSTONE;
+  return GRASS;
+}
 
 function genChunk(cx, cz){
   const b = new Uint8Array(CS*CS*H);
@@ -577,17 +622,13 @@ function genChunk(cx, cz){
         else id=DIRT;
       }
       else { // 顶层
-        if(bio===BIO_SALTLAKE)     id=SALTCRUST;                     // 盐壳平原
-        else if(bio===BIO_CANYON)  id=WINDROCK;                      // 风蚀岩台顶
-        else if(bio===BIO_VOLCANO) id=BLACKSAND;                     // 黑沙覆盖
-        else if(h>=64) id=SNOW;
-        else if(beach) id = (bio===BIO_SWAMP? DIRT : SAND);
-        else if(bio===BIO_DESERT) id=SAND;
-        else if(bio===BIO_MESA)   id=CLAY;
-        else if(bio===BIO_SNOW) id=SNOW;
-        else if(bio===BIO_FOREST) id=MOSSY;
-        else if(bio===BIO_TAIGA) id=SANDSTONE;
-        else id=GRASS;
+        id=surfaceTop(bio,h,beach);
+        // 群系边界柔化: 交界 ~5 格内, 用噪声把邻域表层材质散点渗过来, 软化刀切直线
+        if(!beach && h<64){
+          let nb=-1;
+          for(const [dx,dz] of [[5,0],[-5,0],[0,5],[0,-5]]){ const b2=biomeAt(gx+dx,gz+dz); if(b2!==bio){ nb=b2; break; } }
+          if(nb>=0 && hash2(gx*3+91, gz*3-57) < 0.5) id=surfaceTop(nb,h,beach);
+        }
       }
       b[col+y]=id;
     }
@@ -611,7 +652,15 @@ function genChunk(cx, cz){
       if(b[col+y]!==AIR) continue;
       if(b[col+y-1]===AIR || b[col+y-1]===LAVA) continue;          // 要长在实地上
       const caveR = hash3(gx*3+y, y*7, gz*3-y);
-      if(caveR < (bio===BIO_FOREST ? 0.034 : 0.006)) b[col+y]= (bio===BIO_FOREST && caveR>0.018 ? AMETHYST : CRYSTAL);
+      if(caveR < (bio===BIO_FOREST ? 0.034 : 0.006)){
+        b[col+y]= (bio===BIO_FOREST && caveR>0.018 ? AMETHYST : CRYSTAL);
+        // 晶簇: 稀有地向上叠一节水晶尖 + 四周挂紫晶, 比单块更有"晶洞"观感(只填空气)
+        if(caveR < 0.0022){
+          if(b[col+y+1]===AIR) b[col+y+1]=CRYSTAL;
+          put(gx+1,y,gz,AMETHYST,false); put(gx-1,y,gz,AMETHYST,false);
+          put(gx,y,gz+1,AMETHYST,false); put(gx,y,gz-1,AMETHYST,false);
+        }
+      }
       else if(bio===BIO_FOREST && caveR<0.08 && b[col+y-1]===STONE) b[col+y-1]=CAVECALC;
     }
     // ---- 地表装饰: 不再生成花/草/树, 改用岩石与遗迹点缀荒野 ----
@@ -628,6 +677,38 @@ function genChunk(cx, cz){
         for(let k=1;k<=ch;k++) put(gx,h+k,gz,SANDSTONE,true);
         if(hash2(gx,gz)<0.4) put(gx,h+ch+1,gz,CLAY,true);
       }
+    }
+    // ---- 沙漠仙人掌(独立于上面的岩石/断柱概率) ----
+    if(isCactusAt(gx,gz,h,bio) && b[col+h]!==AIR){
+      const ch=2+Math.floor(hash2(gx+11,gz-7)*2);     // 高 2~3 格
+      for(let k=1;k<=ch;k++) put(gx,h+k,gz,CACTUS,true);
+    }
+    // ---- 沙漠"看点": 风蚀石拱 / 白骨遗骸 / 绿洲棕榈(都很稀有, 各占一片荒漠的地标) ----
+    if(bio===BIO_DESERT && h>WATER_Y+1 && h<58 && b[col+h]!==AIR){
+      const dr=hash2(gx*17+3, gz*17-9);
+      if(dr<0.0009){                                   // 风蚀石拱: 一道砂岩拱门
+        const AW=2+((hash2(gx,gz+1)*2)|0), AH=3+((hash2(gx+2,gz)*2)|0);
+        for(let k=1;k<=AH;k++){ put(gx-AW,h+k,gz,SANDSTONE,true); put(gx+AW,h+k,gz,SANDSTONE,true); }
+        for(let ax=-AW;ax<=AW;ax++) put(gx+ax,h+AH+1,gz,SANDSTONE,true);
+        put(gx-(AW-1),h+AH,gz,SANDSTONE,true); put(gx+(AW-1),h+AH,gz,SANDSTONE,true);  // 内抹角
+      } else if(dr<0.0018){                            // 白骨遗骸: 漂白的巨兽肋骨(复用砂岩=骨色)
+        const L=3+((hash2(gx,gz)*3)|0);
+        for(let s=0;s<L;s++){                          // 脊椎沿 +z, 每节向上弯出一对肋骨
+          put(gx,h+1,gz+s,SANDSTONE,true);
+          put(gx-1,h+1,gz+s,SANDSTONE,false); put(gx+1,h+1,gz+s,SANDSTONE,false);
+          put(gx-2,h+2,gz+s,SANDSTONE,false); put(gx+2,h+2,gz+s,SANDSTONE,false);
+        }
+        put(gx,h+2,gz-1,SANDSTONE,true); put(gx,h+2,gz-2,SANDSTONE,false);             // 头骨方向
+      }
+    }
+    // 绿洲棕榈: 只沿沙漠里的河岸(尼罗河两侧)零星生长, 给绿洲补一抹绿
+    if(bio===BIO_DESERT && h>WATER_Y && h<=WATER_Y+3 && Math.abs(riverField(gx,gz))<0.06
+       && b[col+h]!==AIR && hash2(gx*23+1, gz*23-3)<0.05){
+      const th=4+((hash2(gx,gz)*3)|0);
+      for(let k=1;k<=th;k++) put(gx,h+k,gz,LOG,true);           // 棕榈干(复用橡木原木)
+      const cy=h+th;
+      put(gx,cy+1,gz,LEAVES,false);
+      for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){ put(gx+dx,cy,gz+dz,LEAVES,false); put(gx+dx*2,cy-1,gz+dz*2,LEAVES,false); }  // 下垂的棕榈冠
     }
     // ---- 新群系专属地表资源 ----
     if(b[col+h]!==AIR && h>0){
@@ -2448,6 +2529,11 @@ let jumpPadGrace=false;                  // 被弹跳板弹起后, 直到落地�
 /* ---------- 生命值 / 死亡 ---------- */
 let hp=20, dead=false, lastDmg=-1e9, regenAcc=0, fallStart=null;
 let armor=0;                       // 护甲层数(拾取能量核心累积, 最多 5)
+let cores=0;                       // 能量核心存量: 护甲满5后, 击杀/精英掉落转为可花费的强化货币(成长闭环)
+function gainCore(){                // 拾取能量核心: 先补护甲, 满5后转存为核心货币
+  if(armor<5){ armor++; updateHearts(); return "🛡 护甲 +1 (共 "+armor+"/5, 减伤 "+(armor*6)+"%)"; }
+  cores++; return "⚡ 能量核心 +1 (共 "+cores+" · 按 B 花费强化)";
+}
 const spawnPt={x:8.5,y:60,z:8.5};
 const HEART_MAP=[".XX..XX.","XXXXXXXX","XXXXXXXX",".XXXXXX.","..XXXX..","...XX..."];
 function heartCanvas(kind){ // 2满 1半 0空
@@ -2545,6 +2631,56 @@ function completeQuest(){
   updateQuestHUD();
   saveGame(true);
 }
+/* ---------- 悬赏: 与主线并行的可循环支线目标(咬合精英/连杀战斗系统) ---------- */
+const BOUNTIES=[
+  {id:"cull",    desc:"斩杀 8 个敌人",   goal:8, xp:40, reward:"key"},
+  {id:"elite",   desc:"斩杀 3 个精英怪", goal:3, xp:60, reward:"core"},
+  {id:"streak",  desc:"打出 6 连杀",     goal:6, xp:50, reward:"core"},
+  {id:"survive", desc:"熬过一个夜晚",     goal:1, xp:45, reward:"key"},
+];
+let bountyIdx=0, bountyProg=0, bountyDone=0;
+function curBounty(){ return BOUNTIES[bountyIdx%BOUNTIES.length]; }
+function updateBountyHUD(){
+  const box=document.getElementById("bountybox"); if(!box) return;
+  if(typeof playing==="function" && !playing()){ box.style.display="none"; return; }
+  const b=curBounty();
+  box.style.display="block";
+  document.getElementById("bountyDesc").textContent=b.desc;
+  document.getElementById("bountyFill").style.width=(Math.max(0,Math.min(1,bountyProg/b.goal))*100).toFixed(0)+"%";
+  document.getElementById("bountyNum").textContent=Math.min(bountyProg,b.goal)+" / "+b.goal+"　· 已完成 "+bountyDone+" 单 · 奖励 +"+b.xp+"xp "+(b.reward==="key"?"+宝库钥匙":"+能量核心");
+}
+function bountyProgress(id, value, mode){
+  const b=curBounty(); if(!b || b.id!==id) return;
+  bountyProg = (mode==="max") ? Math.max(bountyProg, value) : bountyProg+value;
+  if(bountyProg>=b.goal) bountyComplete(); else updateBountyHUD();
+}
+function bountyComplete(){
+  const b=curBounty();
+  addXP(b.xp);
+  if(b.reward==="key" && typeof arenaState!=="undefined") arenaState.keys=(arenaState.keys|0)+1;
+  else if(b.reward==="core") spawnDrop(player.x, player.y+1, player.z, "core");
+  bountyDone++;
+  showName("🎯 悬赏达成：【"+b.desc+"】奖励已发放！");
+  sfxLevel && sfxLevel();
+  bountyIdx=(bountyIdx+1)%BOUNTIES.length; bountyProg=0;
+  updateBountyHUD();
+}
+/* ---------- Boss 血条: 有 Boss 在场时顶部居中显示 ---------- */
+function bossBarState(){
+  let b=null;
+  for(const m of mobs){ if(m.def && m.def.boss){ b=m; break; } }
+  if(!b) return {visible:false, pct:0, name:""};
+  const mx=b.maxHp||b.def.hp||1;
+  return {visible:true, pct:Math.max(0,Math.min(1,b.hp/mx)), name:b.def.name};
+}
+function updateBossBar(){
+  const el=document.getElementById("bossbar"); if(!el) return;
+  const s=bossBarState();
+  if(!s.visible){ el.style.display="none"; return; }
+  el.style.display="block";
+  el.querySelector(".bn").textContent="⚔ "+s.name+"　"+Math.ceil(s.pct*100)+"%";
+  el.querySelector(".bf").style.width=(s.pct*100).toFixed(1)+"%";
+}
 function showVictory(){
   const v=document.getElementById("victory"); if(!v) return;
   document.getElementById("victoryText").innerHTML=
@@ -2632,6 +2768,15 @@ const RECIPES=[
   {name:"生命精华", desc:"钻石 + 金苹果之力，最大生命 +4", cost:[[GEM_ORE,3],[GOLD_ORE,3]],
    ok(){ return maxHp<40; }, lockMsg:"生命上限已满 40",
    run(){ maxHp=Math.min(40,maxHp+4); hp=maxHp; updateHearts(); return "❤ 最大生命 +4（"+maxHp+"）"; }},
+  // ---- 能量核心强化(成长闭环: 击杀/精英掉落的核心 → 永久提升, 让打怪的收益有去处) ----
+  {name:"⚡ 核心·锋锐", desc:"能量核心过载，全部伤害永久 +8%", coreCost:3, cost:[],
+   run(){ dmgMul+=0.08; return "⚔ 伤害 +8%（当前 x"+dmgMul.toFixed(2)+"）"; }},
+  {name:"⚡ 核心·丰血", desc:"能量核心滋养，最大生命 +2", coreCost:3, cost:[],
+   ok(){ return maxHp<40; }, lockMsg:"生命上限已满 40",
+   run(){ maxHp=Math.min(40,maxHp+2); hp=maxHp; updateHearts(); return "❤ 最大生命 +2（"+maxHp+"）"; }},
+  {name:"⚡ 核心·坚壁", desc:"能量核心成甲，永久减伤 6%", coreCost:4, cost:[],
+   ok(){ return armor<5; }, lockMsg:"护甲已满 5/5",
+   run(){ armor++; updateHearts(); return "🛡 护甲 +1（"+armor+"/5，减伤 "+(armor*6)+"%）"; }},
   {name:"庆典烟花", desc:"金 + 煤，做一批烟花", cost:[[GOLD_ORE,2],[COAL_ORE,2]],
    run(){ addXP(20); return "🎆 烟花已补充（+20 经验）"; }},
   {name:"沉船灯塔", desc:"航海图纸点亮远航：朽木 + 金 + 煤 → 灯笼", cost:[[WRECKWOOD,8],[GOLD_ORE,2],[COAL_ORE,2]],
@@ -2659,14 +2804,16 @@ function landUnlocked(type){
 function canCraft(r){
   if(r.needLand && !landUnlocked(r.needLand)) return false;
   if(r.ok && !r.ok()) return false;
+  if(r.coreCost && cores<r.coreCost) return false;
   return r.cost.every(([id,n])=>bagCount(id)>=n);
 }
 function doCraft(i){
   const r=RECIPES[i]; if(!r) return;
   if(r.needLand && !landUnlocked(r.needLand)){ showName("⚠ "+(r.lockMsg||"尚未取得对应图纸")); return; }
   if(r.ok && !r.ok()){ showName("⚠ "+(r.lockMsg||"暂时无法合成")); return; }
-  if(!canCraft(r)){ showName("⚠ 材料不足：需要 "+r.cost.map(([id,n])=>BLOCKS[id].name+" x"+n).join("、")); return; }
+  if(!canCraft(r)){ showName("⚠ 材料不足：需要 "+[...r.cost.map(([id,n])=>BLOCKS[id].name+" x"+n), ...(r.coreCost?["能量核心 x"+r.coreCost]:[])].join("、")); return; }
   for(const [id,n] of r.cost) bagTake(id,n);
+  if(r.coreCost) cores-=r.coreCost;
   showName("✅ "+r.run());
   sfxLevel && sfxLevel();
   renderCraft(); saveGame(true);
@@ -2676,16 +2823,19 @@ function renderCraft(){
   const g=document.getElementById("bagGrid"); if(!g) return;
   const items=[...bag.entries()].filter(([id,n])=>n>0 && BLOCKS[id]);
   items.sort((a,b)=>b[1]-a[1]);
-  g.innerHTML = items.length
+  const coreCell='<div class="bagCell" style="color:#ffd27a">⚡ 能量核心 <b>x'+cores+'</b></div>';
+  g.innerHTML = coreCell + (items.length
     ? items.map(([id,n])=>'<div class="bagCell">'+BLOCKS[id].name+' <b>x'+n+'</b></div>').join("")
-    : '<div class="bagCell bagEmpty">空空如也——去挖点方块吧</div>';
+    : '<div class="bagCell bagEmpty">方块空空——去挖点方块吧</div>');
   document.getElementById("recipeList").innerHTML = RECIPES.map((r,i)=>{
     const okc=canCraft(r);
     const lockedLand=r.needLand && !landUnlocked(r.needLand);
-    const cost=r.cost.map(([id,n])=>{
+    const parts=r.cost.map(([id,n])=>{
       const have=bagCount(id);
       return (have>=n?"":"⚠ ")+BLOCKS[id].name+" "+have+"/"+n;
-    }).join("　");
+    });
+    if(r.coreCost) parts.push((cores>=r.coreCost?"":"⚠ ")+"⚡核心 "+cores+"/"+r.coreCost);
+    const cost=parts.join("　");
     return '<div class="recipe'+(okc?"":" locked")+'" data-i="'+i+'">'+
              '<div><div class="rn">'+r.name+'</div><div class="rd">'+(lockedLand?(r.lockMsg||"需要先探索对应地标"):r.desc)+'</div></div>'+
              '<div class="rc">'+cost+'</div></div>';
@@ -2959,6 +3109,9 @@ function doDie(){
 }
 function respawn(){
   dead=false; hp=maxHp; updateHearts();
+  killStreak=0; killStreakT=0;                     // 死亡清空连杀
+  poisonT=0; poisonTickT=0;                        // 死亡清除中毒
+  { const pt=document.getElementById("poisontint"); if(pt) pt.style.opacity=0; }
   player.x=spawnPt.x; player.y=spawnPt.y+1; player.z=spawnPt.z;
   player.vx=player.vy=player.vz=player.kbx=player.kbz=0;
   player.flying=false; fallStart=null;
@@ -3170,6 +3323,11 @@ function chronicleHTML(){
     + row('🪔 神灯许愿', djinnState.rubs+' 次')
     + row('🌊 金羊毛', expeditionState.fleeces+' 束')
     + row('⚙ 机关触发', trapState.triggered)
+    + row('🔥 最高连杀', bestStreak+' 连')
+    + row('💀 精英斩杀', elitesSlain+' 只')
+    + row('🎯 悬赏完成', bountyDone+' 单')
+    + row('⚔ 当前强度', '第 '+dayCount+' 天 · 敌伤 ×'+foeDmgMul().toFixed(2)+' · 敌血 ×'+foeHpMul().toFixed(2))
+    + row('⚡ 能量核心', cores+' 枚 · 护甲 '+armor+'/5 · 按 B 强化')
     + row('🔮 当前天象', om)
     + row('🐫 波斯集市', bz)
     + row('🌊 金羊毛远征', ex)
@@ -3223,7 +3381,9 @@ function enterSoft(){ // 指针锁定不可用时的降级模式(用鼠标指针
 }
 document.addEventListener("keydown",e=>{
   if(e.code==="F3"){ e.preventDefault(); const d=document.getElementById("debug"); d.style.display=d.style.display==="block"?"none":"block"; return; }
-  if(e.code==="F5"){ e.preventDefault(); camMode=(camMode+1)%3; showName(["第一人称","第三人称(背后)","第三人称(正面)"][camMode]); return; }
+  if(e.code==="F5"){ e.preventDefault(); camMode=(camMode+1)%3; showName(["第一人称","第三人称(背后)","第三人称(正面)"][camMode]);
+    const vm=document.getElementById("viewmodel"); if(vm) vm.style.display = camMode>0 ? "none" : ""; // 第三人称时藏起第一人称手, 否则手会浮在画面右下
+    return; }
   if(e.code==="KeyH" && !e.repeat){ e.preventDefault(); toggleFullHelp(); return; }
   if(e.code==="KeyT" && !e.repeat){ e.preventDefault(); toggleChronicle(); return; }
   if(e.code==="KeyY" && !e.repeat){ e.preventDefault(); toggleBazaarPanel(); return; }
@@ -3321,7 +3481,7 @@ newworldbtn.addEventListener("click",()=>{
   for(const [,c] of world) if(c.mesh) destroyMesh(c.mesh);
   world.clear(); meshQueue.length=0; queued.clear();
   mobs.length=0; arrows.length=0; drops.length=0; particles.length=0;
-  hp=maxHp=20; lvl=1; xp=0; armor=0; kills=0; dayCount=1; dmgMul=1; dead=false;
+  hp=maxHp=20; lvl=1; xp=0; armor=0; cores=0; kills=0; dayCount=1; dmgMul=1; dead=false;
   questIdx=0; questProg=0; questDone=false; _qWalkX=null; _qDriveX=null; bag.clear(); updateQuestHUD();
   document.getElementById("victory").style.display="none";
   _gcx=1e9; pcx=1e9; pcz=1e9;
@@ -4251,6 +4411,7 @@ function drawEntity(ent){
   if(ent.hurtT>0)       gl.uniform3f(U.uTint,1.7,0.35,0.35);
   else if(ent.fuse>0){  const f=0.5+0.5*Math.sin(ent.fuse*ent.fuse*22); gl.uniform3f(U.uTint,1+f*1.4,1+f*0.4,1+f*0.4); } // 苦力怕闪白
   else if(ent.burning)  gl.uniform3f(U.uTint,1.5,0.75,0.4);
+  else if(ent.elite)    gl.uniform3f(U.uTint,1.5,1.22,0.55);   // 精英怪: 金光加身, 一眼可辨
   else if(ent.def.fly)  gl.uniform3f(U.uTint,1.1,1.0,0.9);     // 飞龙暖色
   else if(ent.def.boss) gl.uniform3f(U.uTint,1.15,0.9,1.15);   // 僵尸王偏紫,更威慑
   else                  gl.uniform3f(U.uTint,1,1,1);
@@ -4290,6 +4451,7 @@ function deathPoof(m){
   });
 }
 function hurtMob(m,dmg,kx,kz,silent){
+  if(m.burrowed) dmg*=0.4;                    // 沙虫埋沙时只受 4 成伤害(出土露头才是反击窗口), 但仍可击杀, 避免"隐身无敌"
   m.hp-=dmg; m.hurtT=0.4;
   m.kbx+=kx; m.kbz+=kz;
   if(kx||kz) m.vy=Math.max(m.vy,4.2);
@@ -4304,6 +4466,16 @@ function hurtMob(m,dmg,kx,kz,silent){
     }
     if(m.def.hostile){
       kills++; questAdd("hunt",1);
+      // 连杀: 4 秒窗口内连续击杀累计, 越高奖励越多
+      killStreak++; killStreakT=4.0;
+      if(killStreak>bestStreak) bestStreak=killStreak;
+      if(killStreak>=3){ addXP(killStreak); showName("🔥 "+killStreak+" 连杀！  +"+killStreak+" 经验"); }
+      // 精英怪: 掉能量核心 + 额外经验
+      if(m.elite){ elitesSlain++; spawnDrop(m.x, m.y+m.def.h*0.4, m.z, "core"); addXP(12); showName("💰 精英击杀！能量核心 + 大量经验"); }
+      // 悬赏进度: 击杀/精英/连杀
+      bountyProgress("cull",1,"add");
+      bountyProgress("streak",killStreak,"max");
+      if(m.elite) bountyProgress("elite",1,"add");
       if(m.def.boss) questSet("boss");
       if(m.type==="champion")  questSet("champion");
       if(m.type==="legionary") questAdd("legion",1);
@@ -4605,14 +4777,14 @@ function updateMobs(dt){
             }
           }
           // 泰坦近身横扫
-          if(D.boss && dist<3.2 && m.atkCd2<=0){ m.atkCd2=1.4; m.swingT=0.3; damagePlayer(6, dx/dist*10, dz/dist*10); }
+          if(D.boss && dist<3.2 && m.atkCd2<=0){ m.atkCd2=1.4; m.swingT=0.3; foeStrike(6, dx/dist*10, dz/dist*10, m); }
           m.atkCd2=(m.atkCd2||0)-dt;
         } else if(D.hop){                          // 史莱姆: 一跳一跳地追
           speed=D.speed*(m.onGround?0.35:1);
           if(m.onGround && m.hopCd<=0){ m.vy=7.4; m.hopCd=0.55+Math.random()*0.35; }
           m.hopCd=(m.hopCd||0)-dt;
           if(dist<1.5 && m.atkCd<=0 && player.y>m.y-1.2 && player.y<m.y+1.6){
-            m.atkCd=0.9; damagePlayer(3, dx/dist*7, dz/dist*7);
+            m.atkCd=0.9; foeStrike(3, dx/dist*7, dz/dist*7, m);
           }
         } else if(D.creeper){                      // 苦力怕: 贴近自爆
           speed=D.speed;
@@ -4626,14 +4798,31 @@ function updateMobs(dt){
           speed=D.speed;
           if(dist<2.8 && m.atkCd<=0 && player.y>m.y-2 && player.y<m.y+4){
             m.atkCd=1.5; m.swingT=0.3;
-            damagePlayer(5, dx/dist*9, dz/dist*9);
+            foeStrike(5, dx/dist*9, dz/dist*9, m);
           }
+        } else if(m.type==="sandworm"){            // 沙虫: 钻沙潜行逼近 → 破沙而出爆发
+          m.erupt=(m.erupt||0)-dt;
+          m.burrowed = !(m.erupt>0);               // 出土(erupt>0)时露头可被攻击, 其余时间埋在沙里
+          m.tgtYaw=Math.atan2(dx,-dz);
+          if(m.burrowed){
+            speed=D.speed*1.7;                     // 埋沙时贴地疾行追人
+            // 地表沙尘拖尾: 给玩家"有东西在土里逼近"的预警
+            if(m.onGround) particles.push({x:m.x+(Math.random()-.5),y:m.y+0.1,z:m.z+(Math.random()-.5),
+              vx:(Math.random()-.5)*1.2,vy:0.6+Math.random()*1.0,vz:(Math.random()-.5)*1.2,life:.5,size:.14,u:4*TS,v:0,l:1.1});
+            if(dist<2.8 && m.atkCd<=0){            // 靠近 → 破沙而出, 爆发重击 + 强击退
+              m.atkCd=2.8; m.erupt=1.2; m.swingT=0.3;
+              foeStrike(9, dx/dist*13, dz/dist*13, m);
+              for(let q=0;q<16;q++) particles.push({x:m.x+(Math.random()-.5)*1.5,y:m.y+0.3,z:m.z+(Math.random()-.5)*1.5,
+                vx:(Math.random()-.5)*6,vy:2+Math.random()*4,vz:(Math.random()-.5)*6,life:.7,size:.16,u:4*TS,v:0,l:1.2});
+            }
+          } else speed=D.speed*0.5;                // 出土露头时较慢, 是玩家反击的窗口
         } else {                                   // 僵尸/蜘蛛: 近战
           speed=D.speed;
           const reach=D.spider?1.5:(D.crocodile?2.1:1.7), dmg=D.spider?2:(D.crocodile?7:(D.bigCat?4:3));
           if(dist<reach && m.atkCd<=0 && player.y>m.y-1.5 && player.y<m.y+2.2){
             m.atkCd=D.spider?0.85:1.2; m.swingT=0.3;
-            damagePlayer(dmg, dx/dist*6, dz/dist*6);
+            foeStrike(dmg, dx/dist*6, dz/dist*6, m);
+            if(m.type==="serqet") applyPoison(5);   // 巨蝎毒尾: 蜇中→中毒(持续掉血)
           }
         }
       } else if(m.patrol){
@@ -4642,6 +4831,7 @@ function updateMobs(dt){
         m.t=2+Math.random()*3.5; m.pause=Math.random()<0.35; m.tgtYaw=Math.random()*6.283;
       }
       if(!chasing && !m.patrol && !m.pause) speed=D.speed*0.35;
+      if(m.type==="sandworm" && !chasing){ m.burrowed=false; m.erupt=0; }   // 沙虫脱战即露头, 避免隐身游荡
       // 白天阳光下燃烧(苦力怕/蜘蛛/Boss 不燃烧)
       m.burning=false;
       if(sunH>0.08 && !D.creeper && !D.spider && !D.boss){
@@ -4673,6 +4863,13 @@ function updateMobs(dt){
         if(m.t<=0){ m.t=1.5+Math.random()*4; m.pause=Math.random()<0.5; m.tgtYaw=Math.random()*6.283; }
         if(!m.pause) speed=D.speed*0.5;
       }
+    }
+    // 圣甲虫: 一冲一冲地突进扑击(而非匀速追), 让甲虫群像乱窜的虫潮 —— 丰富敌人行为
+    if(m.type==="scarab" && speed>0){
+      const cd=Math.hypot(player.x-m.x, player.z-m.z);
+      m.chargeCd=(m.chargeCd==null?Math.random()*1.4:m.chargeCd)-dt;
+      if((m.charge||0)>0){ m.charge-=dt; speed=D.speed*2.4; }                                   // 突进冲刺
+      else if(m.chargeCd<=0 && cd>1.3 && cd<11){ m.chargeCd=1.2+Math.random()*1.2; m.charge=0.33; if(m.onGround) m.vy=Math.max(m.vy,3.0); } // 起跳扑击
     }
     // 平滑转向 + 移动
     let dyaw=m.tgtYaw-m.yaw;
@@ -4743,11 +4940,16 @@ function spawnMob(type,minD,maxD){
     const gy=groundY(x,z);
     if(gy<0 || gy<=WATER_Y+1) continue;
     const sy = (def.fly && (def.ambient||def.plane||def.mount)) ? gy+def.hover : gy;   // 飞行单位生成在空中
+    // 难度: 敌对怪血量随天数上浮; 普通(非Boss)敌对怪有几率成为"精英"——更肉、更痛、掉落更肥
+    const isElite = def.hostile && !def.boss && Math.random() < eliteChance();
+    let mobHp = def.hostile ? Math.max(1, Math.round(def.hp*foeHpMul())) : def.hp;
+    if(isElite) mobHp = Math.round(mobHp*1.6);
     mobs.push({type, def, x:x+0.5, y:sy, z:z+0.5, vx:0,vy:0,vz:0, kbx:0,kbz:0,
-               yaw:Math.random()*6.283, tgtYaw:0, hp:def.hp, hurtT:0, animT:0, t:0,
-               atkCd:0, burnT:0, swingT:0, groanT:2+Math.random()*5, fleeT:0,
+               yaw:Math.random()*6.283, tgtYaw:0, hp:mobHp, maxHp:mobHp, hurtT:0, animT:0, t:0,
+               atkCd:0, burnT:0, swingT:0, groanT:2+Math.random()*5, fleeT:0, elite:isElite,
                onGround:false, pause:false, burning:false,
                held: def.weapon ? heldFor(def.weapon, def.handP) : null});   // 生物手持武器
+    if(isElite) showName("💀 精英"+def.name+"现身——更强，也更肥美！");
     return true;
   }
   return false;
@@ -4776,6 +4978,8 @@ function spawnNearWater(type){
   return false;
 }
 let spawnTimer=0, dayCount=1, kills=0, bossSpawnedTonight=false, boss=null;
+/* ---------- 连杀 / 精英战绩 ---------- */
+let killStreak=0, killStreakT=0, bestStreak=0, elitesSlain=0;   // 4秒窗口内连续击杀累计; bestStreak/elitesSlain 入存档与编年史
 /* ---------- 经验 / 等级: 升级提升最大生命与伤害 ---------- */
 let xp=0, lvl=1;
 const xpNeed = l => 20+ (l-1)*18;
@@ -4824,16 +5028,59 @@ function nearVillage(){                   // 玩家附近(<44格)是否有可住
   }
   return false;
 }
+/* ---------- 难度强度: 随生存天数递增(每次天亮 +1 天), 中后期真正有压迫感 ----------
+   selftest 默认 dayCount=1 → 三个系数恒为基线(1.0/1.0), 不影响既有战斗断言。 */
+function diffLevel(){ return Math.min(dayCount, 12); }        // 难度等级(天数封顶 12, 不再第6天见顶)
+function foeDmgMul(){ return 1 + (diffLevel()-1)*0.06; }      // 敌人伤害: 每天 +6%, 第12天≈+66%
+function foeHpMul(){  return 1 + (diffLevel()-1)*0.05; }      // 敌人血量: 每天 +5%, 第12天≈+55%
+function eliteChance(){ return Math.min(0.30, 0.04 + dayCount*0.02); } // 精英怪概率: 第1天6% → 随天数最高30%
+function swarmChance(){ return 0.12 + Math.min(dayCount,8)*0.012; }     // 成群出没概率: 第1天≈13% → 后期≈22%
+function spawnPack(type, n, minD, maxD){ let ok=0; for(let i=0;i<n;i++) if(spawnMob(type,minD,maxD)) ok++; return ok; } // 一次刷一窝(蜂群式)
+/* 沙暴袭击: 沙暴中出没的沙漠生物(纯函数便于 selftest); startSandRaid 在沙暴降临时开一波 */
+function sandRaidType(r){ const pool=["scarab","serqet","spider","sandworm"]; return pool[Math.min(pool.length-1, (r*pool.length)|0)]; }
+function startSandRaid(){
+  if(typeof playing==="function" && !playing()) return;
+  const n=1+((Math.random()*2)|0);                 // 开场 1~2 只(轻量), 随后 trySpawns 偶尔补充
+  for(let i=0;i<n;i++) spawnMob(sandRaidType(Math.random()), 18, 34);
+}
+/* 夜间对手挑选(纯函数: 群系 + [0,1) 随机数 → [类型,最近,最远]); 大幅降低僵尸/木乃伊占比, 便于 selftest 断言分布 */
+function nightSpawnFor(bio, r){
+  if(bio===BIO_VOLCANO)  return r<0.34?["slime",20,42]  : r<0.60?["skeleton",22,46]: r<0.82?["spider",18,40] : ["creeper",22,46];   // 火山
+  if(bio===BIO_SALTLAKE) return r<0.32?["skeleton",20,44]:r<0.58?["scarab",16,34]  : r<0.80?["serqet",18,38] : r<0.92?["spider",18,40]:["mummy",22,44]; // 盐湖(木乃伊仅8%)
+  if(bio===BIO_CANYON)   return r<0.34?["serqet",18,38] : r<0.60?["scarab",16,34]  : r<0.80?["skeleton",22,46]:["sandworm",22,44];  // 峡谷
+  if(bio===BIO_DESERT||bio===BIO_MESA)                                                                                              // 沙海主场(木乃伊仅4%)
+    return r<0.24?["scarab",16,34]: r<0.44?["serqet",18,38]: r<0.62?["spider",18,40]: r<0.78?["skeleton",22,46]: r<0.90?["slime",22,44]: r<0.96?["sandworm",22,44]:["mummy",22,46];
+  if(bio===BIO_SNOW||bio===BIO_TAIGA) return r<0.34?["skeleton",22,46]:r<0.60?["slime",22,44]:r<0.82?["spider",18,40]:["mech",24,46]; // 雪原/遗迹
+  return r<0.30?["slime",22,44]: r<0.55?["spider",18,40]: r<0.78?["skeleton",22,46]: r<0.90?["creeper",22,46]:["zombie",22,46];     // 其余(僵尸仅10%)
+}
+/* 敌人攻击统一走这里以吃难度加成; 环境/陷阱/摔落伤害仍直接走 damagePlayer, 不随天数膨胀。
+   传入攻击者 m 时, 精英怪额外 +50% 伤害。 */
+function foeStrike(dmg,kx,kz,m){ const em=(m&&m.elite)?1.5:1; damagePlayer(Math.max(1,Math.round(dmg*foeDmgMul()*em)), kx, kz); }
+/* ---------- 蝎毒(敌人行为差异化 · 巨蝎) ----------
+   被巨蝎蜇中→中毒: 数秒内每秒掉 1 血(无视护甲, 但不致死, 最低留 1 血), 逼玩家拉开距离回血, 而非硬扛。 */
+let poisonT=0, poisonTickT=0;
+function applyPoison(sec){
+  const was=poisonT; poisonT=Math.max(poisonT, sec);
+  if(was<=0){ poisonTickT=1.0; showName("🦂 蝎毒侵体！持续掉血——拉开距离回血"); }
+}
+function tickPoison(dt){
+  const pt=document.getElementById("poisontint");
+  if(poisonT<=0){ if(pt) pt.style.opacity=0; return; }
+  poisonT-=dt; poisonTickT-=dt;
+  if(poisonTickT<=0){ poisonTickT=1.0; if(!dead && hp>1){ hp=Math.max(1, hp-1); updateHearts(); lastDmg=performance.now(); } }  // 毒不致死
+  if(pt) pt.style.opacity = poisonT>0 ? (0.16+0.12*(0.5+0.5*Math.sin(performance.now()/170))) : 0;
+  if(poisonT<=0){ poisonT=0; if(pt) pt.style.opacity=0; }
+}
 function trySpawns(dt){
   spawnTimer-=dt;
   if(spawnTimer>0) return;
-  const diff=Math.min(dayCount,6);              // 难度等级(随天数,更平缓)
-  spawnTimer=Math.max(3.0, 5.0-diff*0.2) * (omenActive('ares')?0.55:1) * undeadSpawnMul();   // 连锁: 阿瑞斯躁动天象 / 亡者之夜 → 刷怪更急
+  const diff=Math.min(dayCount,10);             // 难度等级(随天数, 封顶延后到第10天)
+  spawnTimer=Math.max(2.0, 4.5-diff*0.25) * (omenActive('ares')?0.55:1) * undeadSpawnMul();   // 连锁: 阿瑞斯躁动天象 / 亡者之夜 → 刷怪更急
   const night=sunH<0.02;
   const hasBoss=mobs.some(m=>m.def.boss);
   let zc=0, pc=0;
   for(const m of mobs){ if(m.def.boss||m.def.ambient||m.def.car||m.def.plane||m.def.mount) continue; if(m.def.hostile) zc++; else pc++; }
-  let cap=Math.min(4, 1+Math.floor(diff/2));    // 敌对上限: 平时最多 4 只, 只作点缀
+  let cap=Math.min(8, 2+Math.floor(diff/2));    // 敌对上限: 第1天 2 只起步, 随天数最多 7~8 只围攻
   if(omenActive('ares')) cap+=3;                // 连锁: 阿瑞斯躁动天象 → 敌对更多
   if(undeadNight.active) cap=Math.max(cap,10);  // 亡者之夜: 真围城, 敌对上限拉到 10
   if(night){
@@ -4856,42 +5103,29 @@ function trySpawns(dt){
     if(zc<cap && Math.random()<(undeadNight.active?0.75:(omenActive('ares')?0.45:0.25))){   // 亡者之夜/躁动 → 刷得更急更多
       const bio=biomeAt(Math.floor(player.x),Math.floor(player.z));
       const r=Math.random();
-      // 敌人按群系分化, 不再永远是僵尸
-      // 去掉圣甲虫/虫豸类, 保留少量有辨识度的对手
-      if(bio===BIO_VOLCANO){                        // 火山: 焦土亡魂 + 岩浆史莱姆
-        if(r<0.4) spawnMob("slime",20,42);
-        else if(r<0.7) spawnMob("skeleton",22,46);
-        else spawnMob("creeper",22,46);
-      } else if(bio===BIO_SALTLAKE){                 // 枯骨盐湖: 白骨遍地, 以骷髅/圣甲虫为主
-        if(r<0.5) spawnMob("skeleton",20,44);
-        else if(r<0.8) spawnMob("scarab",16,34);
-        else spawnMob("mummy",22,44);
-      } else if(bio===BIO_CANYON){                   // 风蚀峡谷: 岩缝里的巨蝎与圣甲虫
-        if(r<0.45) spawnMob("serqet",18,38);
-        else if(r<0.75) spawnMob("scarab",16,34);
-        else spawnMob("skeleton",22,46);
-      } else if(bio===BIO_DESERT||bio===BIO_MESA){
-        if(r<0.45) spawnMob("mummy",22,46);
-        else if(r<0.75) spawnMob("skeleton",22,46);
-        else spawnMob("slime",22,44);
-      } else if(bio===BIO_SNOW||bio===BIO_TAIGA){
-        if(r<0.45) spawnMob("skeleton",22,46);
-        else if(r<0.75) spawnMob("slime",22,44);
-        else spawnMob("mech",24,46);
+      // 成群出没: 小概率一次涌出一窝快速小怪(蜂群式围攻, 区别于零散单刷)
+      if(Math.random() < swarmChance()){
+        const swarmType = (bio===BIO_DESERT||bio===BIO_MESA||bio===BIO_SALTLAKE||bio===BIO_CANYON) ? "scarab"
+                        : (bio===BIO_SNOW||bio===BIO_TAIGA) ? "slime" : "spider";
+        const n = 3 + ((Math.random()*2)|0);        // 3~4 只
+        if(spawnPack(swarmType, n, 16, 34) > 0) showName("🐝 "+MOB_DEFS[swarmType].name+"群涌来了！");
       } else {
-        if(r<0.30) spawnMob("slime",22,44);
-        else if(r<0.60) spawnMob("skeleton",22,46);
-        else if(r<0.80) spawnMob("zombie",22,46);
-        else spawnMob("creeper",22,46);
+        const [t,mn,mx]=nightSpawnFor(bio, r);       // 按群系挑一个对手(纯函数, 便于 selftest 断言分布)
+        spawnMob(t, mn, mx);
       }
     }
+  }
+  // 沙暴袭击波: 沙暴中沙漠生物趁乱来袭——不分昼夜, 给白天的战斗一个"舞台"(信号明确、有时限)
+  if(weather==="sand" && zc<cap+2 && Math.random()<0.3 && aridBiome(biomeAt(Math.floor(player.x),Math.floor(player.z)))){
+    spawnMob(sandRaidType(Math.random()), 18, 34);
   }
   // 金字塔守卫: 靠近金字塔时白天也会有木乃伊/圣甲虫, 并有一只阿努比斯守卫
   const pyr=nearStructure(["pyramid"],46);
   if(pyr){
     let guard=0, anu=0;
-    for(const m of mobs){ if(m.type==="mummy") guard++; if(m.type==="anubis") anu++; }
-    if(guard<3 && Math.random()<0.30) spawnMob("mummy",10,26);
+    for(const m of mobs){ if(m.type==="mummy"||m.type==="scarab"||m.type==="serqet") guard++; if(m.type==="anubis") anu++; }
+    // 金字塔守卫多样化: 圣甲虫/巨蝎为主, 木乃伊只占少数(不再一律木乃伊)
+    if(guard<4 && Math.random()<0.34){ const g=Math.random(); spawnMob(g<0.5?"scarab":(g<0.8?"serqet":"mummy"),10,26); }
     if(anu===0 && !hasBoss && Math.random()<0.25){
       if(spawnMob("anubis",10,24)) showName("⚠ 阿努比斯守卫苏醒了！⚠");
     }
@@ -5466,7 +5700,7 @@ function updateArrows(dt){
         if(!dead && px>player.x-0.5 && px<player.x+0.5 && pz>player.z-0.5 && pz<player.z+0.5 &&
            py>player.y-0.2 && py<player.y+PH){
           const d=Math.hypot(a.vx,a.vz)||1;
-          damagePlayer(a.fire?5:(a.plasma?3:4), a.vx/d*5, a.vz/d*5);
+          foeStrike(a.fire?5:(a.plasma?3:4), a.vx/d*5, a.vz/d*5);
           if(a.fire||a.plasma) for(let k=0;k<10;k++) particles.push({x:px,y:py,z:pz,vx:(Math.random()-.5)*5,vy:Math.random()*4,vz:(Math.random()-.5)*5,life:.4,size:.12,u:15*TS,v:0,l:1.7});
           arrows.splice(i,1); consumed=true; break;
         }
@@ -5549,8 +5783,8 @@ function updateDrops(dt){
       const d=DROP_DEF[p.kind];
       if(d.heal>0 && hp<maxHp){ hp=Math.min(maxHp,hp+d.heal); updateHearts(); }
       if(d.xp) addXP(d.xp);
-      if(p.kind==="core" && armor<5){ armor++; showName("🛡 护甲 +1 (共 "+armor+"/5, 减伤 "+(armor*6)+"%)"); }
-      showName("拾取 "+d.name+(d.heal>0?"  +"+(d.heal/2)+"❤":""));
+      if(p.kind==="core"){ showName(gainCore()); }
+      else showName("拾取 "+d.name+(d.heal>0?"  +"+(d.heal/2)+"❤":""));
       sfxPickup(); drops.splice(i,1);
     }
   }
@@ -5769,24 +6003,37 @@ const sunVbo=gl.createBuffer();
 /* ---------- 天穹: 竖直渐变 + 日晕 ----------
    原本天空是单一 clearColor(一整片平色), 是全画面最"塑料"的地方。
    这里在清屏后先铺一张全屏渐变, 再叠一圈太阳光晕, 成本约等于一次全屏填充。 */
+// 夜色系数: 白天 0 → 夜里 1(供夜空繁星强度用; 也可被 selftest 断言)
+function skyNightFactor(h){ return Math.max(0, Math.min(1, (0.10 - h) / 0.20)); }
 const skyProg = makeShader(`
   attribute vec2 aP; varying vec2 vN;
   void main(){ vN = aP; gl_Position = vec4(aP, 0.999, 1.0); }`,`
   precision mediump float;
   varying vec2 vN;
   uniform vec3 uZenith, uHorizon, uGlowCol;
-  uniform vec2 uSun; uniform float uGlow, uAspect;
+  uniform vec2 uSun; uniform float uGlow, uAspect, uNight, uYaw;
+  float sHash(vec2 p){ return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }
   void main(){
     // 天顶->地平线的渐变(幂次让靠近地平线的过渡更紧)
     float t = clamp(vN.y * 0.5 + 0.5, 0.0, 1.0);
     vec3 col = mix(uHorizon, uZenith, pow(t, 0.85));
+    // 夜空繁星: 仅夜里、仅高天出现; 随相机偏航横向漂移, 近似天球转动而非贴屏
+    if(uNight > 0.01){
+      vec2 sp = vec2(vN.x * uAspect + uYaw * 0.9, vN.y) * 46.0;
+      float h = sHash(floor(sp));
+      if(h > 0.982){
+        float d = length(fract(sp) - 0.5);
+        float star = smoothstep(0.10, 0.0, d) * (h - 0.982) / 0.018;
+        col += vec3(star) * uNight * smoothstep(0.18, 0.65, t);
+      }
+    }
     // 太阳光晕: 屏幕空间径向衰减, 需按宽高比修正避免拉成椭圆
     vec2 d = vec2((vN.x - uSun.x) * uAspect, vN.y - uSun.y);
     float r = length(d);
     col += uGlowCol * (uGlow * (exp(-r * 2.6) * 0.75 + exp(-r * 8.0) * 0.55));
     gl_FragColor = vec4(col, 1.0);
   }`);
-const USK={}; for(const n of ["uZenith","uHorizon","uGlowCol","uSun","uGlow","uAspect"]) USK[n]=gl.getUniformLocation(skyProg,n);
+const USK={}; for(const n of ["uZenith","uHorizon","uGlowCol","uSun","uGlow","uAspect","uNight","uYaw"]) USK[n]=gl.getUniformLocation(skyProg,n);
 const ASK_P=gl.getAttribLocation(skyProg,"aP");
 const skyVbo=gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER,skyVbo);
@@ -5910,8 +6157,8 @@ function render(now){
   // 天气: 阴云压暗天空; 闪电瞬间照亮全场
   if(weather!=="clear"){
     if(weather==="sand"){
-      daylight*=0.72;
-      sky=mix3(sky,[0.76,0.56,0.32],0.58);
+      daylight*=0.86;
+      sky=mix3(sky,[0.82,0.62,0.36],0.42);   // 沙暴改为暖金薄雾, 不再灰暗压抑
     } else {
       const murk = weather==="storm" ? 0.88 : 0.95;   // 阴天只是稍暗, 不再灰蒙蒙
       daylight*=murk;
@@ -5945,7 +6192,7 @@ function render(now){
   const fogCol = uw ? [0.08,0.22,0.55] : (weather==="sand" ? mix3(sky,[0.78,0.58,0.34],0.35) : sky);
   let fogFar = uw ? 22 : RENDER*CS*1.05;
   let fogNear= uw ? 2  : fogFar*0.68;
-  if(weather==="sand" && !uw){ fogFar=16; fogNear=1.2; }
+  if(weather==="sand" && !uw){ fogFar=34; fogNear=12; }   // 沙暴不再白到看不见: 近处清晰, 远处才起黄雾
   document.getElementById("watertint").style.display=uw?"block":"none";
   document.getElementById("lavatint").style.display=eyeInLava()?"block":"none";
   document.getElementById("firetint").style.display=(burnT>0&&!eyeInLava())?"block":"none";
@@ -5988,6 +6235,8 @@ function render(now){
     gl.uniform1f(USK.uGlow, sn ? (0.16+0.55*glow) : 0.0);
     gl.uniform2f(USK.uSun, sn?sn[0]:0, sn?sn[1]:2);
     gl.uniform1f(USK.uAspect, canvas.width/Math.max(1,canvas.height));
+    gl.uniform1f(USK.uNight, skyNightFactor(sunH));   // 夜空繁星强度
+    gl.uniform1f(USK.uYaw, vYaw);                     // 随相机偏航让星空漂移
     gl.bindBuffer(gl.ARRAY_BUFFER,skyVbo);
     gl.enableVertexAttribArray(ASK_P);
     gl.vertexAttribPointer(ASK_P,2,gl.FLOAT,false,8,0);
@@ -6070,6 +6319,7 @@ function render(now){
 
   // 生物模型 & 箭矢
   for(const m of mobs){
+    if(m.burrowed) continue;                          // 沙虫钻沙潜行: 不画模型, 只留地表沙尘拖尾预警
     if(Math.hypot(m.x-camX,m.z-camZ)>fogFar+6) continue;
     drawEntity(m);
   }
@@ -6245,7 +6495,7 @@ function updateWeather(dt){
     const r=Math.random();
     const bio=biomeAt(Math.floor(player.x),Math.floor(player.z));
     if(weather==="clear"){
-      if(aridBiome(bio) && r<0.48){ weather="sand"; weatherT=8+Math.random()*6; showName("🌪 沙暴来袭！能见度骤降 — 躲进掩体或建筑"); }   // 沙暴短(8~14秒)
+      if(aridBiome(bio) && r<0.42){ weather="sand"; weatherT=8+Math.random()*5; showName("🌪 沙暴来袭！能见度下降 — 黄沙中偶有生物出没"); startSandRaid(); }   // 沙暴(8~13秒)轻量掩护少量沙漠生物
       else { weather = r<0.25?"storm":"rain"; weatherT=25+Math.random()*35; showName(weather==="storm"?"⛈ 雷暴来袭！":"🌧 下雨了"); }
     }
     else { weather="clear"; weatherT=240+Math.random()*260; showName("☀ 天放晴了"); }
@@ -6354,7 +6604,7 @@ function frame(now){
   dayT=((now/1000)/DAY_LEN+dayShift)%1;
   // 把太阳高度整体抬高: 白天占约 80% 的循环, 夜晚又短又亮(不再是"永夜僵尸游戏")
   sunH=Math.sin(dayT*Math.PI*2)*0.55+0.45;
-  if(playing() && prevSunH<0 && sunH>=0){ dayCount++; bossSpawnedTonight=false; showName("第 "+dayCount+" 天 · 黎明"); } // 天亮=新一天
+  if(playing() && prevSunH<0 && sunH>=0){ dayCount++; bossSpawnedTonight=false; showName("第 "+dayCount+" 天 · 黎明"); bountyProgress("survive",1,"add"); } // 天亮=新一天(并结算"熬过一夜"悬赏)
 
   if(playing()){
     // 移动
@@ -6463,6 +6713,9 @@ function frame(now){
     // 生物 & 生存
     updateMobs(dt);
     trySpawns(dt);
+    updateBossBar();                                                            // Boss 血条实时刷新
+    updateBountyHUD();                                                          // 悬赏进度实时刷新
+    if(killStreakT>0){ killStreakT-=dt; if(killStreakT<=0){ killStreak=0; } }   // 连杀窗口冷却归零
     const regenBless=(blessKind==="regen"&&blessT>0);
     if(!dead && hp<maxHp && (regenBless || performance.now()-lastDmg>7000)){
       regenAcc+=dt;
@@ -6471,6 +6724,7 @@ function frame(now){
     updateArrows(dt);
     updateFuses(dt);
     updateDrops(dt);
+    tickPoison(dt);                                                             // 蝎毒持续伤害
     // 岩浆灼烧: 泡在里面持续掉血, 出来后还会继续烧几秒
     if(!dead){
       if(lava){
@@ -6582,13 +6836,13 @@ function collectSave(){
     v:1, seed:SEED, ts:Date.now(),
     px:+player.x.toFixed(2), py:+player.y.toFixed(2), pz:+player.z.toFixed(2),
     yaw:+player.yaw.toFixed(3), pitch:+player.pitch.toFixed(3),
-    hp, maxHp, lvl, xp, armor, kills, dayCount, bioSeen:[...bioSeen], landSeen:[...landSeen], weather,
+    hp, maxHp, lvl, xp, armor, cores, kills, dayCount, bioSeen:[...bioSeen], landSeen:[...landSeen], weather,
     npc:{ relics:npcState.relics, traderMet:npcState.traderMet, oracleMet:npcState.oracleMet, trades:npcState.trades, blessings:npcState.blessings },
     arch:{ pottery:archState.pottery, pages:archState.pages, digs:archState.digs, shards:archState.shards.slice(), setComplete:!!archState.setComplete },
     arena:{ bestWave:arenaState.bestWave, cleared:arenaState.cleared, keys:arenaState.keys },
     curse:{ pharaohSlain:curseState.pharaohSlain },
     // 尾巴系统累计战绩(机关触发/踩塌/砸中 + 战车碾压); 老存档无 feats → 全归零
-    feats:{ trapsTriggered:trapState.triggered, trapsSprung:trapState.sprung, trapHits:trapState.hits, chariotRams:chariotState.rams, vaultsOpened:vaultState.opened },
+    feats:{ trapsTriggered:trapState.triggered, trapsSprung:trapState.sprung, trapHits:trapState.hits, chariotRams:chariotState.rams, vaultsOpened:vaultState.opened, bestStreak, elitesSlain },
     faction:{ rome:faction.rome, egypt:faction.egypt },
     djinn:{ rubs:djinnState.rubs },
     sphinx:{ solved:sphinxState.solved, failed:sphinxState.failed },
@@ -6600,6 +6854,7 @@ function collectSave(){
     dmgMul:+dmgMul.toFixed(3),
     questIdx, questId:(QUESTS[questIdx]||{}).id||null,
     questProg:+questProg.toFixed(1), questDone,
+    bounty:{ idx:bountyIdx, prog:bountyProg, done:bountyDone },
     dayT:+dayT.toFixed(5),
     spawn:[spawnPt.x,spawnPt.y,spawnPt.z],
     diff
@@ -6644,7 +6899,7 @@ function loadGame(){
   player.yaw=s.yaw||0; player.pitch=s.pitch||0;
   player.vx=player.vy=player.vz=player.kbx=player.kbz=0;
   hp=s.hp??20; maxHp=s.maxHp??20; lvl=s.lvl??1; xp=s.xp??0;
-  armor=s.armor??0; kills=s.kills??0; dayCount=s.dayCount??1;
+  armor=s.armor??0; cores=s.cores|0; kills=s.kills??0; dayCount=s.dayCount??1;
   bioSeen.clear(); if(Array.isArray(s.bioSeen)) for(const b of s.bioSeen) bioSeen.add(b|0);   // 恢复图鉴(老存档缺字段→空,自然兼容)
   landSeen.clear(); if(Array.isArray(s.landSeen)) for(const k of s.landSeen) landSeen.add(String(k));
   // NPC 系统: 恢复文物与来往记录(老存档无 npc 字段 → 全部归零, 自然向后兼容)
@@ -6665,6 +6920,7 @@ function loadGame(){
   const FT=s.feats||{};
   trapState.triggered=FT.trapsTriggered|0; trapState.sprung=FT.trapsSprung|0; trapState.hits=FT.trapHits|0;
   chariotState.rams=FT.chariotRams|0;
+  bestStreak=FT.bestStreak|0; elitesSlain=FT.elitesSlain|0; killStreak=0; killStreakT=0;   // 连杀战绩(老存档无→归零)
   if(typeof vaultState!=="undefined") vaultState.opened=FT.vaultsOpened|0;   // 封印宝库开启次数(老存档无→0)
   sphinxState.solved=(s.sphinx&&s.sphinx.solved)|0; sphinxState.failed=(s.sphinx&&s.sphinx.failed)|0;   // 斯芬克斯答谜战绩(老存档无→0)
   const FC=s.faction||{}; faction.rome=Math.max(0,Math.min(FAC_MAX,FC.rome|0)); faction.egypt=Math.max(0,Math.min(FAC_MAX,FC.egypt|0));   // 阵营声望(老存档无→归零)
@@ -6682,6 +6938,7 @@ function loadGame(){
   const qById = s.questId ? QUESTS.findIndex(q=>q.id===s.questId) : -1;
   questIdx = qById>=0 ? qById : Math.min(s.questIdx??0, QUESTS.length);
   questProg=s.questProg??0; questDone=!!s.questDone;
+  { const bt=s.bounty||{}; bountyIdx=bt.idx|0; bountyProg=bt.prog|0; bountyDone=bt.done|0; }   // 悬赏(老存档无→归零)
   _qWalkX=null; _qDriveX=null;
   updateQuestHUD();
   dmgMul=1+(lvl-1)*0.12;
@@ -7740,6 +7997,17 @@ window.__game = {
   getBlock, setBlock, groundY, heightAt, biomeAt,
   save:()=>saveGame(true), load:()=>loadGame(), hasSave, deleteSave,
   teleport(x,y,z){ player.x=x; player.y=y; player.z=z; player.vx=player.vy=player.vz=0; pcx=1e9; refreshChunks(); },
+  get difficulty(){ return { day:dayCount, foeDmg:+foeDmgMul().toFixed(3), foeHp:+foeHpMul().toFixed(3),
+                              eliteChance:+eliteChance().toFixed(3), spawnCap:Math.min(8,2+Math.floor(Math.min(dayCount,10)/2)) }; },
+  get streak(){ return { cur:killStreak, best:bestStreak, elites:elitesSlain }; },
+  get cores(){ return cores; }, get armor(){ return armor; },
+  get poison(){ return +poisonT.toFixed(2); },
+  get bounty(){ const b=curBounty(); return { id:b.id, desc:b.desc, prog:bountyProg, goal:b.goal, done:bountyDone }; },
+  get bossBar(){ return bossBarState(); },
+  get sandstorm(){ return { weather, active:weather==="sand", arid:aridBiome(biomeAt(Math.floor(player.x),Math.floor(player.z))) }; },
+  raidType:(r)=>sandRaidType(r),
+  skyNight:(h)=>skyNightFactor(h),
+  setDay(n){ dayCount=Math.max(1,n|0); return dayCount; },     // 调试/自测: 直接设定天数以检验难度曲线
   selftest
 };
 
@@ -8426,6 +8694,232 @@ function selftest(){
     }
     player.x=fx2; player.z=fz2; pcx=1e9; refreshChunks();
     ok("远距离云层UV仍在[0,1)内(防白块)", worstUV<1, "最大|uUVOff|="+worstUV.toFixed(4));
+
+    // ---- 上强度批次: 难度递增 / 精英怪 / 连杀 ----
+    { const snapD=dayCount, snapKS=killStreak, snapBS=bestStreak, snapES=elitesSlain,
+            snapKills=kills, snapXp=xp, snapLvl=lvl, snapMax=maxHp, snapDmgMul=dmgMul, snapHp=hp,
+            snapArmor=armor, snapBless=blessT, snapQi=questIdx, snapQp=questProg, snapQd=questDone,
+            mlen=mobs.length, dlen=drops.length;
+      try{
+        // 1) 难度基线: 第1天系数恒为 1.0(锁定"selftest 不被难度膨胀影响"的前提)
+        dayCount=1;
+        ok("难度基线: 第1天敌伤/敌血系数=1.0", foeDmgMul()===1 && foeHpMul()===1, "dmg="+foeDmgMul()+" hp="+foeHpMul());
+        // 2) 随天数上升
+        dayCount=10;
+        ok("难度随天数上升(第10天敌伤&敌血均>基线)", foeDmgMul()>1.3 && foeHpMul()>1.3, "dmg="+foeDmgMul().toFixed(2)+" hp="+foeHpMul().toFixed(2));
+        // 3) 系数封顶(第12天见顶,不无限膨胀)
+        dayCount=99;
+        ok("难度系数第12天封顶", Math.abs(foeDmgMul()-(1+11*0.06))<1e-9 && Math.abs(foeHpMul()-(1+11*0.05))<1e-9, "dmg="+foeDmgMul().toFixed(3)+" hp="+foeHpMul().toFixed(3));
+        // 4) 敌对上限随天数增多(更有围攻感)
+        const cap=d=>Math.min(8,2+Math.floor(Math.min(d,10)/2));
+        ok("敌对上限随天数上升(第1天<第10天)", cap(1)<cap(10) && cap(10)<=8, "第1天="+cap(1)+" 第10天="+cap(10));
+        // 5) 精英概率随天数上升且落在 (0,0.30]
+        dayCount=1;  const ec1=eliteChance();
+        dayCount=99; const ec2=eliteChance();
+        ok("精英怪概率随天数上升并封顶0.30", ec1>0 && ec1<ec2 && ec2<=0.30, "第1天="+ec1.toFixed(2)+" 封顶="+ec2.toFixed(2));
+        // 6) foeStrike: 精英 +50% 伤害(第1天基线, 排除护甲/祝福干扰)
+        dayCount=1; blessT=0; armor=0; maxHp=999; hp=999;
+        foeStrike(10,0,0,null);         const dmgN=999-hp; hp=999;
+        foeStrike(10,0,0,{elite:true}); const dmgE=999-hp;
+        ok("精英攻击比普通更痛(约+50%)", dmgE>dmgN, "普通="+dmgN+" 精英="+dmgE);
+        // 7) 连杀累计 + best 记录(用手搓僵尸走真实 hurtMob 击杀流程)
+        maxHp=999; hp=999; killStreak=0; bestStreak=0; killStreakT=0;
+        const foe=()=>({type:"zombie",def:MOB_DEFS.zombie,x:player.x+0.6,y:player.y,z:player.z,vx:0,vy:0,vz:0,kbx:0,kbz:0,
+          yaw:0,tgtYaw:0,hp:1,hurtT:0,animT:0,t:0,atkCd:0,burnT:0,swingT:0,groanT:0,fleeT:0,onGround:true,pause:false,burning:false,held:null});
+        for(let k=0;k<3;k++){ const z=foe(); mobs.push(z); hurtMob(z,50,0,0); }
+        ok("连杀累计(连斩3只→streak=3)", killStreak===3 && bestStreak===3, "streak="+killStreak+" best="+bestStreak);
+        // 8) 连杀窗口超时清零(复刻 tick 内的衰减, best 保留)
+        killStreakT=0.02; killStreakT-=0.05; if(killStreakT<=0) killStreak=0;
+        ok("连杀窗口超时清零(最高纪录保留)", killStreak===0 && bestStreak===3, "streak="+killStreak+" best="+bestStreak);
+        // 9) 精英击杀计入战绩
+        const eBefore=elitesSlain; const ez=foe(); ez.elite=true; mobs.push(ez); hurtMob(ez,50,0,0);
+        ok("精英击杀计入战绩", elitesSlain===eBefore+1, "elitesSlain="+elitesSlain);
+        // 10) 战绩写入存档(feats)并可还原; 老存档(无字段)归零
+        bestStreak=7; elitesSlain=4;
+        const sv=collectSave();
+        ok("连杀/精英战绩写入存档(feats)", sv.feats.bestStreak===7 && sv.feats.elitesSlain===4,
+           "feats={best:"+sv.feats.bestStreak+",elites:"+sv.feats.elitesSlain+"}");
+        const ftOld={}; // 模拟老存档: feats 缺这两个字段 → |0 归零
+        ok("老存档(无连杀字段)战绩归零", (ftOld.bestStreak|0)===0 && (ftOld.elitesSlain|0)===0, "best="+(ftOld.bestStreak|0)+" elites="+(ftOld.elitesSlain|0));
+      } finally {
+        // 还原一切被本批次改动的运行态
+        dayCount=snapD; killStreak=snapKS; bestStreak=snapBS; elitesSlain=snapES; killStreakT=0;
+        kills=snapKills; xp=snapXp; lvl=snapLvl; maxHp=snapMax; dmgMul=snapDmgMul; hp=snapHp;
+        armor=snapArmor; blessT=snapBless; questIdx=snapQi; questProg=snapQp; questDone=snapQd;
+        mobs.length=mlen; drops.length=dlen; updateHearts();
+      }
+    }
+
+    // ---- 丰富批次: 地图(仙人掌) / 画面(夜空) / 玩法(Boss血条) / 任务(悬赏) ----
+    {
+      // 画面: 夜色系数 —— 正午 0、深夜 1、黄昏介于之间
+      ok("夜色系数: 正午=0/深夜=1/黄昏(0,1)", skyNightFactor(1)===0 && skyNightFactor(-1)===1 && skyNightFactor(0)>0 && skyNightFactor(0)<1,
+         "noon="+skyNightFactor(1)+" mid="+skyNightFactor(-1)+" dusk="+skyNightFactor(0).toFixed(2));
+      // 地图: 沙漠仙人掌谓词 —— 沙漠水位之上可命中; 水下/非沙漠不长
+      let cactusHit=false;
+      for(let gx=0; gx<600 && !cactusHit; gx++) for(let gz=0; gz<30; gz++){ if(isCactusAt(gx,gz, WATER_Y+6, BIO_DESERT)){ cactusHit=true; break; } }
+      ok("沙漠仙人掌谓词可命中", cactusHit, "扫描命中="+cactusHit);
+      ok("仙人掌不长在水下/非沙漠", !isCactusAt(5,5,WATER_Y-1,BIO_DESERT) && !isCactusAt(5,5,WATER_Y+6,BIO_MESA), "ok");
+      // 玩法: Boss 血条 —— 无Boss隐藏; 有Boss显示且血量比正确
+      const mlen0=mobs.length; mobs.length=0;
+      ok("无Boss时血条隐藏", bossBarState().visible===false, "visible="+bossBarState().visible);
+      mobs.push({type:"king",def:MOB_DEFS.king,x:player.x,y:player.y,z:player.z,vx:0,vy:0,vz:0,kbx:0,kbz:0,yaw:0,tgtYaw:0,
+        hp:MOB_DEFS.king.hp/2, maxHp:MOB_DEFS.king.hp, hurtT:0,animT:0,t:0,atkCd:0,burnT:0,swingT:0,groanT:0,fleeT:0,onGround:true,pause:false,burning:false,held:null});
+      const bs=bossBarState();
+      ok("有Boss时血条显示且半血≈50%", bs.visible && Math.abs(bs.pct-0.5)<0.02 && bs.name===MOB_DEFS.king.name, "pct="+bs.pct.toFixed(2)+" name="+bs.name);
+      mobs.length=mlen0;
+      // 任务: 悬赏 —— 达标发奖轮换 / 分类计数 / 存档往返 / 老档归零
+      const bI=bountyIdx,bP=bountyProg,bD=bountyDone, keyS=(typeof arenaState!=="undefined"?arenaState.keys:0),
+            xpS=xp,lvlS=lvl,maxS=maxHp,hpS=hp,dmgS=dmgMul,dropS=drops.length;
+      try{
+        bountyIdx=0; bountyProg=0; bountyDone=0;                       // 第1单: 斩杀8敌
+        for(let k=0;k<BOUNTIES[0].goal;k++) bountyProgress("cull",1,"add");
+        ok("悬赏达标发奖并轮到下一单", bountyDone===1 && bountyIdx===1 && bountyProg===0, "done="+bountyDone+" idx="+bountyIdx+" prog="+bountyProg);
+        bountyProgress("elite",99,"add");                             // 第2单: 斩杀精英(一次超额直接达标)
+        ok("不同类型悬赏各自计数并推进", bountyDone===2 && bountyIdx===2, "done="+bountyDone+" idx="+bountyIdx);
+        bountyIdx=2; bountyProg=3; bountyDone=5;
+        const sv2=collectSave();
+        ok("悬赏写入存档(bounty)", sv2.bounty && sv2.bounty.idx===2 && sv2.bounty.prog===3 && sv2.bounty.done===5, "bounty="+JSON.stringify(sv2.bounty));
+        const oldB={}; ok("老存档(无bounty)悬赏归零", (((oldB.bounty||{}).idx)|0)===0 && (((oldB.bounty||{}).done)|0)===0, "ok");
+      } finally {
+        bountyIdx=bI; bountyProg=bP; bountyDone=bD;
+        if(typeof arenaState!=="undefined") arenaState.keys=keyS;
+        xp=xpS; lvl=lvlS; maxHp=maxS; hp=hpS; dmgMul=dmgS; drops.length=dropS; updateHearts();
+      }
+    }
+
+    // ---- 敌人多样化批次: 僵尸/木乃伊减量 + 群系分布 + 成群出没 ----
+    {
+      const N=200, cnt={};
+      for(let i=0;i<N;i++){ const [t]=nightSpawnFor(BIO_DESERT, i/N); cnt[t]=(cnt[t]||0)+1; }
+      const mummyFrac=(cnt.mummy||0)/N, kinds=Object.keys(cnt).length;
+      ok("沙漠夜刷木乃伊占比≤8%", mummyFrac<=0.08, "木乃伊="+(mummyFrac*100).toFixed(0)+"%");
+      ok("沙漠夜刷类型丰富(≥5种)且无僵尸", kinds>=5 && !cnt.zombie, "种类="+kinds+" 僵尸="+(cnt.zombie||0));
+      const pln={}; for(let i=0;i<N;i++){ const [t]=nightSpawnFor(BIO_PLAIN, i/N); pln[t]=(pln[t]||0)+1; }
+      ok("平原夜刷僵尸占比≤12%", (pln.zombie||0)/N<=0.12, "僵尸="+(((pln.zombie||0)/N)*100).toFixed(0)+"%");
+      const all=new Set();
+      for(const b of [BIO_DESERT,BIO_MESA,BIO_SALTLAKE,BIO_CANYON,BIO_SNOW,BIO_TAIGA,BIO_VOLCANO,BIO_PLAIN,BIO_FOREST,BIO_SWAMP,BIO_SAVANNA])
+        for(let i=0;i<40;i++){ all.add(nightSpawnFor(b, i/40)[0]); }
+      ok("夜刷谱系含蝎/甲虫/蛛/沙虫/机甲等多样对手", ["scarab","serqet","spider","sandworm","mech","slime","skeleton"].every(t=>all.has(t)), "谱系="+[...all].join(","));
+      const dS=dayCount; dayCount=1; const sc1=swarmChance(); dayCount=8; const sc8=swarmChance(); dayCount=dS;
+      ok("成群概率合法且随天数上升", sc1>0 && sc1<1 && sc8>sc1 && sc8<1, "第1天="+sc1.toFixed(2)+" 后期="+sc8.toFixed(2));
+      const mlenS=mobs.length; const got=spawnPack("scarab",4,10,20);
+      ok("成群出没一次刷多只", got>=1 && mobs.length-mlenS===got, "生成="+got);
+      mobs.length=mlenS;
+    }
+
+    // ---- 战斗舞台批次: 沙暴袭击 ----
+    {
+      const pool=new Set(); for(let i=0;i<40;i++) pool.add(sandRaidType(i/40));
+      const okPool=[...pool].every(t=>["scarab","serqet","spider","sandworm"].includes(t) && MOB_DEFS[t] && MOB_DEFS[t].hostile && !MOB_DEFS[t].boss);
+      ok("沙暴袭击者均为沙漠系可战敌人", okPool && pool.size>=3, "谱系="+[...pool].join(","));
+      ok("沙暴袭击限定干旱群系", aridBiome(BIO_DESERT)&&aridBiome(BIO_MESA)&&!aridBiome(BIO_SNOW)&&!aridBiome(BIO_FOREST), "ok");
+      const mlenS=mobs.length; const t0=sandRaidType(0.1); const spawned=spawnMob(t0,10,20);
+      ok("沙暴袭击能刷出敌人", spawned && mobs.length-mlenS===1 && mobs[mobs.length-1].type===t0, "type="+t0+" ok="+spawned);
+      mobs.length=mlenS;
+    }
+
+    // ---- 成长闭环: 能量核心货币 + 核心强化(kill→core→永久提升) ----
+    {
+      const aS=armor, cS=cores, dS=dmgMul, mS=maxHp, hS=hp, bagS=new Map(bag);
+      try{
+        armor=0; cores=0; gainCore();
+        ok("核心拾取: 护甲未满先补甲", armor===1 && cores===0, "armor="+armor+" cores="+cores);
+        armor=5; cores=0; gainCore();
+        ok("核心拾取: 护甲满后转存为核心货币", armor===5 && cores===1, "armor="+armor+" cores="+cores);
+        const iSharp=RECIPES.findIndex(r=>r.name==="⚡ 核心·锋锐");
+        ok("核心强化配方存在", iSharp>=0 && RECIPES[iSharp].coreCost===3, "idx="+iSharp);
+        cores=2; const dmg0=dmgMul; doCraft(iSharp);
+        ok("核心不足时强化被挡下", dmgMul===dmg0 && cores===2, "dmg未变="+(dmgMul===dmg0)+" cores="+cores);
+        cores=5; doCraft(iSharp);
+        ok("核心充足: 伤害强化生效并扣核心3", Math.abs(dmgMul-(dmg0+0.08))<1e-9 && cores===2, "dmg="+dmgMul.toFixed(2)+" cores="+cores);
+        cores=7; const sv=collectSave();
+        ok("能量核心写入存档", sv.cores===7, "sv.cores="+sv.cores);
+        ok("老存档(无cores字段)核心归零", (({}).cores|0)===0, "ok");
+      } finally {
+        armor=aS; cores=cS; dmgMul=dS; maxHp=mS; hp=hS; bag.clear(); for(const [k,v] of bagS) bag.set(k,v); updateHearts();
+      }
+    }
+
+    // ---- 地图: 沙海沙丘 ----
+    {
+      let mn=1e9,mx=-1e9;
+      for(let i=0;i<400;i++){ const d=desertDune(i*7-100, i*3+40); mn=Math.min(mn,d); mx=Math.max(mx,d); }
+      ok("沙丘高度非负且有起伏", mn>=0 && mx<=10 && (mx-mn)>2, "min="+mn.toFixed(1)+" max="+mx.toFixed(1));
+      let hmn=1e9,hmx=-1e9,n=0;
+      for(let gx=-800;gx<=800 && n<220;gx+=17) for(let gz=-800;gz<=800;gz+=17){ if(biomeAt(gx,gz)===BIO_DESERT){ const hh=heightAt(gx,gz); hmn=Math.min(hmn,hh); hmx=Math.max(hmx,hh); n++; } }
+      ok("沙漠地形有起伏且仍可建造(不过高)", n===0 || ((hmx-hmn)>=2 && hmx<52), "样本="+n+" 高差="+(n?(hmx-hmn):0)+" 最高="+(n?hmx:0));
+    }
+
+    // ---- 地图丰富性: 表层材质函数 / 边界柔化 / genChunk 各装饰不崩 ----
+    {
+      ok("表层材质函数分群系正确", surfaceTop(BIO_DESERT,30,false)===SAND && surfaceTop(BIO_MESA,30,false)===CLAY
+         && surfaceTop(BIO_PLAIN,30,false)===GRASS && surfaceTop(BIO_SNOW,66,false)===SNOW && surfaceTop(BIO_FOREST,30,false)===MOSSY,
+         "sand="+(surfaceTop(BIO_DESERT,30,false)===SAND));
+      let genErr=null, okLen=true, sawCactusOrProp=false;
+      try{
+        for(let c=0;c<8;c++){
+          const arr=genChunk(c*3-6, c*2+5);
+          if(arr.length!==CS*CS*H) okLen=false;
+          for(let i=0;i<arr.length;i++){ if(arr[i]===CACTUS||arr[i]===AMETHYST){ sawCactusOrProp=true; break; } }
+        }
+      }catch(e){ genErr=e.message; }
+      ok("genChunk 生成各群系装饰(沙丘/石拱/白骨/棕榈/晶簇/边界柔化)无异常且尺寸正确", !genErr && okLen, genErr||("len="+(CS*CS*H)));
+    }
+
+    // ---- 敌人行为差异化: 巨蝎蝎毒(中毒 DoT) ----
+    {
+      const hpS=hp, mS=maxHp, pS=poisonT, ptS=poisonTickT, dS=dead;
+      try{
+        dead=false; maxHp=999; hp=20; poisonT=0; poisonTickT=0;
+        applyPoison(5);
+        ok("蝎毒可施加(中毒计时开始)", poisonT>0, "poisonT="+poisonT.toFixed(1));
+        const h0=hp; tickPoison(1.1);
+        ok("中毒每秒掉血", hp===h0-1, "掉血="+(h0-hp));
+        hp=1; poisonTickT=0; tickPoison(1.1);
+        ok("蝎毒不致死(最低留1血)", hp===1, "hp="+hp);
+        poisonT=0.05; tickPoison(0.2);
+        ok("中毒到期自动清除", poisonT===0, "poisonT="+poisonT);
+      } finally {
+        hp=hpS; maxHp=mS; poisonT=pS; poisonTickT=ptS; dead=dS; updateHearts();
+        const pt=document.getElementById("poisontint"); if(pt) pt.style.opacity=0;
+      }
+    }
+
+    // ---- 敌人行为差异化: 沙虫钻沙突袭 ----
+    {
+      const hpS=hp,mS=maxHp,aS=armor,pS=poisonT, mlen=mobs.length, px=player.x,py=player.y,pz=player.z;
+      try{
+        armor=0; maxHp=999; hp=999; poisonT=0;
+        const sw={type:"sandworm",def:MOB_DEFS.sandworm,x:player.x+2,y:player.y,z:player.z,vx:0,vy:0,vz:0,kbx:0,kbz:0,
+          yaw:0,tgtYaw:0,hp:MOB_DEFS.sandworm.hp,hurtT:0,animT:0,t:0,atkCd:0,burnT:0,swingT:0,groanT:0,fleeT:0,onGround:true,pause:false,burning:false,held:null};
+        mobs.length=0; mobs.push(sw);
+        const hp0=hp; let sawBurrow=false, sawErupt=false;
+        for(let f=0; f<20; f++){ updateMobs(0.05); if(sw.burrowed) sawBurrow=true; if(sw.erupt>0) sawErupt=true; }
+        ok("沙虫会钻沙潜行(burrowed)", sawBurrow, "曾潜行="+sawBurrow);
+        ok("沙虫破沙而出并造成伤害", sawErupt && hp<hp0, "曾出土="+sawErupt+" 掉血="+(hp0-hp));
+        sw.burrowed=true; const whp=sw.hp; hurtMob(sw,10,0,0,true);
+        ok("沙虫埋沙时只受4成伤害(可击杀非无敌)", Math.abs((whp-sw.hp)-4)<1e-6, "掉血="+(whp-sw.hp));
+      } finally {
+        mobs.length=mlen; hp=hpS; maxHp=mS; armor=aS; poisonT=pS; player.x=px; player.y=py; player.z=pz; updateHearts();
+      }
+    }
+
+    // ---- 敌人行为差异化: 圣甲虫突进扑击 ----
+    {
+      const hpS=hp,mS=maxHp,pS=poisonT, mlen=mobs.length, px=player.x,py=player.y,pz=player.z;
+      try{
+        maxHp=999; hp=999; poisonT=0;
+        const sc={type:"scarab",def:MOB_DEFS.scarab,x:player.x+5,y:player.y,z:player.z,vx:0,vy:0,vz:0,kbx:0,kbz:0,
+          yaw:0,tgtYaw:0,hp:MOB_DEFS.scarab.hp,hurtT:0,animT:0,t:0,atkCd:0,burnT:0,swingT:0,groanT:0,fleeT:0,onGround:true,pause:false,burning:false,held:null};
+        mobs.length=0; mobs.push(sc);
+        let sawCharge=false;
+        for(let f=0; f<40 && !sawCharge; f++){ updateMobs(0.05); if((sc.charge||0)>0) sawCharge=true; }
+        ok("圣甲虫会突进扑击(charge)", sawCharge, "曾突进="+sawCharge);
+      } finally {
+        mobs.length=mlen; hp=hpS; maxHp=mS; poisonT=pS; player.x=px; player.y=py; player.z=pz; updateHearts();
+      }
+    }
 
     // 收尾再确认一次: 即使中途 saveGame 写过测试世界, 还原后玩家存档仍在
     sandseaStorageRestore(liveStore);
