@@ -345,13 +345,8 @@
 <div id="warpFlash"></div>
 <div id="boot"><div><div class="ring"></div>星 际 突 围 · 载 入 中</div></div>
 
-<!-- Three.js：优先本地文件（可完全离线运行），失败再回退 CDN -->
+<!-- Three.js：使用仓库内固定版本，保证离线运行和可重复部署 -->
 <script src="three.min.js"></script>
-<script>
-if(typeof THREE==='undefined'){
-  document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>');
-}
-</script>
 <script>
 'use strict';
 const toastEl=document.getElementById('toast');
@@ -1024,8 +1019,13 @@ const G={
 };
 const MAXE=100;
 const HI_KEY='nebula_hi_v3';
-function getHi(k){return +(localStorage.getItem(HI_KEY+'_'+k)||0);}
-function setHi(k,v){try{localStorage.setItem(HI_KEY+'_'+k,v);}catch(e){}}
+function safeStorageGet(key, fallback=null){
+  try{return localStorage.getItem(key) ?? fallback;}catch(e){return fallback;}
+}
+function safeStorageSet(key,value){try{localStorage.setItem(key,value);return true;}catch(e){return false;}}
+function safeStorageRemove(key){try{localStorage.removeItem(key);return true;}catch(e){return false;}}
+function getHi(k){return +(safeStorageGet(HI_KEY+'_'+k,'0')||0);}
+function setHi(k,v){safeStorageSet(HI_KEY+'_'+k,v);}
 
 const mouse={x:0,y:0};
 const aim={x:0,y:0};
@@ -1067,10 +1067,10 @@ const SET_KEY='nebula_settings_v1';
 const TUT_KEY='nebula_tutorial_done';
 const settings={quality:'auto',musicVol:70,sfxVol:90,musicMuted:false,sfxMuted:false};
 function loadSettings(){
-  try{const s=JSON.parse(localStorage.getItem(SET_KEY));
+  try{const s=JSON.parse(safeStorageGet(SET_KEY,'null'));
     if(s&&typeof s==='object')Object.assign(settings,s);}catch(e){}
 }
-function saveSettings(){try{localStorage.setItem(SET_KEY,JSON.stringify(settings));}catch(e){}}
+function saveSettings(){safeStorageSet(SET_KEY,JSON.stringify(settings));}
 
 /* ---- 画质档位（真实影响渲染量：粒子/泛光/分辨率） ---- */
 let qualityMode='auto';
@@ -1233,7 +1233,7 @@ const tutSteps=[
   {msg:'贴着<b>敌弹</b>擦身而过来擦弹，积攒<b>过载</b>能量',keys:'满槽按 <kbd>Shift</kbd>/<kbd>右键</kbd> 清屏',done:()=>G.graze>0||G.od>0},
   {msg:'需要喘口气时随时<b>暂停</b>',keys:'<kbd>P</kbd> 暂停 / 打开菜单',done:()=>tut.paused}
 ];
-function tutorialDone(){return localStorage.getItem(TUT_KEY)==='1';}
+function tutorialDone(){return safeStorageGet(TUT_KEY)==='1';}
 function startTutorial(){
   tut.active=true;tut.step=0;tut.t=0;tut.moved=false;tut.fired=false;tut.paused=false;
   renderCoach();$('coach').classList.add('on');
@@ -1249,7 +1249,7 @@ function renderCoach(){
 function finishTutorial(skipped){
   tut.active=false;tut.replay=false;
   $('coach').classList.remove('on');
-  try{localStorage.setItem(TUT_KEY,'1');}catch(e){}
+  safeStorageSet(TUT_KEY,'1');
   toast(skipped?'已跳过引导':'引导完成 · 祝好运，指挥官');
 }
 function tutTick(dt){
@@ -1266,7 +1266,7 @@ function tutTick(dt){
   }
 }
 $('coachSkip').addEventListener('click',()=>finishTutorial(true));
-$('tutBtn').addEventListener('click',()=>{try{localStorage.removeItem(TUT_KEY);}catch(e){}tut.replay=true;toast('下次出击将重新播放新手引导');});
+$('tutBtn').addEventListener('click',()=>{safeStorageRemove(TUT_KEY);tut.replay=true;toast('下次出击将重新播放新手引导');});
 
 /* ---- 首因：warp 过渡 + 载入反馈 ---- */
 function buildWarp(){

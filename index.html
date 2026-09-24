@@ -18,6 +18,7 @@
   <meta property="og:image" content="https://bosswenwu.github.io/alex-games/covers/tank-strike.jpg">
   <meta property="og:image:alt" content="Alex Arcade · 钢铁前线 IRON VEIL 装甲射击">
   <meta name="twitter:card" content="summary_large_image">
+  <link rel="preload" as="image" href="covers/tank-strike.jpg" fetchpriority="high">
   <title>Alex Arcade · 在线游戏厅</title>
   <style>
     :root{color-scheme:dark;--bg:#07080c;--panel:#11141b;--line:#ffffff18;--text:#f6f7fb;--muted:#a0a7b5;--lime:#c9ff54;--orange:#ff9d45;font-family:Inter,"Microsoft YaHei",system-ui,sans-serif}
@@ -34,12 +35,13 @@
     .hero-stats{position:absolute;right:28px;bottom:24px;display:flex;gap:8px}.hero-stats span{padding:9px 12px;border-radius:10px;background:#090b0ebf;border:1px solid #ffffff1d;color:#c5cad4;font-size:12px;backdrop-filter:blur(12px)}
     .ticker{display:flex;align-items:center;gap:9px;margin:0 0 72px;padding:15px 18px;border:1px solid var(--line);border-radius:16px;background:#0d1016cc;box-shadow:0 18px 50px #0004;overflow:auto;scrollbar-width:none}.ticker::-webkit-scrollbar{display:none}.ticker b{color:#717988;font-size:10px;letter-spacing:.16em;margin-right:8px;white-space:nowrap}.ticker span{white-space:nowrap;padding:8px 12px;border:1px solid #ffffff14;border-radius:9px;color:#bdc3ce;font-size:12px;background:#ffffff05}.ticker i{color:#4c5260;font-style:normal}
     .section-head{display:flex;justify-content:space-between;align-items:end;margin-bottom:24px}.section-head h2{font-size:clamp(30px,4vw,48px);letter-spacing:-.045em;margin:0}.section-head p{margin:0;color:var(--muted);font-size:14px}
-    .games{display:grid;grid-template-columns:repeat(12,1fr);gap:18px;padding-bottom:76px}.game{--accent:#c9ff54;grid-column:span 4;position:relative;min-height:390px;overflow:hidden;border-radius:24px;border:1px solid var(--line);background:#141720;text-decoration:none;isolation:isolate;box-shadow:0 22px 60px #0005;transition:.28s ease}.game.wide{grid-column:span 12;min-height:440px}.game.wide img{object-position:center 46%}.game:before{content:"";position:absolute;z-index:1;left:18px;right:18px;top:0;height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:.25;transition:.25s}.game img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:-2;transition:.45s ease;filter:saturate(.92) contrast(1.04)}.game:after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,#080a0dfa 4%,#080a0dc9 35%,transparent 72%),linear-gradient(180deg,#0004,transparent 25%);z-index:-1}.game:hover,.game:focus-visible{transform:translateY(-7px);border-color:color-mix(in srgb,var(--accent) 55%,transparent);box-shadow:0 30px 80px #0008,0 0 45px color-mix(in srgb,var(--accent) 10%,transparent)}.game:hover:before{opacity:1}.game:hover img,.game:focus-visible img{transform:scale(1.055);filter:saturate(1.12) contrast(1.05)}
+    .games{display:grid;grid-template-columns:repeat(12,1fr);gap:18px;padding-bottom:76px}.game{--accent:#c9ff54;grid-column:span 4;position:relative;min-height:390px;overflow:hidden;border-radius:24px;border:1px solid var(--line);background:#141720;text-decoration:none;isolation:isolate;box-shadow:0 22px 60px #0005;transition:.28s ease;content-visibility:auto;contain-intrinsic-size:390px}.game.wide{grid-column:span 12;min-height:440px;contain-intrinsic-size:440px}.game.wide img{object-position:center 46%}.game:before{content:"";position:absolute;z-index:1;left:18px;right:18px;top:0;height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:.25;transition:.25s}.game img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:-2;transition:.45s ease;filter:saturate(.92) contrast(1.04)}.game:after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,#080a0dfa 4%,#080a0dc9 35%,transparent 72%),linear-gradient(180deg,#0004,transparent 25%);z-index:-1}.game:hover,.game:focus-visible{transform:translateY(-7px);border-color:color-mix(in srgb,var(--accent) 55%,transparent);box-shadow:0 30px 80px #0008,0 0 45px color-mix(in srgb,var(--accent) 10%,transparent)}.game:hover:before{opacity:1}.game:hover img,.game:focus-visible img{transform:scale(1.055);filter:saturate(1.12) contrast(1.05)}
     .game-top{display:flex;justify-content:space-between;align-items:center;padding:18px}.num{font:800 11px/1 ui-monospace,SFMono-Regular,Consolas;color:#d9dde5;letter-spacing:.12em}.genre{padding:7px 10px;border-radius:999px;background:#080a0dbd;border:1px solid #ffffff25;color:#d6dae3;font-size:11px;backdrop-filter:blur(10px)}
     .game-info{position:absolute;left:22px;right:22px;bottom:21px}.game h3{font-size:30px;letter-spacing:-.04em;margin:0 0 7px}.game p{margin:0 0 18px;color:#bcc2cc;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.play-row{display:flex;justify-content:space-between;align-items:center}.play-now{font-weight:900;font-size:14px;color:var(--lime)}.arrow{display:grid;place-items:center;width:37px;height:37px;border-radius:50%;background:#f4f6fb;color:#090a0d;font-size:18px;transition:.2s}.game:hover .arrow{transform:translateX(4px)}
     .footer{border-top:1px solid var(--line);padding:28px 0 44px;display:flex;justify-content:space-between;gap:20px;color:#727987;font-size:12px}.footer strong{color:#aeb4bf}
     @media(max-width:900px){.game{grid-column:span 6}.game:nth-child(7){grid-column:span 12}.hero{min-height:520px}.hero-content{padding:68px 42px}.hero-stats{display:none}}
-    @media(max-width:620px){.shell{width:min(100% - 24px,1240px)}.nav{height:68px}.nav-meta>span:not(.status){display:none}.hero{margin-top:14px;min-height:570px;border-radius:22px}.hero-bg{object-position:60% center}.hero:after{background:linear-gradient(0deg,#07090bf7 5%,#07090bcc 56%,#07090b42)}.hero-content{position:absolute;left:0;right:0;bottom:0;width:100%;padding:34px 24px}.kicker{font-size:10px}h1{font-size:48px}.hero p{font-size:14px;line-height:1.7}.button{width:100%}.ticker{margin-bottom:56px}.section-head{align-items:start;flex-direction:column;gap:9px}.games{gap:14px}.game,.game:nth-child(7){grid-column:span 12;min-height:360px}.footer{flex-direction:column}}
+    @media(max-width:620px){.shell{width:min(100% - 24px,1240px)}.nav{height:68px}.nav-meta>span:not(.status){display:none}.hero{margin-top:14px;min-height:570px;border-radius:22px}.hero-bg{object-position:60% center}.hero:after{background:linear-gradient(0deg,#07090bf7 5%,#07090bcc 56%,#07090b42)}.hero-content{position:absolute;left:0;right:0;bottom:0;width:100%;padding:34px 24px}.kicker{font-size:10px}h1{font-size:48px}.hero p{font-size:14px;line-height:1.7}.button{width:100%}.ticker{margin-bottom:56px}.section-head{align-items:start;flex-direction:column;gap:9px}.games{gap:14px}.game,.game:nth-child(7){grid-column:span 12;min-height:360px;contain-intrinsic-size:360px}.footer{flex-direction:column}}
+    @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.hero:before,.game,.game:before,.game img{animation:none;transition:none}.button:hover,.button:focus-visible,.game:hover,.game:focus-visible{transform:none}}
   </style>
 </head>
 <body>
@@ -53,7 +55,7 @@
   </header>
   <main class="shell">
     <section class="hero" aria-labelledby="hero-title">
-      <img class="hero-bg" id="hero-bg" src="covers/tank-strike.jpg" alt="精选游戏世界" fetchpriority="high" decoding="async">
+      <img class="hero-bg" id="hero-bg" src="covers/tank-strike.jpg" alt="精选游戏世界" width="1440" height="900" fetchpriority="high" decoding="async">
       <div class="hero-content">
         <span class="kicker" id="hero-kicker">Featured world · Iron Veil</span>
         <h1 id="hero-title">多元世界<br>打开即玩</h1>
@@ -68,13 +70,13 @@
       <div class="games" id="games-grid"></div>
       <noscript>
         <div class="games">
-          <a class="game" href="games/minecraft/index.html">沙海奇境</a>
-          <a class="game" href="games/abyss/index.html">深渊圣所</a>
-          <a class="game" href="games/zhuzhiliao/index.html">竹知了</a>
-          <a class="game" href="games/haven/index.html">Haven</a>
-          <a class="game" href="games/nebula/index.html">Nebula Strike</a>
-          <a class="game" href="games/three-kingdoms/index.html">三国塔防</a>
-          <a class="game" href="games/tank-strike/index.html">钢铁前线 · IRON VEIL</a>
+          <a class="game" href="games/minecraft/index.html" aria-label="进入沙海奇境">沙海奇境</a>
+          <a class="game" href="games/abyss/index.html" aria-label="进入深渊圣所">深渊圣所</a>
+          <a class="game" href="games/zhuzhiliao/index.html" aria-label="进入竹知了">竹知了</a>
+          <a class="game" href="games/haven/index.html" aria-label="进入 Haven">Haven</a>
+          <a class="game" href="games/nebula/index.html" aria-label="进入 Nebula Strike">Nebula Strike</a>
+          <a class="game" href="games/three-kingdoms/index.html" aria-label="进入三国塔防">三国塔防</a>
+          <a class="game" href="games/tank-strike/index.html" aria-label="进入钢铁前线 IRON VEIL">钢铁前线 · IRON VEIL</a>
         </div>
       </noscript>
     </section>
@@ -99,10 +101,10 @@
       grid.innerHTML = GAMES.map((g, i) => {
         const badge = g.badge || `GAME ${String(i + 1).padStart(2, '0')}`;
         const imgLoad = g.featured ? 'fetchpriority="high"' : 'loading="lazy"';
-        return `<a class="game" href="${href(g)}"><img src="${esc(g.cover)}" alt="${esc(g.name)}游戏画面" ${imgLoad} decoding="async">`
+        return `<a class="game" href="${href(g)}" aria-label="进入${esc(g.name)}"><img src="${esc(g.cover)}" alt="${esc(g.name)}游戏画面" width="1440" height="900" ${imgLoad} decoding="async">`
           + `<div class="game-top"><span class="num">${esc(badge)}</span><span style="display:flex;gap:7px">${g.req?`<span class="genre">${esc(g.req)}</span>`:''}<span class="genre">${esc(g.genre)}</span></span></div>`
           + `<div class="game-info"><h3>${esc(g.name)}</h3><p>${esc(g.desc)}</p>`
-          + `<div class="play-row"><span class="play-now">立即游玩</span><span class="arrow">↗</span></div></div></a>`;
+          + `<div class="play-row"><span class="play-now">立即游玩</span><span class="arrow" aria-hidden="true">↗</span></div></div></a>`;
       }).join('');
       const feat = GAMES.find(g => g.featured);
       if (feat) {
