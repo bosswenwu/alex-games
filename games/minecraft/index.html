@@ -4144,9 +4144,40 @@ const BIOME_YIELD={
   [BIO_FOREST]:[[CAVECALC,0.18],[AMETHYST,0.08],[CRYSTAL,0.03]],
   [BIO_TAIGA]:[[WRECKWOOD,0.12],[MOSSY,0.16],[IRON_ORE,0.05]]
 };
+/* 🏆 地标珍藏: 每种地标第一次抵达领一件专属纪念品(永久小加成/专属物资), 集齐是收藏目标。
+   与上面 LAND_LOOT(四址探齐, 挂 PAYOFF_N=4 与 HUD x/4)互不干扰; f() 只在首次领取时执行一次,
+   直接改已存档的字段(maxHp/dmgMul/armor/声望); 常驻效果(回血/摔落)按 trophies 集合实时判断, 读档自然恢复。 */
+const trophies=new Set();
+const LAND_TROPHY={
+  pyramid:  {n:"法老安卡",   d:"最大生命 +2 · 鎏金×2",       f:()=>{ maxHp=Math.min(40,maxHp+2); hp=Math.min(maxHp,hp+2); updateHearts(); giveBlock(GILDED,2); }},
+  colosseum:{n:"角斗士桂冠", d:"伤害 +4%",                   f:()=>{ dmgMul+=0.04; }},
+  palace:   {n:"凯撒印玺",   d:"罗马声望 +10 · 鎏金×4",      f:()=>{ faction.rome=Math.min(100,faction.rome+10); giveBlock(GILDED,4); }},
+  castrum:  {n:"军团盾徽",   d:"护甲 +1",                    f:()=>{ armor=Math.min(5,armor+1); }},
+  village:  {n:"绿洲水囊",   d:"自然回血 +25%(常驻)",        f:()=>{}},
+  forum:    {n:"元老卷轴",   d:"+40 经验 · 白灰泥×12",       f:()=>{ addXP(40); giveBlock(PLASTER_WHITE,12); }},
+  bazaar:   {n:"波斯驼铃",   d:"+30 经验 · 金块×3",          f:()=>{ addXP(30); giveBlock(GOLD_ORE,3); }},
+  crater:   {n:"天外陨铁",   d:"宝石×2 · 文物 +1",           f:()=>{ giveBlock(GEM_ORE,2); npcState.relics++; }},
+  rainbow:  {n:"虹之碎片",   d:"摔落伤害 -25%(常驻)",        f:()=>{}},
+  oasis:    {n:"蜜渍椰枣",   d:"回满生命 + 60 秒回血祝福",   f:()=>{ hp=maxHp; updateHearts(); applyBless("regen",60); }},
+  city:     {n:"霓虹招牌",   d:"+25 经验 · 霓虹×4",          f:()=>{ addXP(25); giveBlock(NEON,4); }},
+  airport:  {n:"飞行员徽章", d:"+35 经验",                   f:()=>{ addXP(35); }},
+  racetrack:{n:"冠军奖杯",   d:"+30 经验 · 鎏金×2",          f:()=>{ addXP(30); giveBlock(GILDED,2); }},
+  park:     {n:"游乐票根",   d:"+25 经验 · 羊毛×6",          f:()=>{ addXP(25); giveBlock(WOOL,6); }}
+};
+const TROPHY_TOTAL=Object.keys(LAND_TROPHY).length;
+function grantTrophy(type){
+  const T=LAND_TROPHY[type];
+  if(!T || trophies.has(type)) return false;
+  trophies.add(type); T.f();
+  showName("🏆 地标珍藏 · "+T.n+" — "+T.d+"  ("+trophies.size+"/"+TROPHY_TOTAL+")");
+  return true;
+}
+const trophyRegenMul=()=>trophies.has("village")?1.25:1;
+const trophyFallMul=()=>trophies.has("rainbow")?0.75:1;
 function tickLandmarkPayoff(){
   const land=nearestLandmark(player.x,player.z);
   if(!land || land.dist>9) return;
+  if(grantTrophy(land.type)) saveGame(true);
   const loot=LAND_LOOT[land.type]; if(!loot) return;
   const key=land.type+":"+Math.floor(land.x/CELL)+":"+Math.floor(land.z/CELL);
   if(landSeen.has(key)) return;
@@ -5051,6 +5082,8 @@ function chronicleHTML(){
     + row('🦅 罗马军团', rt.name+' ('+faction.rome+'/100)'+(romeWanted()?' · ⚔通缉中'+Math.ceil(romeWantedT)+'s':(faction.rome<12?' · ⚠冷淡':'')))
     + row('☥ 埃及祭司', et.name+' ('+faction.egypt+'/100)')
     + row('🗺 群系图鉴', bioSeen.size+' / '+CODEX_TOTAL)
+    + row('🏆 地标珍藏', trophies.size+' / '+TROPHY_TOTAL)
+    + '<div style="font-size:12px;line-height:1.7;color:#c9b98a;padding:0 0 6px 24px">'+Object.keys(LAND_TROPHY).map(k=>trophies.has(k)?('<span style="color:#ffd23f" title="'+LAND_TROPHY[k].d+'">'+LAND_TROPHY[k].n+'</span>'):'<span style="opacity:.4">'+(LANDMARKS[k]||"？").replace(/^\S*?(?=[\u4e00-\u9fa5])/,"")+'·？</span>').join(' · ')+'</div>'
     + row('🏺 文物碎片', npcState.relics)
     + row('🏺 陶片图鉴', potterySeenCount()+' / '+POTTERY_TYPES.length+'（出土 '+archState.pottery+' 片）· 按 P')
     + row('🦁 斯芬克斯', sphinxState.solved+' 题解开 · 错答 '+sphinxState.failed+' · 近旁按 R')
@@ -9202,7 +9235,10 @@ function frame(now){
     else if(!player.onGround) fallStart = fallStart===null ? player.y : Math.max(fallStart,player.y);
     else if(fallStart!==null){
       const drop=fallStart-player.y;
-      if(drop>3.5 && !(typeof mythicFallImmune==="function" && mythicFallImmune())) damagePlayer(Math.min(15,Math.floor(drop-3)),0,0);
+      if(drop>3.5 && !(typeof mythicFallImmune==="function" && mythicFallImmune())){
+        const fd=Math.floor(Math.min(15,Math.floor(drop-3))*trophyFallMul());   // 虹之碎片: 摔落伤害 -25%
+        if(fd>0) damagePlayer(fd,0,0);
+      }
       fallStart=null;
     }
     if(player.flying && player.onGround) player.flying=false;
@@ -9243,7 +9279,7 @@ function frame(now){
     const regenBless=(blessKind==="regen"&&blessT>0);
     if(!dead && hp<maxHp && (regenBless || performance.now()-lastDmg>7000)){
       regenAcc+=dt;
-      if(regenAcc>(regenBless?0.4:(omenActive('demeter')?0.7:1.5))){ regenAcc=0; hp=Math.min(maxHp,hp+1); updateHearts(); }   // 连锁: 得墨忒耳丰饶天象 → 回血更快
+      if(regenAcc>(regenBless?0.4:(omenActive('demeter')?0.7:1.5))/trophyRegenMul()){ regenAcc=0; hp=Math.min(maxHp,hp+1); updateHearts(); }   // 连锁: 得墨忒耳丰饶天象 → 回血更快
     }
     updateArrows(dt);
     updateFuses(dt);
@@ -9360,7 +9396,7 @@ function collectSave(){
     v:1, seed:SEED, ts:Date.now(),
     px:+player.x.toFixed(2), py:+player.y.toFixed(2), pz:+player.z.toFixed(2),
     yaw:+player.yaw.toFixed(3), pitch:+player.pitch.toFixed(3),
-    hp, maxHp, lvl, xp, armor, cores, kills, dayCount, bioSeen:[...bioSeen], landSeen:[...landSeen], weather,
+    hp, maxHp, lvl, xp, armor, cores, kills, dayCount, bioSeen:[...bioSeen], landSeen:[...landSeen], trophies:[...trophies], weather,
     npc:{ relics:npcState.relics, traderMet:npcState.traderMet, oracleMet:npcState.oracleMet, trades:npcState.trades, blessings:npcState.blessings },
     arch:{ pottery:archState.pottery, pages:archState.pages, digs:archState.digs, shards:archState.shards.slice(), setComplete:!!archState.setComplete },
     arena:{ bestWave:arenaState.bestWave, cleared:arenaState.cleared, keys:arenaState.keys },
@@ -9426,6 +9462,7 @@ function loadGame(){
   armor=s.armor??0; cores=s.cores|0; kills=s.kills??0; dayCount=s.dayCount??1;
   bioSeen.clear(); if(Array.isArray(s.bioSeen)) for(const b of s.bioSeen) bioSeen.add(b|0);   // 恢复图鉴(老存档缺字段→空,自然兼容)
   landSeen.clear(); if(Array.isArray(s.landSeen)) for(const k of s.landSeen) landSeen.add(String(k));
+  trophies.clear(); if(Array.isArray(s.trophies)) for(const k of s.trophies) if(LAND_TROPHY[k]) trophies.add(String(k));   // 老存档无此字段 → 空
   // NPC 系统: 恢复文物与来往记录(老存档无 npc 字段 → 全部归零, 自然向后兼容)
   const N=s.npc||{};
   npcState.relics=N.relics|0; npcState.trades=N.trades|0; npcState.blessings=N.blessings|0;
@@ -10548,6 +10585,8 @@ window.__game = {
   setWeather(w,t){ if(["clear","rain","storm","sand"].includes(w)){ weather=w; weatherT=(t==null?40:t); return weather; } return false; },
   get weather(){ return { kind:weather, t:+weatherT.toFixed(1) }; },
   get night(){ return sunH<0.06; }, get hostiles(){ return mobs.filter(m=>m.def&&m.def.hostile&&!m.def.boss).length; },
+  get trophies(){ return { got:[...trophies], total:TROPHY_TOTAL }; },
+  grantTrophy:(t)=>grantTrophy(t),
   claimLandmark(type,sx,sz){ const key=type+":"+(sx|0)+":"+(sz|0); landSeen.add(key); return [...landSeen]; },
   getBlock, setBlock, groundY, heightAt, biomeAt,
   save:()=>saveGame(true), load:()=>loadGame(), hasSave, deleteSave,
@@ -11483,6 +11522,21 @@ function selftest(){
       const g0=gfxLevel; setGfx(0); const offOk=!shadow.ok; setGfx(g0);
       const mainSrc=gl.getAttachedShaders(mainProg).map(sh=>gl.getShaderSource(sh)||"").join("\n");
       ok("沙面高光: 主着色器有沙粒闪光且按画质开关", U.uSandFx!==null && mainSrc.indexOf("sandK")>=0, "loc="+(U.uSandFx!==null));
+      // 地标珍藏: 覆盖全部地标 / 同一地标只领一次 / 进存档 / 常驻效果
+      {
+        const miss=Object.keys(LANDMARKS).filter(k=>!LAND_LOOT[k] && !LAND_TROPHY[k])
+          .concat(Object.keys(LAND_TROPHY).filter(k=>!LANDMARKS[k]).map(k=>"不可达:"+k));   // 珍藏只能来自指南针地标(否则永远领不到)
+        const trS=[...trophies], mhS=maxHp, hpS2=hp, bagS=new Map(bag);
+        trophies.clear();
+        const a=grantTrophy("pyramid"), m1=maxHp, b=grantTrophy("pyramid"), m2=maxHp;
+        grantTrophy("village"); grantTrophy("rainbow");
+        const sv=collectSave();
+        const perks=trophyRegenMul()===1.25 && trophyFallMul()===0.75;
+        trophies.clear(); for(const k of trS) trophies.add(k); maxHp=mhS; hp=hpS2; bag.clear(); for(const [k,v] of bagS) bag.set(k,v); updateHearts();
+        ok("地标珍藏: 每种地标都有奖励(四址 LAND_LOOT 或珍藏), 同一地标只领一次, 进存档, 常驻加成生效",
+           miss.length===0 && a===true && b===false && m1===Math.min(40,mhS+2) && m2===m1 && Array.isArray(sv.trophies) && sv.trophies.includes("pyramid") && perks,
+           "miss="+miss.join(",")+" a="+a+" b="+b+" hp="+mhS+"→"+m1+"→"+m2);
+      }
       ok("材质: 逐块旋转——松沙陷坑与沙子同模式(伪装不露馅), 沙纹只转180°, 草地四向", UV_ROT[LOOSESAND*2]===UV_ROT[SAND*2] && UV_ROT[LOOSESAND*2+1]===UV_ROT[SAND*2+1] && UV_ROT[SAND*2]===1 && UV_ROT[GRASS*2]===2,
          "sand="+UV_ROT[SAND*2]+" loose="+UV_ROT[LOOSESAND*2]);
       // ---- 图集扩页(512×1024)与村落建材 ----
