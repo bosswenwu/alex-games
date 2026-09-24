@@ -6206,6 +6206,7 @@ function spawnMob(type,minD,maxD){
                  onGround:false, pause:false, burning:false, held:null});
       return true;
     }
+    if(def.hostile && !def.boss && inVillageSafe(x,z)) continue;   // 村墙内是安全区, 换个位置(多半落到墙外)
     const gy=groundY(x,z);
     if(gy<0 || gy<=WATER_Y+1) continue;
     const sy = (def.fly && (def.ambient||def.plane||def.mount)) ? gy+def.hover : gy;   // 飞行单位生成在空中
@@ -6304,6 +6305,15 @@ function foeDmgMul(){ return 1 + (diffLevel()-1)*0.06; }      // 敌人伤害: �
 function foeHpMul(){  return 1 + (diffLevel()-1)*0.05; }      // 敌人血量: 每天 +5%, 第12天≈+55%
 function eliteChance(){ return Math.min(0.30, 0.04 + dayCount*0.02); } // 精英怪概率: 第1天6% → 随天数最高30%
 function swarmChance(){ return 0.12 + Math.min(dayCount,8)*0.012; }     // 成群出没概率: 第1天≈13% → 后期≈22%
+/* 村落灯火庇护: 绿洲村落苔石墙以内不刷普通敌对怪(Boss、沙暴袭击、亡者之夜照常, 只是从墙外来) */
+function inVillageSafe(x,z){
+  const sx=Math.floor(x/CELL), sz=Math.floor(z/CELL);
+  for(let dx=-1;dx<=1;dx++) for(let dz=-1;dz<=1;dz++){
+    const s=structureAt(sx+dx,sz+dz);
+    if(s && s.type==="village" && Math.hypot(s.x-x, s.z-z) < VIL_WALL+2) return true;
+  }
+  return false;
+}
 function spawnPack(type, n, minD, maxD){ let ok=0; for(let i=0;i<n;i++) if(spawnMob(type,minD,maxD)) ok++; return ok; } // 一次刷一窝(蜂群式)
 /* 沙暴袭击: 沙暴中出没的沙漠生物(纯函数便于 selftest); startSandRaid 在沙暴降临时开一波 */
 function sandRaidType(r){ const pool=["scarab","serqet","spider","sandworm"]; return pool[Math.min(pool.length-1, (r*pool.length)|0)]; }
@@ -10016,6 +10026,14 @@ function selftest(){
       }
       ok("绿洲村落能在世界里生成", !!vs, vs?("@"+vs.x+","+vs.z+" h="+vs.h):"none");
       if(vs){
+        // 安全区: 村中心在庇护内、远处不在; 站在村中心近距离刷普通敌对怪一只也刷不进墙内
+        const px0=player.x, pz0=player.z, py0=player.y, n0=mobs.length;
+        const safeIn=inVillageSafe(vs.x,vs.z), safeOut=!inVillageSafe(vs.x+VIL_WALL+40, vs.z);
+        player.x=vs.x+0.5; player.z=vs.z+0.5; player.y=vs.h+1;
+        let spawned=0; for(let i=0;i<20;i++) if(spawnMob("zombie",3,12)) spawned++;
+        const inside=mobs.slice(n0).filter(m=>Math.hypot(m.x-vs.x,m.z-vs.z)<VIL_WALL+2).length;
+        mobs.length=n0; player.x=px0; player.z=pz0; player.y=py0;
+        ok("村落安全区: 村墙内不刷普通敌对怪", safeIn && safeOut && spawned===0 && inside===0, "in="+safeIn+" out="+safeOut+" spawned="+spawned);
         const P=villagePlan(vs);
         const kinds=new Set(P.houses.map(H=>H.kind));
         ok("村落有 4~7 栋房屋且泥砖屋/木筋屋混搭", P.houses.length>=4 && P.houses.length<=7 && kinds.has("adobe") && kinds.has("timber"),
