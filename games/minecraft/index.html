@@ -361,7 +361,7 @@ const SANDSTONE=14, CACTUS=15, PINE_LOG=16, PINE_LEAF=17, BRICK=18, WOOL=19,
       GEM_ORE=27, DARKPLANK=28, MOSSY=29, PUMPKIN=30, LANTERN=31,
       // 十字形植物(可穿过)
       ROSE=32, DAISY=33, TALLGRASS=34, SHROOM=35, DEADBUSH=36, LILY=37;
-const PLANT = id => id>=ROSE && id<=LILY;
+const PLANT = id => (id>=ROSE && id<=LILY) || id===REEDS;
 const LAVA=38, OBSIDIAN=39, CRYSTAL=40, MAGMA=41;
 // 城市方块
 const CONCRETE=42, ASPHALT=43, METAL=44, NEON=45, WINDOW=46;
@@ -375,6 +375,8 @@ const CAVECALC=57, AMETHYST=58, WRECKWOOD=59; // 晶洞方解石/紫晶 · 沉�
 const SUSGRAVEL=60;                           // 可疑沙砾: 考古刷点(挖开出土陶片/文物/图纸残页, 复用砂砾贴图 83)
 const TRAPPLATE=61;                           // 机关压力板: 刻纹砂岩(复用石棺侧面 194), 踩上去触发落石/暗箭/滚石
 const LOOSESAND=62;                           // 松沙陷坑: 外观与沙子完全相同(复用贴图 4), 踩塌落坑
+// 村落建材(round2 B1, 图集第二页 256+): 三色灰泥 · 木框窗 · 棕榈干/叶 · 芦苇 · 鎏金饰面; 63-70 此前从未用过, 旧存档不冲突
+const PLASTER=63, PLASTER_ROSE=64, PLASTER_WHITE=65, WINDOW_WOOD=66, PALM_LOG=67, PALM_LEAF=68, REEDS=69, GILDED=70;
 // t=顶面贴图 b=底面 s=侧面 (图集编号)
 const BLOCKS = {
   [GRASS]:  {name:"草方块",   t:0,  b:2,  s:1},
@@ -431,7 +433,7 @@ const BLOCKS = {
   [SALTCRYSTAL]:{name:"盐晶",   t:252,b:252,s:252},
   [BLACKSAND]:{name:"黑沙",     t:253,b:253,s:253},
   [BASALT]: {name:"玄武岩",     t:254,b:254,s:255},
-  [WINDROCK]:{name:"风蚀岩",    t:99, b:99, s:99},
+  [WINDROCK]:{name:"风蚀岩",    t:265,b:265,s:99},   // 顶/底: 平整风化岩面(265); 侧面按世界 y 取 99/266-268 连续岩层
   [GLOWVEIN]:{name:"发光矿脉",  t:159,b:159,s:159},
   [CAVECALC]:{name:"方解石",    t:235,b:235,s:235},
   [AMETHYST]:{name:"紫晶簇",    t:236,b:236,s:236},
@@ -439,11 +441,19 @@ const BLOCKS = {
   [SUSGRAVEL]:{name:"可疑沙砾", t:83, b:83, s:83},   // 考古刷点(视觉同砂砾, 上方有金色微光提示)
   [TRAPPLATE]:{name:"机关压力板", t:194,b:123,s:194}, // 刻纹压力板(观察得到, 可绕开, 踩上去触发机关)
   [LOOSESAND]:{name:"松沙",     t:4,  b:4,  s:4},    // 陷坑伪装: 与沙子无异, 踩上去塌陷成坑
+  [PLASTER]:{name:"赭黄灰泥",   t:256,b:256,s:256},
+  [PLASTER_ROSE]:{name:"玫瑰灰泥", t:257,b:257,s:257},
+  [PLASTER_WHITE]:{name:"石灰白灰泥", t:258,b:258,s:258},
+  [WINDOW_WOOD]:{name:"木框窗", t:95, b:95, s:259},    // 不透明: 房子不再"透空", 室内灯笼也不会白天从玻璃里透出来
+  [PALM_LOG]:{name:"棕榈木",    t:261,b:261,s:260},
+  [PALM_LEAF]:{name:"棕榈叶",   t:262,b:262,s:262},   // 同树叶: 半透明镂空, 不挡天光
+  [REEDS]:  {name:"芦苇",       t:263,b:263,s:263},   // 十字植物
+  [GILDED]: {name:"鎏金饰面",   t:269,b:269,s:269},   // 装饰金(替代建筑外立面上的金矿石); 挖下得金矿石
 };
 // 植物可以直接走过去; 冰/玻璃/树叶不完全遮挡; 岩浆会陷进去
 const SOLID   = id => id!==AIR && id!==WATER && id!==LAVA && !PLANT(id);   // 碰撞
 const OPAQUE  = id => id!==AIR && id!==WATER && id!==LEAVES && id!==GLASS
-                      && id!==PINE_LEAF && id!==ICE && !PLANT(id);  // 完全遮挡
+                      && id!==PINE_LEAF && id!==PALM_LEAF && id!==ICE && !PLANT(id);  // 完全遮挡
 const OCCLUDE = id => SOLID(id) && id!==GLASS && id!==ICE;          // 产生环境光遮蔽
 const EMISSIVE= id => id===LANTERN || id===LAVA || id===CRYSTAL || id===MAGMA || id===NEON || id===WINDOW || id===GLOWVEIN || id===SALTCRYSTAL || id===AMETHYST; // 自发光
 /* 物品栏: 常用道具全部落在 1-9 键上, TNT 固定在 9 键 */
@@ -985,7 +995,7 @@ function drawStructure(s,put){
       if(hash2(x*3+off*7, t*5-j)<0.6) put(x-off, h+j, z+t, SAND, false);
     }
     // 顶端金冠
-    put(x,h+R,z,GOLD_ORE,true);
+    put(x,h+R,z,GILDED,true);
 
     // --- 北面入口 + 走廊直通中心 ---
     for(let dz=R; dz>=3; dz--){
@@ -1010,7 +1020,7 @@ function drawStructure(s,put){
     // 入口门框
     box(x-2,h+1,z-R-1,x+2,h+4,z-R-1,SANDSTONE,false);
     box(x-1,h+1,z-R-1,x+1,h+3,z-R-1,AIR,false);
-    put(x-2,h+4,z-R-1,GOLD_ORE,true); put(x+2,h+4,z-R-1,GOLD_ORE,true);
+    put(x-2,h+4,z-R-1,GILDED,true); put(x+2,h+4,z-R-1,GILDED,true);
 
     // --- 中央墓室 ---
     box(x-4,h+1,z-3,x+4,h+5,z+4,AIR,false);              // 掏空
@@ -1037,7 +1047,7 @@ function drawStructure(s,put){
       const bxp=x+ox, bzp=z-R-5;
       box(bxp-1,h,bzp-1,bxp+1,h,bzp+1,CLAY,false);        // 基座
       for(let y=h+1;y<=h+9;y++) put(bxp,y,bzp,SANDSTONE,true);
-      put(bxp,h+10,bzp,GOLD_ORE,true);                    // 金顶
+      put(bxp,h+10,bzp,GILDED,true);                    // 金顶
     }
     // --- 狮身人面像(简化: 卧姿身躯 + 头 + 头巾) ---
     const sxp=x, szp=z-R-12;
@@ -1047,7 +1057,7 @@ function drawStructure(s,put){
     box(sxp-2,h+3,szp-4,sxp+2,h+5,szp-1,SANDSTONE,false); // 头
     box(sxp-3,h+4,szp-4,sxp-3,h+5,szp-1,CLAY,false);      // 头巾
     box(sxp+3,h+4,szp-4,sxp+3,h+5,szp-1,CLAY,false);
-    put(sxp-1,h+4,szp-5,GOLD_ORE,true); put(sxp+1,h+4,szp-5,GOLD_ORE,true); // 眼睛
+    put(sxp-1,h+4,szp-5,GILDED,true); put(sxp+1,h+4,szp-5,GILDED,true); // 眼睛
   }
   else if(type==="colosseum"){
     /* ===== 罗马斗兽场: 环形三层拱廊看台 + 沙地竞技场 ===== */
@@ -1079,8 +1089,8 @@ function drawStructure(s,put){
         }
       }
     }
-    put(x,h+13,z,GOLD_ORE,true);                                  // 顶部金饰, 远处可见的地标标记
-    put(x,h+1,z,GOLD_ORE,true);                                   // 场地中央的冠军印记
+    put(x,h+13,z,GILDED,true);                                  // 顶部金饰, 远处可见的地标标记
+    put(x,h+1,z,GILDED,true);                                   // 场地中央的冠军印记
   }
   else if(type==="forum"){
     /* ===== 罗马广场: 大理石列柱回廊 + 凯旋门 + 雕像基座 ===== */
@@ -1090,11 +1100,11 @@ function drawStructure(s,put){
       put(X,h,Z, ((Math.floor((X-x+W)/3)+Math.floor((Z-z+D)/3))&1)?COBBLE:MARBLE, true);
     for(let X=x-W;X<=x+W;X+=4){                                   // 南北两排列柱
       for(let y=h+1;y<=h+5;y++){ put(X,y,z-D,MARBLE,true); put(X,y,z+D,MARBLE,true); }
-      put(X,h+6,z-D,GOLD_ORE,true); put(X,h+6,z+D,GOLD_ORE,true);
+      put(X,h+6,z-D,GILDED,true); put(X,h+6,z+D,GILDED,true);
     }
     for(let Z=z-D;Z<=z+D;Z+=4){                                   // 东西两排列柱
       for(let y=h+1;y<=h+5;y++){ put(x-W,y,Z,MARBLE,true); put(x+W,y,Z,MARBLE,true); }
-      put(x-W,h+6,Z,GOLD_ORE,true); put(x+W,h+6,Z,GOLD_ORE,true);
+      put(x-W,h+6,Z,GILDED,true); put(x+W,h+6,Z,GILDED,true);
     }
     // 北侧凯旋门(三拱门)
     const az=z-D;
@@ -1102,12 +1112,12 @@ function drawStructure(s,put){
     box(x-4,h+1,az,x-2,h+5,az,AIR,false);
     box(x+2,h+1,az,x+4,h+5,az,AIR,false);
     box(x-1,h+1,az,x+1,h+6,az,AIR,false);
-    put(x,h+9,az,GOLD_ORE,true); put(x-5,h+9,az,GOLD_ORE,true); put(x+5,h+9,az,GOLD_ORE,true);
+    put(x,h+9,az,GILDED,true); put(x-5,h+9,az,GILDED,true); put(x+5,h+9,az,GILDED,true);
     // 广场中央两尊雕像基座
     for(const sxp of [x-4,x+4]){
       box(sxp-1,h+1,z-1,sxp+1,h+1,z+1,MOSSY,false);
       for(let y=h+2;y<=h+5;y++) put(sxp,y,z,MARBLE,true);
-      put(sxp,h+6,z,GOLD_ORE,true);
+      put(sxp,h+6,z,GILDED,true);
     }
   }
   else if(type==="castrum"){
@@ -1124,7 +1134,7 @@ function drawStructure(s,put){
     }
     // 南墙正门(双开)
     box(x-2,h+1,z+R,x+2,h+4,z+R,AIR,false);
-    put(x-3,h+5,z+R,GOLD_ORE,true); put(x+3,h+5,z+R,GOLD_ORE,true);
+    put(x-3,h+5,z+R,GILDED,true); put(x+3,h+5,z+R,GILDED,true);
     // 四角箭塔
     for(const [ox,oz] of [[-R,-R],[R,-R],[-R,R],[R,R]]){
       for(let y=h+1;y<=h+10;y++)
@@ -1144,7 +1154,7 @@ function drawStructure(s,put){
     put(x,h+1,z+2,AIR,true); put(x,h+2,z+2,AIR,true);
     for(let k=0;k<=2;k++) box(x-4+k,h+6+k,z-2+k,x+4-k,h+6+k,z+2-k,ROOFTILE,false);
     for(let y=h+9;y<=h+12;y++) put(x,y,z,LOG,true);              // 旗杆
-    put(x,h+13,z,GOLD_ORE,true);                                 // 鹰旗(aquila)
+    put(x,h+13,z,GILDED,true);                                 // 鹰旗(aquila)
     put(x-1,h+12,z,BRICK,true); put(x+1,h+12,z,BRICK,true);
   }
   else if(type==="aqueduct"){
@@ -1183,19 +1193,19 @@ function drawStructure(s,put){
     // 环绕列柱(科林斯柱: 柱身+金柱头)
     for(let X=x-W+2;X<=x+W-2;X+=3) for(const Z of [z-D+2,z+D-2]){
       for(let y=h+3;y<=h+9;y++) put(X,y,Z,MARBLE,true);
-      put(X,h+10,Z,GOLD_ORE,true);
+      put(X,h+10,Z,GILDED,true);
     }
     for(let Z=z-D+2;Z<=z+D-2;Z+=3) for(const X of [x-W+2,x+W-2]){
       for(let y=h+3;y<=h+9;y++) put(X,y,Z,MARBLE,true);
-      put(X,h+10,Z,GOLD_ORE,true);
+      put(X,h+10,Z,GILDED,true);
     }
     // 王座厅
     box(x-6,h+4,z-6,x+6,h+10,z+6,MARBLE,true);
     box(x-5,h+4,z-5,x+5,h+9,z+5,AIR,false);
     box(x-2,h+4,z+6,x+2,h+7,z+6,AIR,false);                      // 正门
-    for(let k=0;k<=4;k++) box(x-7+k,h+11+k,z-7+k,x+7-k,h+11+k,z+7-k, k===4?GOLD_ORE:ROOFTILE, false);
+    for(let k=0;k<=4;k++) box(x-7+k,h+11+k,z-7+k,x+7-k,h+11+k,z+7-k, k===4?GILDED:ROOFTILE, false);
     // 王座 + 金饰 + 壁灯
-    box(x-1,h+4,z-4,x+1,h+5,z-3,GOLD_ORE,false);
+    box(x-1,h+4,z-4,x+1,h+5,z-3,GILDED,false);
     put(x,h+6,z-4,GEM_ORE,true);
     for(const [cx2,cz2] of [[-4,-4],[4,-4],[-4,4],[4,4]]){
       for(let y=h+4;y<=h+7;y++) put(x+cx2,y,z+cz2,MARBLE,true);
@@ -1205,7 +1215,7 @@ function drawStructure(s,put){
     for(const ox of [-8,8]){
       box(x+ox-1,h+4,z+9,x+ox+1,h+4,z+11,MARBLE,false);
       for(let y=h+5;y<=h+8;y++) put(x+ox,y,z+10,MARBLE,true);
-      put(x+ox,h+9,z+10,GOLD_ORE,true);
+      put(x+ox,h+9,z+10,GILDED,true);
     }
   }
   else if(type==="ruin"){
@@ -1681,17 +1691,17 @@ function drawPalm(put,px,base,pz,th,lx,lz){
   let tx=px, tz=pz;
   const bend=Math.ceil(th*0.6);
   for(let k=1;k<=th;k++){
-    if(k===bend && (lx||lz)){ put(tx+lx,base+k-1,tz+lz,LOG,true); tx+=lx; tz+=lz; }
-    put(tx,base+k,tz,LOG,true);
+    if(k===bend && (lx||lz)){ put(tx+lx,base+k-1,tz+lz,PALM_LOG,true); tx+=lx; tz+=lz; }
+    put(tx,base+k,tz,PALM_LOG,true);
   }
   const ty=base+th;
-  put(tx,ty+1,tz,LEAVES,true);
+  put(tx,ty+1,tz,PALM_LEAF,true);
   for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
-    put(tx+dx,ty+1,tz+dz,LEAVES,false); put(tx+dx*2,ty+1,tz+dz*2,LEAVES,false);
-    put(tx+dx*3,ty,tz+dz*3,LEAVES,false); put(tx+dx*4,ty-1,tz+dz*4,LEAVES,false);
+    put(tx+dx,ty+1,tz+dz,PALM_LEAF,false); put(tx+dx*2,ty+1,tz+dz*2,PALM_LEAF,false);
+    put(tx+dx*3,ty,tz+dz*3,PALM_LEAF,false); put(tx+dx*4,ty-1,tz+dz*4,PALM_LEAF,false);
   }
   for(const [dx,dz] of [[1,1],[-1,1],[1,-1],[-1,-1]]){
-    put(tx+dx,ty+1,tz+dz,LEAVES,false); put(tx+dx*2,ty,tz+dz*2,LEAVES,false);
+    put(tx+dx,ty+1,tz+dz,PALM_LEAF,false); put(tx+dx*2,ty,tz+dz*2,PALM_LEAF,false);
   }
 }
 // 石板路: 圆石为主, 夹杂石头/苔石/砂砾/砂岩碎块, 像被踩了很多年的老街
@@ -1992,7 +2002,7 @@ function drawVillageHouse(P,H,h,put){
   const slab=(y,id,u0,u1,v0,v1)=>{ for(let u=u0;u<=u1;u++) for(let v=v0;v<=v1;v++) Q(u,v,y,id); };
   if(H.kind==="adobe"){
     const white=H.v1>=0.6;                                              // 四成刷白灰, 其余是赭红泥砖
-    const wall=white?CAVECALC:CLAY, trim=white?CLAY:SANDSTONE;
+    const wall=white?PLASTER_WHITE:CLAY, trim=white?CLAY:SANDSTONE;
     for(let u=-hw;u<=hw;u++) for(let v=0;v<D;v++) for(let y=h+1;y<=h+5;y++) Q(u,v,y,AIR);
     slab(h,trim,-hw,hw,0,D-1); slab(h,PLANKS,-hw+1,hw-1,1,D-2);
     shell(h+1,trim,-hw,hw,0,D-1);
@@ -2002,8 +2012,8 @@ function drawVillageHouse(P,H,h,put){
       if((u===-hw||u===hw||v===0||v===D-1) && ((u+v)&1)===0) Q(u,v,h+6,trim);
     Q(0,0,h+1,AIR); Q(0,0,h+2,AIR);                                     // 门洞
     for(let u=-1;u<=1;u++) Q(u,0,h+3,DARKPLANK);                        // 门楣
-    Q(-2,0,h+3,GLASS); Q(2,0,h+3,GLASS);                                 // 窗
-    Q(-hw,3,h+3,GLASS); Q(hw,3,h+3,GLASS); Q(0,D-1,h+3,GLASS);
+    Q(-2,0,h+3,WINDOW_WOOD); Q(2,0,h+3,WINDOW_WOOD);                     // 窗(木框, 不透明)
+    Q(-hw,3,h+3,WINDOW_WOOD); Q(hw,3,h+3,WINDOW_WOOD); Q(0,D-1,h+3,WINDOW_WOOD);
     for(const v of [1,3,D-1]) Q(-hw-1,v,h+4,DARKPLANK);                 // 伸出墙外的木梁头
     for(const u of [-2,0,2]) Q(u,D,h+4,DARKPLANK);
     const [cA,cB]=H.v2<0.5?[WOOL,BRICK]:[WOOL,HAY];                    // 条纹遮阳篷
@@ -2017,7 +2027,7 @@ function drawVillageHouse(P,H,h,put){
       for(const [u,v] of [[-2,3],[2,3],[-2,D-1],[2,D-1],[0,3]]) Q(u,v,h+10,trim);
       Q(0,3,h+6,AIR); Q(0,3,h+7,AIR);                                    // 屋顶平台门
       Q(-1,3,h+8,DARKPLANK); Q(0,3,h+8,DARKPLANK); Q(1,3,h+8,DARKPLANK);
-      Q(-2,4,h+7,GLASS); Q(2,4,h+7,GLASS);
+      Q(-2,4,h+7,WINDOW_WOOD); Q(2,4,h+7,WINDOW_WOOD);
       Q(-2,1,h+6,LEAVES); Q(2,1,h+6,LANTERN); Q(-1,1,h+6,HAY);          // 平台上的盆栽/灯/干草
     } else {
       Q(-2,2,h+6,LEAVES); Q(2,D-2,h+6,LANTERN);
@@ -2025,7 +2035,7 @@ function drawVillageHouse(P,H,h,put){
     }
     for(let k=1;k<=4;k++) Q(hw+1,D-1-k,h+k,trim);                       // 侧墙外一列台阶通屋顶
   } else {
-    const PL=[WOOL,WOOL,CAVECALC,HAY][Math.floor(H.v1*4)];             // 灰泥色: 白/白/米/赭黄
+    const PL=[PLASTER,PLASTER_ROSE,PLASTER_WHITE,PLASTER][Math.floor(H.v1*4)];   // 灰泥色: 赭黄/玫瑰/石灰白/赭黄
     const ROOF=H.v2<0.7?ROOFTILE:DARKPLANK;
     for(let u=-hw;u<=hw;u++) for(let v=0;v<D;v++) for(let y=h+1;y<=h+12;y++) Q(u,v,y,AIR);
     slab(h,COBBLE,-hw,hw,0,D-1);
@@ -2040,8 +2050,8 @@ function drawVillageHouse(P,H,h,put){
     for(let y=h+5;y<=h+6;y++) Q(0,0,y,DARKPLANK);                                               // 正面二层中柱
     Q(-2,D-1,h+5,DARKPLANK); Q(-1,D-1,h+6,DARKPLANK); Q(2,D-1,h+5,DARKPLANK); Q(1,D-1,h+6,DARKPLANK);   // 背面人字斜撑
     Q(0,0,h+2,AIR); Q(0,0,h+3,AIR); Q(0,-1,h+1,COBBLE);                 // 门 + 台阶
-    for(const u of [-2,2]){ Q(u,0,h+3,GLASS); Q(u,D-1,h+3,GLASS); Q(u,0,h+5,GLASS); Q(u,0,h+6,GLASS); }   // 一层小窗 + 二层高窗
-    for(const v of [1,D-2]) for(const u of [-hw,hw]){ Q(u,v,h+3,GLASS); Q(u,v,h+5,GLASS); Q(u,v,h+6,GLASS); }
+    for(const u of [-2,2]){ Q(u,0,h+3,WINDOW_WOOD); Q(u,D-1,h+3,WINDOW_WOOD); Q(u,0,h+5,WINDOW_WOOD); Q(u,0,h+6,WINDOW_WOOD); }   // 一层小窗 + 二层高窗
+    for(const v of [1,D-2]) for(const u of [-hw,hw]){ Q(u,v,h+3,WINDOW_WOOD); Q(u,v,h+5,WINDOW_WOOD); Q(u,v,h+6,WINDOW_WOOD); }
     for(const u of [-2,2]){ Q(u,-1,h+2,LEAVES); Q(u,-1,h+3,(u<0)===(H.v1<0.5)?ROSE:DAISY,false); }   // 窗下花箱
     // 山墙朝街的坡屋顶(屋脊沿进深方向), 前后各挑出一格
     for(let k=0;k<=hw+1;k++){
@@ -2564,14 +2574,14 @@ const A_F=gl.getAttribLocation(mainProg,"aF");
 const AC_POS=gl.getAttribLocation(colProg,"aPos");
 
 /* ---------- 程序化贴图图集 · 32px 高清版 ----------
- * 图集 512×512 = 16×16 格, 每格 32px (tile = 行*16+列, UV 格宽仍是 TS=1/16)。
- * 网格/实体/掉落物的 UV 统一内缩 EP=1/512 = 1 texel, 所以每格真正显示的是中间 30×30
+ * 图集 512×1024 = 16 列 × 32 行, 每格 32px (tile = 行*16+列; UV 格宽 TS=1/16, 格高 TV=1/32)。
+ * 网格/实体/掉落物的 UV 两轴各内缩 1 texel(横 EP=1/512, 纵 EPV=1/1024), 所以每格真正显示的是中间 30×30
  * (格内坐标 1..30); 最外 1px 是"护边": 可平铺材质按回绕复制对边, 图案类按钳制复制,
  * 这样 mipmap 缩小和相邻方块拼接都不会串色/出缝。
  * 随机只走 txRnd()/txH(): 与世界种子无关的确定性序列, 每格按编号重新播种 → 任何存档外观一致。 */
-const TX_PX=32, TX_V=30;
+const TX_PX=32, TX_V=30, TX_ROWS=32;           // 16 列 × 32 行 = 512 格(0..511)
 const atlasCv = document.createElement("canvas");
-atlasCv.width=atlasCv.height=TX_PX*16;
+atlasCv.width=TX_PX*16; atlasCv.height=TX_PX*TX_ROWS;
 const actx = atlasCv.getContext("2d");
 let _txS=1;
 function txRnd(){ _txS=(_txS+0x6D2B79F5)|0; let t=Math.imul(_txS^(_txS>>>15),1|_txS); t=(t+Math.imul(t^(t>>>7),61|t))^t; return ((t^(t>>>14))>>>0)/4294967296; }
@@ -2950,7 +2960,8 @@ drawTile(63,()=> vary(212,60,44,12));                                       // �
 // 色板取自美术规范(creative-spec §2.3): 地面类亮度控制在基色 ±18% 内, 远看不花; 特殊像素(颗粒/亮晶)≤3~4%
 const P_DIRT =txSteps("#4a3322 #5a3e28 #6b4a30 #7e5a3a #93704c",7);
 const P_PEB  =txSteps("#6a5a4a #83735f #9a8670 #b09d86",4);
-const P_GRASS=txSteps("#34561f #3f6425 #557f30 #6e9a3c #8db44e #b5cc72",8);
+// 橄榄绿(round2 B3): 比旧的 #5FD13A 系低约 15% 彩度, 与暖沙/陶瓦同一套自然色, 不再发荧光
+const P_GRASS=txSteps("#32481c #3d5722 #4f6b2b #637f35 #7a9042 #97a55c",8);
 const P_STONE=txSteps("#55534f #5f5d5a #78756f #8e8a83 #a3a098 #b8b5ae",8);
 const P_SAND =txSteps("#a9824f #c49c68 #d8b681 #e6cb9c #f3e0ba",8);
 function dirtAt(x,y){                                                     // 泥土: 团粒 + 浮雕小石子 + 暗色土缝 + 草根
@@ -3064,7 +3075,7 @@ function leafTile(ti,cols,hi,rim,count,ra,rb,sd){
   }
   txPut(ti,(x,y)=>d.at(x,y)||[0,0,0,0]);
 }
-leafTile(8,txPal("#2f5e22 #3f7a2c #5a9a3a"),[134,188,85],[34,70,26],54,3.8,2.4,81);
+leafTile(8,txPal("#2c4f20 #3a6528 #4f7d33"),[112,150,72],[30,58,24],54,3.8,2.4,81);   // 橄榄叶色(同草地降彩度)
 function needleTile(ti,sd){                                               // 松针: 暗色枝簇打底(成簇透空) + 1×4px 针叶笔触
   const d=txDecal(); txSeed(sd); const pal=txSteps("#163a22 #1f4a2e #2c5e3b #3d7a4e",4);
   for(let y=0;y<TX_V;y++) for(let x=0;x<TX_V;x++) if(txFbm(x,y,3,3,2,sd+1)>0.4) d.set(x,y,txMul(pal[0],0.8+txH(x,y,sd+2)*0.2));
@@ -3212,7 +3223,7 @@ plantTile(90,(x,y)=>{                                                     // 高
     const bx=2+i*2.5+txH(i,0,901)*1.5, top=4+txH(i,1,902)*12, bend=(txH(i,2,903)-0.5)*7;
     const f=(29-y)/(29-top); if(y<top) continue;
     const cx=bx+bend*f*f;
-    if(Math.abs(x+.5-cx)<(f<0.8?1.0:0.6)) return txLerp(txPal("#2c5e20 #3f7a2b #549637 #6cae45 #8cc75c"),1-((y-top)/(29-top))*0.8+(i%3)*0.06);
+    if(Math.abs(x+.5-cx)<(f<0.8?1.0:0.6)) return txLerp(txPal("#37602a #4b7934 #5f9140 #75a64f #93bc68").map(c=>txMix(c,[138,154,85],0.15)),1-((y-top)/(29-top))*0.8+(i%3)*0.06);
   }
 });
 plantTile(97,(x,y)=>{                                                     // 枯木丛: 分叉枯枝
@@ -3259,21 +3270,31 @@ txPut(93,(x,y)=>{                                                         // 南
   const rib=Math.abs(Math.sin(a*5));
   return txRamp(txPal("#7e400a #95500e #ad6014 #c2701a #d38322 #e2962e"),0.2+rib*0.6+(txH(x,y,931)-0.5)*0.12-(r<4?0.25:0));
 },true);
-txPut(94,(x,y)=>{                                                         // 灯笼: 铁笼(边框+中竖/横条) + 顶盖 + 暖光玻璃(中心最亮)
+txPut(94,(x,y)=>{                                                         // 灯笼: 顶盖 + 四角铁柱 + 底座 + 单一径向暖光核(不再有中竖条把光分成"两只眼")
   const e=Math.min(x,y,TX_V-1-x,TX_V-1-y);
   if(y<4) return txRamp(txPal("#241f1b #2e2a26 #474039"),y===3?0:(x+y)%5===0?0.9:0.4);
-  if(e<2||Math.abs(x-14.5)<1) return e===0?[30,27,24]:[46,42,38];
-  const d=Math.hypot(x-14.5,y-16)/13;
-  return txLerp(txPal("#fff1c4 #ffe39a #ffd27a #f0b458 #d08a38"),d+(txH(x,y,941)-0.5)*0.1);
+  if(y>=27) return txRamp(txPal("#221e1a #2e2a26 #413a33"),y===27?0.9:0.35);   // 底座
+  if(x<3||x>26) return x===0||x===29?[28,25,22]:(x===1||x===27)?[70,63,55]:[44,40,36];   // 左右角柱(内侧 1px 高光)
+  if(y===4) return [40,36,32];                                                  // 顶盖下沿
+  const d=Math.hypot((x-14.5)/11.5,(y-15.5)/11.5);
+  return txLerp(txPal("#fffbe6 #fff1c4 #ffe39a #ffcf72 #eea552 #c97c34"),Math.pow(d,0.85)+(txH(x,y,941)-0.5)*0.06);
 },true);
 // 风蚀岩(峡谷): 三道厚薄不一的红褐岩层(边界蜿蜒) + 水平擦痕 + 风蚀凹坑 + 顶部"沙漠漆"垂流
 const STRATA=txPal("#b5623f #c97b52 #d8966a #a45538 #e1af84 #bf7049 #9a4e34 #d48c60");
-txLit(99,(x,y)=>txFbm(x,y,2,10,3,992)*0.45+txFbm(x,y,4,4,2,995)*0.2-((w=>w.d1<0.8&&txH(w.id,0,998)<0.4)(txWorley(x+.5,y+.5,5,5,993,1))?0.3:0),(x,y,h,s)=>{
-  const yy=txW(y+(txFbm(x,y,2,1,2,991)-0.5)*4,30), b=yy<11?0:yy<18?1:yy<26?2:3;
-  const c=STRATA[[1,7,5,2][b]];
-  const varnish=(txH(x,0,996)<0.1 && y<5+txH(x,1,997)*12)?0.8:1;
-  return txMul(c,clamp((0.86+h*0.3+s*1.2+(txH(x,y,994)-0.5)*0.08)*varnish,0.6,1.2));
-},1.3,false,0.05);
+// 120px 高的岩层柱切成 4 片(99/266/267/268), 网格按世界 y 选片 → 岩层跨 4 格连续, 不再每米重来; 去掉了每格同位置的"凹坑印章"
+const WR_BANDS=(()=>{ txSeed(9911); const B=[]; let y=0; while(y<120){ const t=3+Math.floor(txRnd()*9); B.push([y,Math.floor(txRnd()*STRATA.length)]); y+=t; } return B; })();
+function windrockSide(ti,k){
+  txLit(ti,(x,y)=>txFbm(x,y,2,10,3,992)*0.45+txFbm(x,y,4,4,2,995)*0.2+(txH(x,y+30*k,999)<0.01?-0.25:0),(x,y,h,s)=>{
+    const yy=txW(y+30*k+Math.round((txVN(x/TX_V*2,0.5,2,1,991)-0.5)*5),120);
+    let bi=0; while(bi+1<WR_BANDS.length && WR_BANDS[bi+1][0]<=yy) bi++;
+    const c=STRATA[WR_BANDS[bi][1]];
+    const scr=txW(yy-WR_BANDS[bi][0],120)===0?0.9:1;                     // 层界细暗线
+    const varnish=(k===0 && txH(x,0,996)<0.1 && y<5+txH(x,1,997)*12)?0.85:1;
+    return txMul(c,clamp((0.88+h*0.26+s*1.1+(txH(x,y,994)-0.5)*0.07)*varnish*scr,0.6,1.2));
+  },1.2,false,0.04);
+}
+windrockSide(99,0); windrockSide(266,1); windrockSide(267,2); windrockSide(268,3);
+const WR_SIDE=[268,267,266,99];                                           // 按 y&3 取片: 片 0 在最上
 txPut(122,(x,y)=>{                                                        // 岩浆: 流动亮流 + 暗色结壳
   const n=txFbm(x+txFbm(x,y,3,3,2,1221)*8,y,3,3,3,1222);
   const w=txWorley(x+.5,y+.5,4,4,1223,1);
@@ -3417,6 +3438,102 @@ txPut(34,(x,y)=>{
   if(Math.hypot(x-14.5,y-14.5)<2.2) return [40,34,30];
   return txRamp(txPal("#6e1811 #8e2217 #ac2d1d #c63926 #d84a30"),d<1.2?0.2:d<2.6?0.75-(cx+cy)*0.08:0.02);
 });
+/* ---------- 图集第二页(256-270): 村落建材 / 棕榈 / 芦苇 / 铁件 / 风蚀岩顶 / 鎏金 / 遮阳篷 ---------- */
+// 灰泥墙: 基色 + 低频 fbm 斑驳 ±6% + 抹刀痕 + 一道细裂纹 + 零星砂粒; 1px 边缘压暗 6%(远看分得清砌块又不成网格)
+function plasterTile(ti,base,crack,sd){
+  const B=txHex(base), C=txHex(crack);
+  txPut(ti,(x,y)=>{
+    const cx=6+sd%11+txVN(0.5,y/TX_V*3,1,3,sd+3)*5, cy0=3+sd%7, cy1=cy0+9+sd%6;   // 细裂: 竖向蜿蜒 1px + 一个分叉
+    if(y>=cy0 && y<=cy1 && Math.abs(x+.5-cx-(y-cy0)*0.35)<0.55) return C;
+    if(y>cy0+4 && y<cy0+8 && Math.abs(x+.5-(cx+(cy0+4-cy0)*0.35)-(y-cy0-4)*-0.9)<0.5) return txMix(C,B,0.35);
+    const g=txH(x,y,sd+7);
+    if(g<0.02) return txMul(B,0.86);
+    if(g>0.985) return txMul(B,1.07);
+    const k=1+(txFbm(x,y,3,3,3,sd)-0.5)*0.12+(txFbm(x,y,1,6,2,sd+1)-0.5)*0.05+(txH(x,y,sd+2)-0.5)*0.03;
+    return txMul(B,k);
+  },false,0.06);
+}
+plasterTile(256,"#d98a48","#b06a33",2561);                               // 赭黄灰泥
+plasterTile(257,"#e29c8c","#b7766a",2573);                               // 玫瑰灰泥
+plasterTile(258,"#e8e1d2","#bdb3a0",2587);                               // 石灰白灰泥
+txPut(259,(x,y)=>{                                                        // 木框窗(不透明): 3px 框 + 2px 十字棂 + 渐变玻璃 + 左上斜向高光 + 2px 窗台
+  const FR=[91,62,42], HI=[122,90,62], DK=[64,43,29], SILL=[138,106,74];
+  if(y>=28) return y===28?txMul(SILL,1.12):SILL;
+  const e=Math.min(x,y,TX_V-1-x,27-y);
+  if(e<3) return e===0?DK:((x<3&&y>=x)||(y<3&&x>=y))&&e===1?HI:FR;
+  if(x===14||x===15||y===13||y===14) return (x===14||y===13)?HI:FR;         // 十字棂(左/上缘高光)
+  const py=y<13?(y-3)/10:(y-15)/10;                                       // 每格窗玻璃内: 上亮下暗
+  let c=txLerp(txPal("#86afc8 #6a90ab #53758f #3e5e78"),py*0.9+(txH(x,y,2591)-0.5)*0.05);
+  if(x<14 && y<13 && (x+y===12||x+y===13||x+y===17)) c=txMix(c,[214,232,240],x+y===17?0.55:0.9);   // 左上格斜向反光
+  if(y===3||y===15) c=txMul(c,0.8);                                        // 窗框投下的细影
+  return c;
+},true);
+txLit(260,(x,y)=>{                                                        // 棕榈树干侧: 菱形叶痕格(每 5px 一排, 错位半格) + 竖向纤维
+  const b=Math.floor(y/5), ly=y%5, xx=txW(x+(b%2)*5,10);
+  const d=Math.abs(xx-4.5)/5+Math.abs(ly-2)/2.5;
+  return (d>0.95?0:1-d*0.5)+txFbm(x,y,6,1,2,2601)*0.15;
+},(x,y,h,s)=>{
+  const b=Math.floor(y/5), ly=y%5, xx=txW(x+(b%2)*5,10);
+  const d=Math.abs(xx-4.5)/5+Math.abs(ly-2)/2.5;
+  if(d>0.95) return txMul([106,82,58],0.92+txH(x,y,2602)*0.12);          // 叶痕(深)
+  if(ly===0 || (ly===1&&d>0.7)) return txMul([168,140,102],1+s*0.6);        // 上唇高光
+  return txMul([138,110,78],clamp(0.95+(txFbm(x,y,10,1,2,2603)-0.5)*0.1+s*1.2+(txH(x,y,2604)-0.5)*0.05,0.75,1.2));
+},1.0,false,0.04);
+ringsTile(261,txSteps("#9d8058 #b89a6c #c8ab7e #d4b98e",5),txSteps("#5a4430 #6a523a #8a6e4e",4),2611);   // 棕榈截面: 纤维束 + 淡年轮
+{ // 棕榈叶: 透明底, 两根斜向叶轴(可平铺回绕), 两侧每 2px 一片 1px 细长小叶(±50°), 叶根深梢亮, 5% 枯黄叶尖
+  const d=txDecal(); txSeed(2621);
+  const L=txPal("#2e4f20 #3b6127 #4b722f #5f8238 #748f44"), DRY=[170,152,86], RA=[96,108,54];
+  const r=[Math.SQRT1_2,Math.SQRT1_2];
+  for(const c0 of [0,15]){
+    for(let t=0;t<44;t+=2){
+      const ox=c0+t*r[0]-8, oy=t*r[1]-8;
+      for(const sg of [-1,1]){
+        const a=sg*50*Math.PI/180, lx=r[0]*Math.cos(a)-r[1]*Math.sin(a), ly=r[0]*Math.sin(a)+r[1]*Math.cos(a);
+        const len=5+Math.floor(txRnd()*3), dry=txRnd()<0.05;
+        const tone=0.8+txRnd()*0.25;                                           // 每片小叶明暗不同, 打散规则的人字纹
+        for(let k=1;k<=len;k++){ const f=k/len; d.set(ox+lx*k,oy+ly*k, dry&&f>0.6?DRY:txMul(txLerp(L,f*0.75+txRnd()*0.15),tone*(0.88+0.12*f))); }
+      }
+    }
+    for(let t=0;t<44;t+=0.5) d.set(c0+t*r[0]-8, t*r[1]-8, RA);             // 叶轴
+  }
+  txPut(262,(x,y)=>d.at(x,y)||[0,0,0,0]);
+}
+plantTile(263,(x,y)=>{                                                    // 芦苇: 7 根细叶(根深梢亮) + 2 支香蒲穗
+  for(const [cx,cy] of [[9,5],[20,8]]) if(x>=cx-1&&x<=cx+1&&y>=cy&&y<cy+6) return txMul([107,74,46],x===cx-1?1.15:x===cx+1?0.85:1);
+  if((x===9&&y>=11)||(x===20&&y>=14)) return [94,116,54];                    // 穗梗
+  for(let i=0;i<7;i++){
+    const bx=3+i*4+txH(i,0,2631)*2, top=2+txH(i,1,2632)*10, bend=(txH(i,2,2633)-0.5)*9;
+    if(y<top) continue; const f=(29-y)/(29-top), cx=bx+bend*f*f;
+    if(Math.abs(x+.5-cx)<(f<0.7?0.9:0.55)) return txLerp(txPal("#5e7a34 #748f42 #88a24f #9db35a"),1-f*0.85+(i%2)*0.05);
+  }
+});
+txPut(264,(x,y)=>{                                                        // 铁件: 深铁色 + 左侧 1px 高光 + 3% 锈斑 + 细竖向拉丝
+  if(txH(x,y,2641)<0.03 || (txFbm(x,y,4,4,2,2642)>0.72 && txH(x,y,2643)<0.4)) return txMix([106,74,52],[84,60,44],txH(x,y,2644));
+  if(x===0||x===15) return [74,69,64];
+  return txMul([43,41,38],0.92+(txFbm(x,y,12,1,2,2645)-0.5)*0.14+(txH(x,y,2646)-0.5)*0.05);
+});
+txLit(265,(x,y)=>{ const w=txWorley(x+.5,y+.5,5,5,2651,0.9); return (txH(w.id,0,2652)<0.25 && w.d1<2.0 ? 0.35*(1-w.d1/2.0) : 0)+txFbm(x,y,3,3,3,2653)*0.4; },
+(x,y,h,s)=>{                                                              // 风蚀岩顶: 平整风化岩面 + 浮雕小卵石 + 6% 沙尘, 无岩层
+  const dust=txFbm(x,y,2,2,2,2654);
+  let c=txLerp(txPal("#a86e48 #b97d54 #c98e62 #d49c70"),0.3+h*0.8+s*1.0+(txH(x,y,2655)-0.5)*0.1);
+  if(dust>0.6) c=txMix(c,[212,176,124],clamp((dust-0.6)*3,0,0.4));
+  return c;
+},1.2,false,0.04);
+txLit(269,(x,y)=>{                                                        // 鎏金饰面: 2px 刻边 + 中心菱形刻纹, 斜向镜面反光
+  const e=Math.min(x,y,TX_V-1-x,TX_V-1-y), dm=Math.abs(x-14.5)+Math.abs(y-14.5);
+  return e===0?0.9:e===1?0.1:(Math.abs(dm-8)<0.8?0.15:0.75+txFbm(x,y,4,4,2,2691)*0.1);
+},(x,y,h,s)=>{
+  const P=txPal("#8a6420 #b8892e #e3b84a #f6dc8a");
+  const streak=Math.abs(x-y+4)<3?0.35:Math.abs(x-y-12)<1.2?0.2:0;
+  return txLerp(P,clamp(0.25+h*0.45+s*2.2+streak+(txH(x,y,2692)-0.5)*0.06,0,1));
+},1.4,true);
+txPut(270,(x,y)=>{                                                        // 遮阳篷帆布: 5px 红白竖条 + 褶皱明暗 + 下沿 2px 毛边(透明)
+  if(y>=28 && txH(x,y,2701)<(y===29?0.6:0.3)) return [0,0,0,0];
+  const red=Math.floor(x/5)%2===0, fold=0.9+0.1*Math.cos((x+.5)/10*Math.PI*2);
+  const c=red?[200,69,46]:[239,230,210];
+  return txMul(c,fold*(0.97+(txFbm(x,y,2,6,2,2702)-0.5)*0.06)*(y<2?0.88:1));
+},true);
+let ATLAS_MIPS=0;                                                         // 手工 mip 级数(自测用: 512×1024 → 1×1 共 10 级)
 const atlasTex = gl.createTexture();
 gl.bindTexture(gl.TEXTURE_2D, atlasTex);
 gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,atlasCv);
@@ -3424,13 +3541,15 @@ gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,atlasCv);
 // 每格 32px 且按 2 的幂对齐, 32→1px 的前 5 级都不跨格混色; 配合 1px 护边 + NEAREST_MIPMAP_LINEAR
 // (级内最近点, 不做双线性) 采样永远落在本格内 → 远处不闪烁、也不串色。近处仍是 NEAREST 放大的清晰像素。
 {
-  let w=atlasCv.width, src=actx.getImageData(0,0,w,w).data, lv=0;
-  while(w>1){
-    const nw=w>>1, dst=new Uint8Array(nw*nw*4);
-    for(let y=0;y<nw;y++) for(let x=0;x<nw;x++){
+  // 512×1024 非正方形: 宽高各自减半(到 1 为止), WebGL1 也要求完整链到 1×1; 越界采样钳到最后一行/列
+  let w=atlasCv.width, h=atlasCv.height, src=actx.getImageData(0,0,w,h).data, lv=0;
+  while(w>1 || h>1){
+    const nw=Math.max(1,w>>1), nh=Math.max(1,h>>1), dst=new Uint8Array(nw*nh*4);
+    for(let y=0;y<nh;y++) for(let x=0;x<nw;x++){
       let r=0,g=0,b=0,a=0,n=0,ra=0,ga=0,ba=0;
       for(let k=0;k<4;k++){
-        const i=((2*y+(k>>1))*w+2*x+(k&1))*4;
+        const sx=Math.min(2*x+(k&1),w-1), sy=Math.min(2*y+(k>>1),h-1);
+        const i=(sy*w+sx)*4;
         ra+=src[i]; ga+=src[i+1]; ba+=src[i+2];
         if(src[i+3]>=128){ r+=src[i]; g+=src[i+1]; b+=src[i+2]; a+=src[i+3]; n++; }
       }
@@ -3438,9 +3557,10 @@ gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,atlasCv);
       if(n>0){ dst[o]=r/n; dst[o+1]=g/n; dst[o+2]=b/n; } else { dst[o]=ra/4; dst[o+1]=ga/4; dst[o+2]=ba/4; }
       dst[o+3]=n>=2?a/n:0;
     }
-    gl.texImage2D(gl.TEXTURE_2D,++lv,gl.RGBA,nw,nw,0,gl.RGBA,gl.UNSIGNED_BYTE,dst);
-    src=dst; w=nw;
+    gl.texImage2D(gl.TEXTURE_2D,++lv,gl.RGBA,nw,nh,0,gl.RGBA,gl.UNSIGNED_BYTE,dst);
+    src=dst; w=nw; h=nh;
   }
+  ATLAS_MIPS=lv;
 }
 // WebGL2 可截断 mip 链: 第 5 级每格恰好 1px, 再往下才会多格混色
 if(typeof WebGL2RenderingContext!=="undefined" && gl instanceof WebGL2RenderingContext) gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAX_LEVEL,5);
@@ -3492,9 +3612,10 @@ const FACES=[
 ];
 const CORNERS=[[0,0],[1,0],[1,1],[0,1]];
 const AOL=[0.42,0.6,0.8,1.0];
-const TS=1/16, EP=1/512;
+// 图集 512×1024: 横向格宽 TS=1/16、纵向格高 TV=1/32; 内缩护边两轴各 1 texel: EP=1/512(横) EPV=1/1024(纵)
+const TS=1/16, TV=1/32, EP=1/512, EPV=1/1024;
 // 天光可见度: 仅实心不透光方块挡天(树叶不算——树荫交给阴影贴图), 水也不挡
-const SKY_OCC = id => OCCLUDE(id) && id!==LEAVES;
+const SKY_OCC = id => OCCLUDE(id) && id!==LEAVES && id!==PALM_LEAF;
 const _hm=new Int16Array((CS+2)*(CS+2));   // 区块外扩 1 格的高度图: 每列最高挡天方块的 y
 // 某格的天光(0..1): 露天=1; 被遮挡时按"头顶压了多深"衰减, 屋檐下还亮、深洞才暗
 function cellSky(bx,bz,x,y,z){
@@ -3513,14 +3634,14 @@ const shadow={fbo:null, tex:null, size:0, range:0, pcf:0, ok:false, dirty:true,
 const UV_ROT=new Uint8Array(256*2);
 for(const [id,tb,sd] of [[GRASS,2,1],[DIRT,2,1],[STONE,2,1],[SNOW,2,1],[GRAVEL,2,1],[SUSGRAVEL,2,1],
     [COBBLE,2,1],[MOSSY,2,1],[LEAVES,2,1],[PINE_LEAF,2,1],[BLACKSAND,2,1],[SALTCRUST,2,1],[BASALT,2,0],
-    [SAND,1,0],[LOOSESAND,1,0],[OBSIDIAN,2,1]]){   // 砂岩/风蚀岩/陶土是成层条纹, 一转就成棋盘格, 不参与
+    [SAND,1,0],[LOOSESAND,1,0],[OBSIDIAN,2,1],[PALM_LEAF,2,1],[PLASTER,2,1],[PLASTER_ROSE,2,1],[PLASTER_WHITE,2,1],[PALM_LOG,2,1],[GILDED,0,1],[WINDROCK,2,0]]){   // 砂岩/陶土(及风蚀岩侧面)是成层条纹, 一转就成棋盘格; 风蚀岩顶(265)无层理, 可四向旋转
   UV_ROT[id*2]=tb; UV_ROT[id*2+1]=sd;
 }
 const _uvA=[0,0,0,0], _uvB=[0,0,0,0];
 // 风摆类别(写进 aF 的 128 位以上, 见 mainProg): 1 = 十字植物的顶端顶点(根部不动), 2 = 树叶(整块细碎抖动), 0 = 不动
 function swayClass(id, topVert){
   if(PLANT(id)) return (id!==LILY && topVert) ? 1 : 0;
-  return (id===LEAVES || id===PINE_LEAF) ? 2 : 0;
+  return (id===LEAVES || id===PINE_LEAF || id===PALM_LEAF) ? 2 : 0;
 }
 // 水面角点深度: 共享该角点的 4 列水深取平均(非水列记 0), 再减去水面下沉的 0.14 → 岸边角点趋近 0, 供泡沫/深浅色
 const waterCornerDepth=(a,b,c,d)=>Math.max(0,(a+b+c+d)/4-0.14);
@@ -3555,8 +3676,8 @@ function buildChunkMesh(c){
       const def=BLOCKS[id], isW=id===WATER;
       // 十字形植物: 两片交叉的贴图片, 不做面剔除/AO
       if(PLANT(id)){
-        const tile=def.s, u0=(tile%16)*TS, v0=Math.floor(tile/16)*TS;
-        const u1=u0+TS-EP, v1=v0+TS-EP, uu0=u0+EP, vv0=v0+EP;
+        const tile=def.s, u0=(tile%16)*TS, v0=Math.floor(tile/16)*TV;
+        const u1=u0+TS-EP, v1=v0+TV-EPV, uu0=u0+EP, vv0=v0+EPV;
         const yb = id===LILY ? 0.02 : 0;          // 睡莲贴着水面
         const yt = id===LILY ? 0.06 : 1;
         const quads = id===LILY
@@ -3580,9 +3701,9 @@ function buildChunkMesh(c){
         const F=FACES[f], d=F.d;
         const nid=gb(wx+d[0], y+d[1], wz+d[2]);
         if(nid!==AIR && OPAQUE(nid)) continue;
-        if(nid===id && id!==LEAVES) continue;
-        const tile = f===2?def.t : f===3?def.b : def.s;
-        const u0=(tile%16)*TS, v0=Math.floor(tile/16)*TS;
+        if(nid===id && id!==LEAVES && id!==PALM_LEAF) continue;
+        const tile = f===2?def.t : f===3?def.b : id===WINDROCK?WR_SIDE[y&3] : def.s;
+        const u0=(tile%16)*TS, v0=Math.floor(tile/16)*TV;
         const V=isW?wV:oV, I=isW?wI:oI;
         // 本面的贴图朝向: rot(0..3 个 90°) + mir(左右镜像)
         let rot=0, mir=0;
@@ -3634,7 +3755,7 @@ function buildChunkMesh(c){
             } else light=wcol(wx,y,wz);
           }
           const uu=u0+(_uvA[k]?TS-EP:EP);
-          const vv=v0+(_uvB[k]?TS-EP:EP);
+          const vv=v0+(_uvB[k]?TV-EPV:EPV);
           V.push(wx+px, y+py, wz+pz, uu, vv, light, f+8*Math.round(sky*15)+vhi);
         }
         const b=isW?wN:oN;
@@ -3713,7 +3834,7 @@ function collideAxis(axis){
           for(let k=0;k<14;k++) particles.push({
             x:player.x+(Math.random()-.5)*.8, y:player.y+0.1, z:player.z+(Math.random()-.5)*.8,
             vx:(Math.random()-.5)*3, vy:2+Math.random()*3, vz:(Math.random()-.5)*3,
-            life:.45, size:.09, u:(203%16)*TS, v:Math.floor(203/16)*TS, l:2.2});
+            life:.45, size:.09, u:(203%16)*TS, v:Math.floor(203/16)*TV, l:2.2});
         } else { player.vy=0; player.onGround=true; }
       }
     } else {
@@ -3882,7 +4003,7 @@ function completeQuest(){
     x:player.x+(Math.random()-.5)*2, y:player.y+1.4+Math.random()*1.5, z:player.z+(Math.random()-.5)*2,
     vx:(Math.random()-.5)*5, vy:2+Math.random()*4, vz:(Math.random()-.5)*5,
     life:.9+Math.random()*.6, size:.11,
-    u:(FIREWORK_TILES[(Math.random()*FIREWORK_TILES.length)|0]%16)*TS, v:Math.floor(198/16)*TS, l:2.3});
+    u:(FIREWORK_TILES[(Math.random()*FIREWORK_TILES.length)|0]%16)*TS, v:Math.floor(198/16)*TV, l:2.3});
   questIdx++; questProg=0;
   _qWalkX=null; _qDriveX=null;
   if(questIdx>=QUESTS.length){ questDone=true; showVictory(); }
@@ -4856,7 +4977,7 @@ function doBreak(){
   if(brokeId===SUSGRAVEL){ archaeologyDig(hit.x,hit.y,hit.z); questAdd("mine",1); return; }  // 考古刷点: 出土文物, 不进背包
   if(brokeId===TRAPPLATE){ trapFired.add(tkey(hit.x,hit.y,hit.z)); showName("🔧 拆除了机关压力板 — 机关已失效"); return; } // 谨慎的玩家可挖掉压力板来拆解机关
   if(brokeId===LOOSESAND){ trapFired.add(tkey(hit.x,hit.y,hit.z)); bagAdd(SAND,1); return; }  // 松沙挖开只是普通沙子
-  bagAdd(brokeId,1);                                   // 挖到的方块进背包, 供合成消耗
+  bagAdd(brokeId===GILDED?GOLD_ORE:brokeId,1);        // 挖到的方块进背包, 供合成消耗(鎏金饰面 → 金矿石, 与旧装饰金掉落一致)
   const bonus=applyBiomeYield(brokeId);
   if(bonus) showName("⛏ "+(BLOCKS[brokeId]?BLOCKS[brokeId].name:"方块")+" + 群系产材 "+bonus.join("、"));
   questAdd("mine",1);
@@ -4949,7 +5070,7 @@ function spawnParticles(bx,by,bz,id){
       x:bx+0.2+Math.random()*0.6, y:by+0.2+Math.random()*0.6, z:bz+0.2+Math.random()*0.6,
       vx:(Math.random()-0.5)*4, vy:Math.random()*4+1, vz:(Math.random()-0.5)*4,
       life:0.4+Math.random()*0.5, size:0.06+Math.random()*0.07,
-      u:(tile%16)*TS+Math.random()*TS*0.7, v:Math.floor(tile/16)*TS+Math.random()*TS*0.7,
+      u:(tile%16)*TS+Math.random()*TS*0.7, v:Math.floor(tile/16)*TV+Math.random()*TV*0.7,
       l:0.7+Math.random()*0.3,
     });
   }
@@ -5647,7 +5768,7 @@ function pushBox(ent, pt, rot, roll, spin){
   for(let f=0;f<6;f++){
     const F=FACES[f], d=F.d;
     const tile = f===2?pt.tT : f===3?pt.tB : (f===5?pt.tF:pt.tS);
-    const u0=(tile%16)*TS+EP, v0=Math.floor(tile/16)*TS+EP, u1=u0+TS-2*EP, v1=v0+TS-2*EP;
+    const u0=(tile%16)*TS+EP, v0=Math.floor(tile/16)*TV+EPV, u1=u0+TS-2*EP, v1=v0+TV-2*EPV;
     const quad=[], uv=[[u0,v1],[u1,v1],[u1,v0],[u0,v0]];
     for(const [a,b] of [[-1,-1],[1,-1],[1,1],[-1,1]])
       quad.push(corner(d[0]+a*F.u[0]+b*F.v[0], d[1]+a*F.u[1]+b*F.v[1], d[2]+a*F.u[2]+b*F.v[2]));
@@ -5716,7 +5837,7 @@ function deathPoof(m){
     x:m.x+(Math.random()-.5)*.6, y:m.y+Math.random()*m.def.h, z:m.z+(Math.random()-.5)*.6,
     vx:(Math.random()-.5)*3, vy:Math.random()*3+.5, vz:(Math.random()-.5)*3,
     life:.4+Math.random()*.4, size:.07+Math.random()*.06,
-    u:(tile%16)*TS+Math.random()*TS*.7, v:Math.floor(tile/16)*TS+Math.random()*TS*.7, l:1,
+    u:(tile%16)*TS+Math.random()*TS*.7, v:Math.floor(tile/16)*TV+Math.random()*TV*.7, l:1,
   });
 }
 function hurtMob(m,dmg,kx,kz,silent){
@@ -5892,7 +6013,7 @@ function updatePlane(m,dt){
   if(Math.random()<dt*18) particles.push({
     x:m.x-Math.sin(m.yaw)*1.2, y:m.y, z:m.z+Math.cos(m.yaw)*1.2,
     vx:0,vy:0.2,vz:0, life:.6+Math.random()*.5, size:.10,
-    u:12*TS, v:Math.random()*TS*.5, l:1.1});
+    u:12*TS, v:Math.random()*TV*.5, l:1.1});
 }
 /* 悬浮摩托: 没人骑时原地悬停轻晃 */
 function updateBike(m,dt){
@@ -5960,7 +6081,7 @@ function updateFlyer(m,dt,dx,dz,dist){
   if(m.type==="phoenix" && Math.random()<dt*40) particles.push({
     x:m.x+(Math.random()-.5)*1.6, y:m.y+Math.random()*1.2, z:m.z+(Math.random()-.5)*1.6,
     vx:(Math.random()-.5)*1.4, vy:-0.6-Math.random(), vz:(Math.random()-.5)*1.4,
-    life:.5+Math.random()*.5, size:.14, u:15*TS, v:Math.random()*TS*.5, l:2.0});
+    life:.5+Math.random()*.5, size:.14, u:15*TS, v:Math.random()*TV*.5, l:2.0});
 }
 function wyvernBreath(m){
   const ex=m.x, ey=m.y+0.6, ez=m.z;
@@ -6113,7 +6234,7 @@ function updateMobs(dt){
           if(Math.random()<dt*9) particles.push({
             x:m.x+(Math.random()-.5)*.5, y:m.y+Math.random()*D.h, z:m.z+(Math.random()-.5)*.5,
             vx:0, vy:1.5+Math.random(), vz:0, life:.35, size:.09,
-            u:15*TS+Math.random()*TS*.6, v:Math.random()*TS*.6, l:1.6,
+            u:15*TS+Math.random()*TS*.6, v:Math.random()*TV*.6, l:1.6,
           });
           if(m.burnT>0.8){
             m.burnT=0;
@@ -6186,7 +6307,7 @@ function groundY(x,z){
   for(let y=H-1;y>0;y--){
     const b=getBlock(x,y,z);
     if(b===AIR || PLANT(b)) continue;              // 花草可穿过, 继续往下找真正的地面
-    return (SOLID(b)&&b!==LEAVES&&b!==LOG) ? y+1 : -1;
+    return (SOLID(b)&&b!==LEAVES&&b!==LOG&&b!==PALM_LEAF&&b!==PALM_LOG) ? y+1 : -1;
   }
   return -1;
 }
@@ -6804,7 +6925,7 @@ function burstFirework(a){
       x:a.x, y:a.y, z:a.z,
       vx:Math.sin(ph)*Math.cos(th)*sp, vy:Math.cos(ph)*sp, vz:Math.sin(ph)*Math.sin(th)*sp,
       life:0.9+Math.random()*0.8, size:0.10+Math.random()*0.09,
-      u:(tile%16)*TS+Math.random()*TS*0.6, v:Math.floor(tile/16)*TS+Math.random()*TS*0.6, l:2.4});
+      u:(tile%16)*TS+Math.random()*TS*0.6, v:Math.floor(tile/16)*TV+Math.random()*TV*0.6, l:2.4});
   }
   // 副爆: 另一种颜色的小环, 层次更好看
   const t2=FIREWORK_TILES[(Math.random()*FIREWORK_TILES.length)|0];
@@ -6814,7 +6935,7 @@ function burstFirework(a){
       x:a.x, y:a.y, z:a.z,
       vx:Math.cos(th)*sp, vy:(Math.random()-0.5)*1.5, vz:Math.sin(th)*sp,
       life:0.8+Math.random()*0.6, size:0.09,
-      u:(t2%16)*TS+Math.random()*TS*0.6, v:Math.floor(t2/16)*TS+Math.random()*TS*0.6, l:2.4});
+      u:(t2%16)*TS+Math.random()*TS*0.6, v:Math.floor(t2/16)*TV+Math.random()*TV*0.6, l:2.4});
   }
   sfxFirework();
 }
@@ -6882,7 +7003,7 @@ function fireFlame(){                              // 喷火器: 短程锥形持
       x:ox+dx*t+(Math.random()-.5)*sp, y:oy+dy*t+(Math.random()-.5)*sp, z:oz+dz*t+(Math.random()-.5)*sp,
       vx:dx*7+(Math.random()-.5)*2.5, vy:dy*7+(Math.random()-.5)*2.5+1.2, vz:dz*7+(Math.random()-.5)*2.5,
       life:.25+Math.random()*.3, size:.15+Math.random()*.1,
-      u:15*TS, v:Math.random()*TS*.6, l:2.0});
+      u:15*TS, v:Math.random()*TV*.6, l:2.0});
   }
   // 锥形范围伤害: 6 格内、与瞄准方向夹角小的生物会被烧到并着火
   for(let i=mobs.length-1;i>=0;i--){
@@ -6940,7 +7061,7 @@ function updateArrows(dt){
       if(Math.random()<dt*50) particles.push({
         x:a.x+(Math.random()-.5)*.12, y:a.y-0.15, z:a.z+(Math.random()-.5)*.12,
         vx:0, vy:-1.2, vz:0, life:.35, size:.07,
-        u:(a.fwTile%16)*TS, v:Math.floor(a.fwTile/16)*TS, l:2.0});
+        u:(a.fwTile%16)*TS, v:Math.floor(a.fwTile/16)*TV, l:2.0});
       a.fuse-=dt;
       if(a.fuse<=0 || a.vy<0){ burstFirework(a); arrows.splice(i,1); }  // 到点或到顶就炸开
       continue;
@@ -6955,7 +7076,7 @@ function updateArrows(dt){
       particles.push({x:a.x+(Math.random()-.5)*.15, y:a.y+(Math.random()-.5)*.15, z:a.z+(Math.random()-.5)*.15,
         vx:(Math.random()-.5)*.6, vy:(Math.random()-.3)*.8, vz:(Math.random()-.5)*.6,
         life:.3+Math.random()*.3, size:fire?.13:.09,
-        u:(fire?15:12)*TS+Math.random()*TS*.5, v:Math.random()*TS*.5, l:fire?1.7:1.0});
+        u:(fire?15:12)*TS+Math.random()*TS*.5, v:Math.random()*TV*.5, l:fire?1.7:1.0});
     }
     /* 连续碰撞检测(扫掠): 子弹一帧能飞 0.5~1.7 格, 只测终点会直接"穿过"
        无人机/飞机这类又小又快的目标。这里把整段位移切成 <=0.25 格的小步逐个判定。 */
@@ -7073,7 +7194,7 @@ function updateFuses(dt){
     if(Math.random()<dt*14) particles.push({   // 引信火花
       x:f.x+0.3+Math.random()*0.4, y:f.y+1.05, z:f.z+0.3+Math.random()*0.4,
       vx:(Math.random()-.5)*0.6, vy:1.6+Math.random(), vz:(Math.random()-.5)*0.6,
-      life:.3, size:.07, u:15*TS+Math.random()*TS*.6, v:Math.random()*TS*.6, l:1.7,
+      life:.3, size:.07, u:15*TS+Math.random()*TS*.6, v:Math.random()*TV*.6, l:1.7,
     });
     if(f.t<=0){ fuses.splice(i,1); explode(f.x+0.5,f.y+0.5,f.z+0.5); }
   }
@@ -7116,7 +7237,7 @@ function explode(cx,cy,cz,scale){
       x:cx+(Math.random()-.5)*2, y:cy+(Math.random()-.5)*2, z:cz+(Math.random()-.5)*2,
       vx:(Math.random()-.5)*9, vy:Math.random()*7, vz:(Math.random()-.5)*9,
       life:.4+Math.random()*.6, size:.12+Math.random()*.12,
-      u:(fire?15:12)*TS+Math.random()*TS*.6, v:Math.random()*TS*.6, l:fire?1.7:0.9,
+      u:(fire?15:12)*TS+Math.random()*TS*.6, v:Math.random()*TV*.6, l:fire?1.7:0.9,
     });
   }
   // 范围伤害
@@ -8229,7 +8350,7 @@ function render(now){
     const ux=ldy*rz, uy2=ldz*rx-ldx*rz, uz=-ldy*rx;
     const arr=[];
     for(const p of particles){
-      const s=p.size, e2=TS*0.18;
+      const s=p.size, e2=TS*0.18, e2v=TV*0.18;
       // 默认: 面向相机的方片; p.st>0(沙暴沙粒): 沿速度方向拉长成细条, 读起来是被风卷着飞的沙线
       let ax=rx, ay=0, az=rz, bx=ux, by=uy2, bz=uz, sa=s, sb=s;
       if(p.st){
@@ -8238,7 +8359,7 @@ function render(now){
         const l2=Math.hypot(vx,vy,vz);
         if(l2>0.05){ ax=vx/l2; ay=vy/l2; az=vz/l2; bx=ldy*az-ldz*ay; by=ldz*ax-ldx*az; bz=ldx*ay-ldy*ax; sa=s*p.st; sb=s*0.3; }
       }
-      const c4=[[-1,-1,0,0],[1,-1,e2,0],[1,1,e2,e2],[-1,-1,0,0],[1,1,e2,e2],[-1,1,0,e2]];
+      const c4=[[-1,-1,0,0],[1,-1,e2,0],[1,1,e2,e2v],[-1,-1,0,0],[1,1,e2,e2v],[-1,1,0,e2v]];
       for(const [a,b2,du,dv] of c4)
         arr.push(p.x+ax*a*sa+bx*b2*sb, p.y+ay*a*sa+by*b2*sb, p.z+az*a*sa+bz*b2*sb, p.u+du, p.v+dv, p.l);
     }
@@ -8253,11 +8374,11 @@ function render(now){
     const [ldx,ldy,ldz]=lookDir();
     let rx=-ldz, rz=ldx; const rl=Math.hypot(rx,rz)||1; rx/=rl; rz/=rl;
     const ux=ldy*rz, uy2=ldz*rx-ldx*rz, uz=-ldy*rx;
-    const tt=TS-2*EP, arr=[];
+    const tt=TS-2*EP, tv=TV-2*EPV, arr=[];
     for(const p of drops){
       const s=0.2, yb=p.y+0.16+Math.sin(p.bob)*0.06;
-      const u0=(p.tile%16)*TS+EP, v0=Math.floor(p.tile/16)*TS+EP;
-      const c4=[[-1,-1,0,tt],[1,-1,tt,tt],[1,1,tt,0],[-1,-1,0,tt],[1,1,tt,0],[-1,1,0,0]];
+      const u0=(p.tile%16)*TS+EP, v0=Math.floor(p.tile/16)*TV+EPV;
+      const c4=[[-1,-1,0,tv],[1,-1,tt,tv],[1,1,tt,0],[-1,-1,0,tv],[1,1,tt,0],[-1,1,0,0]];
       for(const [a,b2,du,dv] of c4)
         arr.push(p.x+(rx*a+ux*b2)*s, yb+(uy2*b2)*s, p.z+(rz*a+uz*b2)*s, u0+du, v0+dv, 1.0);
     }
@@ -8272,10 +8393,10 @@ function render(now){
     const [ldx,ldy,ldz]=lookDir();
     let rx=-ldz, rz=ldx; const rl=Math.hypot(rx,rz)||1; rx/=rl; rz/=rl;
     const ux=ldy*rz, uy2=ldz*rx-ldx*rz, uz=-ldy*rx;
-    const tt=TS-2*EP, arr=[];
+    const tt=TS-2*EP, tv=TV-2*EPV, arr=[];
     for(const e of trapEnts){
-      const s=e.size, u0=(e.tile%16)*TS+EP, v0=Math.floor(e.tile/16)*TS+EP;
-      const c4=[[-1,-1,0,tt],[1,-1,tt,tt],[1,1,tt,0],[-1,-1,0,tt],[1,1,tt,0],[-1,1,0,0]];
+      const s=e.size, u0=(e.tile%16)*TS+EP, v0=Math.floor(e.tile/16)*TV+EPV;
+      const c4=[[-1,-1,0,tv],[1,-1,tt,tv],[1,1,tt,0],[-1,-1,0,tv],[1,1,tt,0],[-1,1,0,0]];
       for(const [a,b2,du,dv] of c4)
         arr.push(e.x+(rx*a+ux*b2)*s, e.y+(uy2*b2)*s, e.z+(rz*a+uz*b2)*s, u0+du, v0+dv, 1.0);
     }
@@ -8290,20 +8411,20 @@ function render(now){
     const [ldx,ldy,ldz]=lookDir();
     let rx=-ldz, rz=ldx; const rl=Math.hypot(rx,rz)||1; rx/=rl; rz/=rl;
     const ux=ldy*rz, uy2=ldz*rx-ldx*rz, uz=-ldy*rx;
-    const tt=TS-2*EP;
+    const tt=TS-2*EP, tv=TV-2*EPV;
     gl.uniform1i(U.uMode,1);                               // 透明模式: c.a *= uAlpha
     gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
     gl.depthMask(false);
-    // 一簇幻影的相对billboard: [dx,dy(基准), size, tile]  (WATER=5 水泊, LEAVES=8 棕榈冠, CACTUS=73 仙人掌)
-    const cluster=[[0,0.2,3.2,5],[-1.2,2.4,1.9,8],[1.1,2.2,1.7,8],[1.9,1.6,1.3,73]];
+    // 一簇幻影的相对billboard: [dx,dy(基准), size, tile]  (WATER=5 水泊, 262 棕榈叶冠, CACTUS=73 仙人掌)
+    const cluster=[[0,0.2,3.2,5],[-1.2,2.4,1.9,262],[1.1,2.2,1.7,262],[1.9,1.6,1.3,73]];
     for(const g of mirages){
       if(g.alpha<=0.02) continue;
       const shimmer=Math.sin(mirageT*2+g.phase)*0.18;      // 轻微上下浮动模拟热浪蒸腾
       const arr=[];
       for(const [ox,oy,s,tile] of cluster){
-        const u0=(tile%16)*TS+EP, v0=Math.floor(tile/16)*TS+EP;
+        const u0=(tile%16)*TS+EP, v0=Math.floor(tile/16)*TV+EPV;
         const bx=g.x+rx*ox, bz=g.z+rz*ox, by=g.y+oy+shimmer;
-        const c4=[[-1,-1,0,tt],[1,-1,tt,tt],[1,1,tt,0],[-1,-1,0,tt],[1,1,tt,0],[-1,1,0,0]];
+        const c4=[[-1,-1,0,tv],[1,-1,tt,tv],[1,1,tt,0],[-1,-1,0,tv],[1,1,tt,0],[-1,1,0,0]];
         for(const [a,b2,du,dv] of c4)
           arr.push(bx+(rx*a+ux*b2)*s, by+(uy2*b2)*s, bz+(rz*a+uz*b2)*s, u0+du, v0+dv, 1.3);
       }
@@ -8437,7 +8558,7 @@ function updateWeather(dt){
       x:px, y:top, z:pz,
       vx:snowing?(Math.random()-.5)*1.2:0, vy: snowing? -2.4 : -22, vz:snowing?(Math.random()-.5)*1.2:0,
       life: snowing?1.5:0.55, size: snowing?0.07:0.045,
-      u: snowing? 13*TS : 5*TS, v: Math.random()*TS*0.5, l: snowing?1.5:0.85,
+      u: snowing? 13*TS : 5*TS, v: Math.random()*TV*0.5, l: snowing?1.5:0.85,
     });
   }
   // 雷暴: 闪电劈击
@@ -8901,7 +9022,7 @@ function safeStandY(x,z){
   if(!world.has(key(x>>4,z>>4))) return -1;
   for(let y=H-3;y>WATER_Y;y--){
     const below=getBlock(x,y-1,z);
-    if(!SOLID(below) || below===LEAVES || below===LOG) continue;   // 找到一块能站的实心地面
+    if(!SOLID(below) || below===LEAVES || below===LOG || below===PALM_LEAF || below===PALM_LOG) continue;   // 找到一块能站的实心地面
     // 头顶两格必须是空的(植物可穿过)
     const feet=getBlock(x,y,z), head=getBlock(x,y+1,z);
     const clear=(b)=> b===AIR || PLANT(b);
@@ -9676,7 +9797,7 @@ function triggerPlate(x,y,z){
   if(getBlock(x,y,z)===TRAPPLATE) setBlock(x,y,z,SANDSTONE);   // 压下后露出"已触发"的素砂岩
   const roll=hash3(x*3+1,y*5+2,z*7+3);
   for(let i=0;i<14;i++) particles.push({x:x+0.5+(Math.random()-.5), y:y+1+Math.random(), z:z+0.5+(Math.random()-.5),
-    vx:(Math.random()-.5)*2, vy:0.5+Math.random()*2, vz:(Math.random()-.5)*2, life:.5, size:.08, u:(83%16)*TS, v:0, l:1.4});
+    vx:(Math.random()-.5)*2, vy:0.5+Math.random()*2, vz:(Math.random()-.5)*2, life:.5, size:.08, u:(83%16)*TS, v:Math.floor(83/16)*TV, l:1.4});
   if(roll<0.4){                                     // 落石: 从头顶天花板砸下一串碎石
     showName("⚠ 咔哒——头顶传来碎石松动声！(落石)");
     for(let n=0;n<4+((roll*10)|0)%3;n++){
@@ -9724,17 +9845,17 @@ function updateTraps(dt){
     if(e.kind==="rock"){
       e.vy-=26*dt; e.y+=e.vy*dt;
       if(Math.random()<dt*22) particles.push({x:e.x+(Math.random()-.5)*.5, y:e.y, z:e.z+(Math.random()-.5)*.5,
-        vx:0, vy:-0.5, vz:0, life:.4, size:.07, u:(83%16)*TS, v:0, l:1.1});
+        vx:0, vy:-0.5, vz:0, life:.4, size:.07, u:(83%16)*TS, v:Math.floor(83/16)*TV, l:1.1});
       // 砸中玩家
       if(Math.abs(e.x-player.x)<0.7 && Math.abs(e.z-player.z)<0.7 && e.y>player.y-0.3 && e.y<player.y+PH){
         if(!dead){ damagePlayer(6,0,0); trapState.hits++; }
-        for(let k=0;k<10;k++) particles.push({x:e.x,y:e.y,z:e.z,vx:(Math.random()-.5)*4,vy:Math.random()*3,vz:(Math.random()-.5)*4,life:.4,size:.1,u:(83%16)*TS,v:0,l:1.2});
+        for(let k=0;k<10;k++) particles.push({x:e.x,y:e.y,z:e.z,vx:(Math.random()-.5)*4,vy:Math.random()*3,vz:(Math.random()-.5)*4,life:.4,size:.1,u:(83%16)*TS,v:Math.floor(83/16)*TV,l:1.2});
         trapEnts.splice(i,1); continue;
       }
       // 落地
       const gb=getBlock(Math.floor(e.x),Math.floor(e.y-0.4),Math.floor(e.z));
       if(SOLID(gb) || e.y<-8){
-        for(let k=0;k<8;k++) particles.push({x:e.x,y:e.y,z:e.z,vx:(Math.random()-.5)*3,vy:Math.random()*2,vz:(Math.random()-.5)*3,life:.4,size:.09,u:(83%16)*TS,v:0,l:1.0});
+        for(let k=0;k<8;k++) particles.push({x:e.x,y:e.y,z:e.z,vx:(Math.random()-.5)*3,vy:Math.random()*2,vz:(Math.random()-.5)*3,life:.4,size:.09,u:(83%16)*TS,v:Math.floor(83/16)*TV,l:1.0});
         trapEnts.splice(i,1); continue;
       }
     } else {                                         // boulder: 沿走廊滚动
@@ -9742,7 +9863,7 @@ function updateTraps(dt){
       if(SOLID(getBlock(Math.floor(nx),Math.floor(e.y),Math.floor(nz)))){ trapEnts.splice(i,1); continue; } // 撞墙停
       e.x=nx; e.z=nz;
       if(Math.random()<dt*30) particles.push({x:e.x+(Math.random()-.5)*.8, y:e.y-0.3, z:e.z+(Math.random()-.5)*.8,
-        vx:0, vy:0.3, vz:0, life:.4, size:.09, u:(83%16)*TS, v:0, l:1.1});
+        vx:0, vy:0.3, vz:0, life:.4, size:.09, u:(83%16)*TS, v:Math.floor(83/16)*TV, l:1.1});
       if(Math.abs(e.x-player.x)<0.9 && Math.abs(e.z-player.z)<0.9 && player.y>e.y-1.2 && player.y<e.y+1.4){
         if(!dead){ const d=Math.hypot(e.vx,e.vz)||1; damagePlayer(6, e.vx/d*9, e.vz/d*9); trapState.hits++; }
         trapEnts.splice(i,1); continue;
@@ -10028,10 +10149,10 @@ function selftest(){
         const c=id=>cnt[id]||0;
         ok("村落生成无异常, 有水塘/睡莲/芦苇", !vErr && c(WATER)>=40 && c(LILY)>0 && c(TALLGRASS)>=20, vErr||("水="+c(WATER)+" 睡莲="+c(LILY)+" 高草="+c(TALLGRASS)));
         ok("村落有路灯(≥8 盏灯笼)与石板路", c(LANTERN)>=8 && c(COBBLE)>=60 && P.lamps.length>=4, "灯笼="+c(LANTERN)+" 圆石="+c(COBBLE)+" 路灯="+P.lamps.length);
-        ok("村屋有窗/灰泥或泥砖墙/陶瓦或木屋顶", c(GLASS)>=P.houses.length*4 && (c(CLAY)+c(CAVECALC)+c(WOOL))>=100 && (c(ROOFTILE)+c(DARKPLANK))>=40,
-           "玻璃="+c(GLASS)+" 墙="+(c(CLAY)+c(CAVECALC)+c(WOOL))+" 顶="+(c(ROOFTILE)+c(DARKPLANK)));
-        ok("村落有棕榈/集市摊/水井/苔石墙拱门", P.palms.length>=3 && !!P.market && !!P.well && P.gates.length===2 && c(MOSSY)>=30 && c(LOG)>=20,
-           "棕榈="+P.palms.length+" 苔石="+c(MOSSY)+" 原木="+c(LOG));
+        ok("村屋有窗/灰泥或泥砖墙/陶瓦或木屋顶", (c(GLASS)+c(WINDOW_WOOD))>=P.houses.length*4 && (c(CLAY)+c(CAVECALC)+c(WOOL)+c(PLASTER)+c(PLASTER_ROSE)+c(PLASTER_WHITE))>=100 && (c(ROOFTILE)+c(DARKPLANK))>=40,
+           "窗="+(c(GLASS)+c(WINDOW_WOOD))+" 墙="+(c(CLAY)+c(CAVECALC)+c(WOOL)+c(PLASTER)+c(PLASTER_ROSE)+c(PLASTER_WHITE))+" 顶="+(c(ROOFTILE)+c(DARKPLANK)));
+        ok("村落有棕榈/集市摊/水井/苔石墙拱门", P.palms.length>=3 && !!P.market && !!P.well && P.gates.length===2 && c(MOSSY)>=30 && (c(LOG)+c(PALM_LOG))>=20,
+           "棕榈="+P.palms.length+" 苔石="+c(MOSSY)+" 原木="+(c(LOG)+c(PALM_LOG)));
         let sig2=0; drawStructure(vs,(X,Y,Z,id)=>{ sig2=(sig2*31+X*7+Y*13+Z*17+id)|0; });
         ok("村落生成确定(两次施工完全一致)", sig===sig2, sig+" vs "+sig2);
         // 真实区块: 水塘中心是水; 第一栋房子的门楣/腰梁出现在它所在的区块里(跨区块拼接)
@@ -10782,6 +10903,34 @@ function selftest(){
       const g0=gfxLevel; setGfx(0); const offOk=!shadow.ok; setGfx(g0);
       ok("材质: 逐块旋转——松沙陷坑与沙子同模式(伪装不露馅), 沙纹只转180°, 草地四向", UV_ROT[LOOSESAND*2]===UV_ROT[SAND*2] && UV_ROT[LOOSESAND*2+1]===UV_ROT[SAND*2+1] && UV_ROT[SAND*2]===1 && UV_ROT[GRASS*2]===2,
          "sand="+UV_ROT[SAND*2]+" loose="+UV_ROT[LOOSESAND*2]);
+      // ---- 图集扩页(512×1024)与村落建材 ----
+      ok("图集: 512×1024 = 16 列 × 32 行, TV=1/32, 纵向护边 EPV=1/1024, 完整 mip 链 10 级",
+         atlasCv.width===512 && atlasCv.height===1024 && TV===1/32 && EPV===1/1024 && ATLAS_MIPS===10,
+         atlasCv.width+"×"+atlasCv.height+" mips="+ATLAS_MIPS);
+      { // 每个方块面贴图: 编号合法, 内缩后的 UV 落在本格可见区(格内 1..30 px)——两轴都查, 防串格
+        let bad="";
+        const inTile=(t)=>{ const u0=(t%16)*TS, v0=Math.floor(t/16)*TV, px=(t%16)*32, py=Math.floor(t/16)*32;
+          const us=[u0+EP,u0+TS-EP], vs=[v0+EPV,v0+TV-EPV];
+          return us.every(u=>{ const x=Math.floor(u*512+1e-6); return x>=px+1 && x<=px+31; })
+              && vs.every(v=>{ const y=Math.floor(v*1024+1e-6); return y>=py+1 && y<=py+31; }); };
+        for(const id in BLOCKS){ const B=BLOCKS[id]; for(const t of [B.t,B.b,B.s]) if(!(t>=0 && t<16*TX_ROWS) || !inTile(t)) bad+=id+":"+t+" "; }
+        for(const t of WR_SIDE) if(!inTile(t)) bad+="WR:"+t+" ";
+        if(!inTile(511)) bad+="511 ";
+        ok("图集: 全部方块贴图编号 < 512 且 UV 内缩后不越出本格(横/纵各 1 texel 护边)", !bad, bad||"ok");
+      }
+      { // 新贴图槽 256-270 确实画了东西(不透明块满覆盖, 棕榈叶/芦苇有镂空)
+        const alphaFrac=(t)=>{ const d=actx.getImageData((t%16)*32+1,Math.floor(t/16)*32+1,30,30).data; let a=0; for(let i=3;i<d.length;i+=4) if(d[i]>=128) a++; return a/900; };
+        const solid=[256,257,258,259,260,261,264,265,266,267,268,269].filter(t=>alphaFrac(t)<0.999);
+        const pl=alphaFrac(262), rd=alphaFrac(263);
+        ok("图集: 新贴图 256-270 已绘制(灰泥/木框窗/棕榈/铁件/风蚀岩顶与岩层/鎏金满覆盖; 棕榈叶 30~75% 覆盖)", !solid.length && pl>0.3 && pl<0.75 && rd>0.03 && rd<0.5,
+           "缺="+solid.join(",")+" 棕榈叶="+pl.toFixed(2)+" 芦苇="+rd.toFixed(2));
+      }
+      ok("村落建材: 灰泥×3/木框窗/棕榈干叶/芦苇/鎏金已注册(ID 63-70 不与旧存档冲突), 属性正确",
+         [PLASTER,PLASTER_ROSE,PLASTER_WHITE,WINDOW_WOOD,PALM_LOG,PALM_LEAF,REEDS,GILDED].every((id,i)=>id===63+i && !!BLOCKS[id] && !!BLOCKS[id].name)
+         && [PLASTER,PLASTER_ROSE,PLASTER_WHITE,WINDOW_WOOD,PALM_LOG,GILDED].every(id=>SOLID(id)&&OPAQUE(id)&&OCCLUDE(id)&&!EMISSIVE(id))
+         && !OPAQUE(PALM_LEAF) && !SKY_OCC(PALM_LEAF) && swayClass(PALM_LEAF,false)===2 && PLANT(REEDS) && !SOLID(REEDS)
+         && BLOCKS[WINDROCK].t===265 && BLOCKS[WINDROCK].s===99 && WR_SIDE.length===4 && BLOCKS[LANTERN].s===94,
+         "ids="+[PLASTER,GILDED].join("-"));
       ok("光影: 画质切到「低」关闭阴影, 切回恢复", offOk && (shadow.ok || !HAS_DEPTH_TEX), "restored="+shadow.ok);
     }
 
