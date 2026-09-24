@@ -7983,8 +7983,8 @@ const GFX_PRESETS=[
   // clouds = 云噪声层数(3..5), cshadow = 地面云影开关
   {shadow:false, post:false, clouds:3, cshadow:0},                                                          // 低: 无阴影贴图、无后处理(直出画布)
   {shadow:true, size:1024, range:40, pcf:0, post:true, bloom:true, fxaa:true, clouds:4, cshadow:1},         // 中: + 泛光/调色/暗角/FXAA
-  {shadow:true, size:2048, range:56, pcf:1, post:true, bloom:true, fxaa:true, msaa:0, heat:true, clouds:5, cshadow:1},   // 高(电脑默认): + 正午热浪
-  {shadow:true, size:4096, range:80, pcf:1, post:true, bloom:true, fxaa:true, msaa:0, heat:true, dof:true, clouds:5, cshadow:1}, // 极致: + 远景柔化
+  {shadow:true, size:2048, range:56, pcf:1, post:true, bloom:true, fxaa:true, msaa:0, heat:true, clouds:5, cshadow:1, rays:12},   // 高(电脑默认): + 正午热浪 + 光束
+  {shadow:true, size:4096, range:80, pcf:1, post:true, bloom:true, fxaa:true, msaa:0, heat:true, dof:true, clouds:5, cshadow:1, rays:20}, // 极致: + 远景柔化
 ];
 let gfxLevel=2;
 try{ const v=parseInt(localStorage.getItem("sandsea_gfx"),10); if(v>=0 && v<GFX_PRESETS.length) gfxLevel=v; }catch(e){}
@@ -8076,6 +8076,30 @@ in vec2 vUV; out vec4 o;
 uniform sampler2D uScene, uBloom, uDepth, uDof;
 uniform vec2 uRcp; uniform float uAspect, uTime, uSubpix, uBloomI, uVig, uHeat, uDofOn, uNear, uFar, uDofNear, uDofFar;
 uniform vec3 uWB;
+// 光束(god rays): 沿视线从相机步进到深度命中点, 每步查太阳阴影贴图, 被遮挡处留下暗缝 → 棕榈/拱门/峡谷边缘漏下光柱
+uniform sampler2D uShadowMap; uniform mat4 uLightPV, uInvPV;
+uniform vec3 uCamP, uSunDirW, uRayCol; uniform float uRayI, uRaySteps;
+float ign(vec2 p){ return fract(52.9829189*fract(dot(p, vec2(0.06711056, 0.00583715)))); }
+vec3 godRays(vec2 uv){
+  float d = texture(uDepth, uv).r;
+  vec4 wp = uInvPV * vec4(uv*2.0-1.0, d*2.0-1.0, 1.0);
+  vec3 hit = wp.xyz / wp.w;
+  vec3 dir = hit - uCamP; float dl = length(dir); dir /= max(dl, 1e-3);
+  float Lm = min(dl, 72.0);                                          // 最多走 72 格
+  float j = ign(gl_FragCoord.xy), lit = 0.0;
+  for(int i=0;i<24;i++){
+    if(float(i) >= uRaySteps) break;
+    vec3 p = uCamP + dir*(Lm*(float(i)+j)/uRaySteps);
+    vec3 s = (uLightPV*vec4(p,1.0)).xyz*0.5 + 0.5;
+    bool outside = s.x<0.0 || s.y<0.0 || s.x>1.0 || s.y>1.0 || s.z>1.0;
+    lit += outside ? 1.0 : step(s.z - 0.0015, texture(uShadowMap, s.xy).r);
+  }
+  lit /= uRaySteps;
+  float mu = dot(dir, uSunDirW), g = 0.62;
+  float hg = (1.0-g*g) / pow(1.0 + g*g - 2.0*g*mu, 1.5) * 0.0796;    // Henyey-Greenstein 前向散射
+  float skyK = d > 0.99999 ? 0.3 : 1.0;                             // 天空本就有日晕, 光束只点到为止, 免得太阳一侧整片发白
+  return uRayCol * (lit * hg * Lm * 0.0055 * skyK) * uRayI;
+}
 float L(vec2 uv){ return dot(texture(uScene,uv).rgb, vec3(0.299,0.587,0.114)); }
 float linZ(vec2 uv){ float d=texture(uDepth,uv).r; return uNear*uFar/(uFar-d*(uFar-uNear)); }
 float hash12(vec2 p){ vec3 p3=fract(vec3(p.xyx)*0.1031); p3+=dot(p3,p3.yzx+33.33); return fract((p3.x+p3.y)*p3.z); }
@@ -8143,6 +8167,7 @@ void main(){
     uv.y+=sin(uv.y*230.0+uTime*5.0)*sin(uv.x*37.0+uTime*1.7)*0.0009*uHeat*smoothstep(60.0,140.0,z);
   }
   vec3 c=fxaa(uv);
+  if(uRayI>0.001) c+=godRays(uv);
   if(uDofOn>0.5){    // 极致: 远景大气柔化(近处永不模糊, 不影响操作); 天空不参与
     float d=texture(uDepth,uv).r;
     float z=uNear*uFar/(uFar-d*(uFar-uNear));
@@ -8294,6 +8319,25 @@ function postPass(prog,dst,srcTex,srcW,srcH){
 }
 /* render() 结尾: 解析 MSAA → 泛光链 → 远景柔化 → 合成到画布 */
 let _postMaxAttr=0;
+// 光束要从深度还原世界坐标: render() 每帧存下相机位置与 (投影×视图) 的逆矩阵
+const _postCam={p:[0,0,0], inv:null};
+function matInvert(m){
+  const a=m, o=new Float32Array(16);
+  const b00=a[0]*a[5]-a[1]*a[4], b01=a[0]*a[6]-a[2]*a[4], b02=a[0]*a[7]-a[3]*a[4], b03=a[1]*a[6]-a[2]*a[5];
+  const b04=a[1]*a[7]-a[3]*a[5], b05=a[2]*a[7]-a[3]*a[6], b06=a[8]*a[13]-a[9]*a[12], b07=a[8]*a[14]-a[10]*a[12];
+  const b08=a[8]*a[15]-a[11]*a[12], b09=a[9]*a[14]-a[10]*a[13], b10=a[9]*a[15]-a[11]*a[13], b11=a[10]*a[15]-a[11]*a[14];
+  let det=b00*b11-b01*b10+b02*b09+b03*b08-b04*b07+b05*b06;
+  if(!det) return null; det=1/det;
+  o[0]=(a[5]*b11-a[6]*b10+a[7]*b09)*det;  o[1]=(a[2]*b10-a[1]*b11-a[3]*b09)*det;
+  o[2]=(a[13]*b05-a[14]*b04+a[15]*b03)*det; o[3]=(a[10]*b04-a[9]*b05-a[11]*b03)*det;
+  o[4]=(a[6]*b08-a[4]*b11-a[7]*b07)*det;  o[5]=(a[0]*b11-a[2]*b08+a[3]*b07)*det;
+  o[6]=(a[14]*b02-a[12]*b05-a[15]*b01)*det; o[7]=(a[8]*b05-a[10]*b02+a[11]*b01)*det;
+  o[8]=(a[4]*b10-a[5]*b08+a[7]*b06)*det;  o[9]=(a[1]*b08-a[0]*b10-a[3]*b06)*det;
+  o[10]=(a[12]*b04-a[13]*b02+a[15]*b00)*det; o[11]=(a[9]*b02-a[8]*b04-a[11]*b00)*det;
+  o[12]=(a[5]*b07-a[4]*b09-a[6]*b06)*det; o[13]=(a[0]*b09-a[1]*b07+a[2]*b06)*det;
+  o[14]=(a[13]*b01-a[12]*b03-a[14]*b00)*det; o[15]=(a[8]*b03-a[9]*b01+a[10]*b00)*det;
+  return o;
+}
 function postEnd(now, uw, fogFar){
   // 关掉所有顶点属性数组: 全屏三角形用 gl_VertexID 不需要属性; 也避免下一帧开头的天空绘制
   // 碰到"指向已删除区块缓冲的属性"(INVALID_OPERATION)。各绘制段都会自己重新启用需要的属性。
@@ -8307,7 +8351,13 @@ function postEnd(now, uw, fogFar){
   if(P.heat && !uw && weather==="clear" && aridBiome(biomeAt(Math.floor(player.x),Math.floor(player.z)))) heatT=smoothstep(0.5,0.9,sunH);
   post.heat=P.heat ? post.heat+(heatT-post.heat)*0.03 : 0;
   const dofOn=post.dof.length===2;
-  const needDepth=post.heat>0.001 || dofOn;
+  // 光束强度: 黄金时段最盛, 正午淡淡一层; 水下/无阴影/月光投影时关; 雨雷暴减弱, 沙暴本就浑浊
+  let rayI=0;
+  if(P.rays && shadow.ok && !uw && _ls.useSun){
+    rayI=_ls.sunI*(0.25+0.75*_ls.warm)*(weather==="rain"||weather==="storm"?0.35:(weather==="sand"?0.6:1));
+  }
+  post.rays=rayI;
+  const needDepth=post.heat>0.001 || dofOn || rayI>0.001;
   if(post.msFbo){
     gl.bindFramebuffer(gl.READ_FRAMEBUFFER,post.msFbo);
     gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER,post.fbo);
@@ -8359,8 +8409,21 @@ function postEnd(now, uw, fogFar){
   gl.uniform1f(c.uDofOn,dofOn?1:0);
   gl.uniform1f(c.uNear,0.1); gl.uniform1f(c.uFar,1000);          // 与 render() 里 matPersp 的近/远裁剪面一致
   gl.uniform1f(c.uDofNear,Math.min(110,fogFar*0.62)); gl.uniform1f(c.uDofFar,Math.max(fogFar*1.25,160));
+  gl.uniform1f(c.uRayI,rayI);
+  if(rayI>0.001 && _postCam.inv){
+    gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D,shadow.tex);
+    gl.uniform1i(c.uShadowMap,4);
+    gl.uniformMatrix4fv(c.uLightPV,false,shadow.lpv);
+    gl.uniformMatrix4fv(c.uInvPV,false,_postCam.inv);
+    gl.uniform3fv(c.uCamP,_postCam.p);
+    gl.uniform3fv(c.uSunDirW,_ls.sun);
+    const sc=_ls.sunCol, k=1/Math.max(0.05,1.15*_ls.sunI);
+    gl.uniform3f(c.uRayCol,Math.pow(sc[0]*k,1/2.2),Math.pow(sc[1]*k,1/2.2),Math.pow(sc[2]*k,1/2.2));
+    gl.uniform1f(c.uRaySteps,P.rays);
+  } else if(c.uRayI) gl.uniform1f(c.uRayI,0);
   gl.drawArrays(gl.TRIANGLES,0,3);
   // 还原 render() 依赖的状态
+  gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D,null);
   for(let u=3;u>=1;u--){ gl.activeTexture(gl.TEXTURE0+u); gl.bindTexture(gl.TEXTURE_2D,null); }
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,atlasTex);
   gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
@@ -8408,6 +8471,7 @@ function lightState(){
   _ls.sunI=sunI; _ls.warm=warm;
   const moonI=night*0.30;
   const useSun=sunI>=moonI;
+  _ls.useSun=useSun;
   const L=useSun?_ls.sun:_ls.moon;
   _ls.light[0]=L[0]; _ls.light[1]=L[1]; _ls.light[2]=L[2];
   // 光的颜色(线性空间)
@@ -8641,6 +8705,7 @@ function render(now){
   const proj=matPersp(fov,w/h,0.1,1000);
   const view=matMul(matMul(matRotX(vPitch),matRotY(vYaw)),matTrans(-camX,-camY,-camZ));
   const pv=matMul(proj,view);
+  _postCam.p[0]=camX; _postCam.p[1]=camY; _postCam.p[2]=camZ; _postCam.inv=matInvert(pv);   // 供后处理光束还原世界坐标
   updateFrustum(pv);                          // 每帧刷新视锥平面, 供区块剔除
   // 相机相关的天空状态: 小坐标原点(每 1024 格对齐)、云层偏移(取模, 见 cloudUV 说明)、着色器时间
   {
@@ -11476,6 +11541,9 @@ function selftest(){
       const glErr=gl.getError();
       ok("后处理: 「高」档渲染一帧 无 GL 错误且合成到画布", !rErr && glErr===gl.NO_ERROR && (!POST_CAN || post.broken || post.frames===f0+1),
          "err="+glErr+" "+rErr+" frames="+(post.frames-f0)+" broken="+post.broken);
+      ok("光束: 「高」档合成着色器含光束步进(uRayI/阴影贴图/逆矩阵), 且上一帧已存相机逆矩阵",
+         !POST_CAN || post.broken || (post.progs && post.progs.comp.uRayI!=null && post.progs.comp.uInvPV!=null && !!_postCam.inv && GFX_PRESETS[2].rays>0 && !GFX_PRESETS[1].rays),
+         "rays="+GFX_PRESETS.map(x=>x.rays||0));
       setGfx(g0);
       // 拍照模式: F1 切换, 隐藏物品栏/准星, 保留水下色调; 再按恢复
       const pm0=photoMode;
