@@ -2110,13 +2110,22 @@ function setBlock(x,y,z,id){
   const cx=x>>4, cz=z>>4, c=world.get(key(cx,cz));
   if(!c) return;
   if(worldGenReady) blockDiff.set(x+","+y+","+z, id);
-  c.blocks[((x&15)*CS+(z&15))*H+y]=id;
+  const bi=((x&15)*CS+(z&15))*H+y, old=c.blocks[bi];
+  c.blocks[bi]=id;
   _gcx=1e9; // 失效缓存
   buildChunkMesh(c);
   const lx=x&15, lz=z&15;
-  const touch=(ncx,ncz)=>{ const n=world.get(key(ncx,ncz)); if(n&&n.mesh) buildChunkMesh(n); };
-  if(lx===0)  touch(cx-1,cz); if(lx===15) touch(cx+1,cz);
-  if(lz===0)  touch(cx,cz-1); if(lz===15) touch(cx,cz+1);
+  // 邻区块重建: 贴边(面剔除), 或方块光可能变了 —— 放/拆光源, 或改动点处在光里(挡住/放开了光路)。
+  // 光的影响半径 r = max(光源等级, 改动点及其 6 邻格的光级); 只重建 r 格以内的邻块(含对角), 远离灯光的挖掘不多花一分钱
+  let r=Math.max(EMIT_LV[old], EMIT_LV[id], blockLightAt(x,y,z));
+  for(const [ox,oy,oz] of [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]]) r=Math.max(r, blockLightAt(x+ox,y+oy,z+oz));
+  for(let dx=-1;dx<=1;dx++) for(let dz=-1;dz<=1;dz++){
+    if(!dx && !dz) continue;
+    const n=world.get(key(cx+dx,cz+dz)); if(!n || !n.mesh) continue;
+    const ex=dx<0?lx:dx>0?CS-1-lx:0, ez=dz<0?lz:dz>0?CS-1-lz:0;
+    const edge=(dx===0||dz===0) && ex===0 && ez===0;
+    if(edge || (r>0 && ex<=r && ez<=r)) buildChunkMesh(n);
+  }
 }
 
 /* ---------- 兼容性兜底: 任何一步失败都显示友好中文提示页, 绝不白屏 ---------- */
@@ -2366,16 +2375,21 @@ const FS_PREC=`
   #else
   precision mediump float;
   #endif`;
+// 方块光颜色(线性空间, 暖橙烛光)与强度: 夜里强、黄昏中等、正午只剩一点(白天日光本身就亮)
+const BL_COL_GLSL="vec3(1.0, 0.72, 0.40)";
+const blockLightK=sunH=>2.4-2.05*smoothstep(-0.05,0.35,sunH);
 const mainProg = makeShader(`
   attribute vec3 aPos; attribute vec2 aUV; attribute float aL; attribute float aF;
   uniform mat4 uPV, uLightPV; uniform vec3 uOffset; uniform vec2 uUVOff; uniform vec3 uEye;
   uniform float uShadowBias, uWTime; uniform vec3 uWind, uWOrig;
-  varying vec2 vUV; varying float vL, vSky, vKind;
+  varying vec2 vUV; varying float vL, vSky, vKind, vBL;
   varying vec3 vN, vRel, vSh;
   void main(){
     vec3 p = aPos + uOffset;
-    float cls = floor(aF/128.0 + 0.001);
-    float fa = aF - cls*128.0;
+    float bl = floor(aF/2048.0 + 0.0001);          // aF 解码顺序: 方块光 → 类别 → 天光 → 面(见 packAF)
+    float a2 = aF - bl*2048.0;
+    float cls = floor(a2/128.0 + 0.001);
+    float fa = a2 - cls*128.0;
     float sky = floor(fa/8.0 + 0.01);
     float f = fa - sky*8.0;
     if(cls > 0.5){                       // 风吹: 植物顶端大幅弯摆, 树叶细碎抖动; 阵风在世界里缓慢推移
@@ -2388,7 +2402,7 @@ const mainProg = makeShader(`
       if(cls > 1.5) p.y += 0.015*uWind.y*sin(uWTime*2.7 + ph*2.3)*gust;
     }
     gl_Position = uPV * vec4(p,1.0);
-    vUV = aUV + uUVOff; vL = aL;
+    vUV = aUV + uUVOff; vL = aL; vBL = bl/15.0;
     ${FACE_N_GLSL}
     vKind = f<5.5 ? 0.0 : (f<6.5 ? 1.0 : 2.0);
     vSky = f<6.5 ? sky/15.0 : 1.0;
@@ -2398,11 +2412,11 @@ const mainProg = makeShader(`
     vec4 ls = uLightPV * vec4(p + n*uShadowBias, 1.0);
     vSh = ls.xyz*0.5 + 0.5;
   }`,FS_PREC+`
-  varying vec2 vUV; varying float vL, vSky, vKind;
+  varying vec2 vUV; varying float vL, vSky, vKind, vBL;
   varying vec3 vN, vRel, vSh;
   uniform sampler2D uTex;
   uniform vec3 uTint, uSunDir, uSunCol, uAmbCol;
-  uniform float uDay, uAlpha;
+  uniform float uDay, uAlpha, uBlk;
   uniform int uMode;
   ${SKY_GLSL}
   ${FOG_GLSL}
@@ -2436,6 +2450,8 @@ const mainProg = makeShader(`
       float dirVis = sh * clamp(vSky*2.4 - 0.25, 0.0, 1.0);
       if(uCloudShadow > 0.0 && dirVis > 0.0) dirVis *= 1.0 - uCloudShadow*cloudShade(vRel);   // 云影缓缓掠过沙丘
       light = uAmbCol * (hemi * skyAmb * ao) + uSunCol * (direct * dirVis * mix(1.0, ao, 0.45));
+      // 方块光: 灯笼/岩浆/水晶周围的暖色光池(夜里明显, 正午几乎看不出); 平滑衰减, 墙角随 AO 略暗
+      if(vBL > 0.0) light += ${BL_COL_GLSL} * (uBlk * pow(vBL, 3.2) * mix(1.0, ao, 0.5));
       // 浅水底的焦散光纹(只在露天水域: 天光可见度门控, 洞穴里不出现)
       vec3 wp = vRel + uEyeL;
       if(vKind < 1.5 && vSky > 0.8 && wp.y < ${GLSL_F(WATER_Y)}+0.9){
@@ -2461,11 +2477,13 @@ const mainProg = makeShader(`
 const waterProg = makeShader(`
   attribute vec3 aPos; attribute vec2 aUV; attribute float aL; attribute float aF;
   uniform mat4 uPV, uLightPV; uniform vec3 uEye, uWOrig; uniform float uWTime, uShadowBias;
-  varying vec3 vRel, vN, vSh; varying float vDepth, vCls, vShore;
+  varying vec3 vRel, vN, vSh; varying float vDepth, vCls, vShore, vBL;
   void main(){
     vec3 p = aPos;
-    float cls = floor(aF/128.0 + 0.001);
-    float fa = aF - cls*128.0;
+    float bl = floor(aF/2048.0 + 0.0001);          // 与 mainProg 同一解码顺序
+    float a2 = aF - bl*2048.0;
+    float cls = floor(a2/128.0 + 0.001);
+    float fa = a2 - cls*128.0;
     float sky = floor(fa/8.0 + 0.01);
     float f = fa - sky*8.0;
     ${FACE_N_GLSL}
@@ -2474,13 +2492,13 @@ const waterProg = makeShader(`
     if(abs(fract(p.y) - 0.86) < 0.02) p.y += 0.03*sin(uWTime*1.3 + q.x*0.7 + q.z*0.45) - 0.015;
     gl_Position = uPV * vec4(p, 1.0);
     float land = floor(cls/2.0 + 0.01);
-    vRel = p - uEye; vN = n; vDepth = aL; vCls = cls - land*2.0; vShore = land*0.25;
+    vRel = p - uEye; vN = n; vDepth = aL; vCls = cls - land*2.0; vShore = land*0.25; vBL = bl/15.0;
     vec4 ls = uLightPV * vec4(p + n*uShadowBias, 1.0);
     vSh = ls.xyz*0.5 + 0.5;
   }`,FS_PREC+`
-  varying vec3 vRel, vN, vSh; varying float vDepth, vCls, vShore;
+  varying vec3 vRel, vN, vSh; varying float vDepth, vCls, vShore, vBL;
   uniform vec3 uSunDir, uSunCol, uAmbCol, uGlint, uShallow, uDeep, uShallow2, uDeep2;
-  uniform float uDay;
+  uniform float uDay, uBlk;
   ${SKY_GLSL}
   ${FOG_GLSL}
   ${SHADOW_GLSL}
@@ -2520,6 +2538,7 @@ const waterProg = makeShader(`
     float k = 1.0 - exp(-vDepth*0.6);
     vec3 cS = mix(uShallow, uShallow2, vCls), cD = mix(uDeep, uDeep2, vCls);
     vec3 lk = (uAmbCol*0.9 + uSunCol*0.45*max(uSunDir.y, 0.0)*mix(0.55, 1.0, sh*cs)) * uDay;
+    if(vBL > 0.0) lk += ${BL_COL_GLSL} * (uBlk * 0.8 * pow(vBL, 3.2));   // 岸边灯笼照亮水面
     vec3 lg = pow(clamp(lk, 0.0, 2.0), vec3(0.4545));  // 线性光强 → 伽马空间的明暗倍率
     vec3 body = mix(cS, cD, k) * lg;
     vec3 col = mix(body, refl*mix(0.75, 1.0, cs), fres*(1.0 - below)) + uGlint*spec*sh*cs*(1.0 - below);
@@ -2552,15 +2571,28 @@ const colProg = makeShader(`
   void main(){ gl_Position = uPV * vec4(aPos+uOffset, 1.0); }`,`
   precision mediump float; uniform vec4 uColor;
   void main(){ gl_FragColor = uColor; }`);
+// 生物脚下的软阴影团(blob shadow): 顶点 = 世界坐标 + (局部 qx,qz ∈[-1,1], 不透明度); 片元按半径做平滑椭圆衰减
+const blobProg = makeShader(`
+  attribute vec3 aPos; attribute vec3 aQ; uniform mat4 uPV; varying vec3 vQ;
+  void main(){ vQ = aQ; gl_Position = uPV * vec4(aPos, 1.0); }`,`
+  precision mediump float; varying vec3 vQ;
+  void main(){
+    float r = length(vQ.xy);
+    float a = vQ.z * (1.0 - smoothstep(0.4, 1.0, r));
+    if(a < 0.004) discard;
+    gl_FragColor = vec4(0.05, 0.045, 0.07, a);
+  }`, {aPos:0, aQ:1});
+const UB_PV=gl.getUniformLocation(blobProg,"uPV");
+const blobVbo=gl.createBuffer();
 const U = {}; // uniform 位置
 for(const n of ["uPV","uOffset","uUVOff","uEye","uFogNear","uFogFar","uTex","uFogCol","uDay","uAlpha","uMode","uTint",
                  "uLightPV","uShadowBias","uShadow","uSunDir","uSunCol","uAmbCol","uShadowOn","uShadowTexel","uPCF",
-                 "uWTime","uWind","uWOrig","uCloudShadow"])
+                 "uWTime","uWind","uWOrig","uCloudShadow","uBlk"])
   U[n]=gl.getUniformLocation(mainProg,n);
 // 水面程序 uniform
 const UW = {};
 for(const n of ["uPV","uLightPV","uEye","uWOrig","uWTime","uShadowBias","uShadow","uShadowOn","uShadowTexel","uPCF",
-                 "uSunDir","uSunCol","uAmbCol","uGlint","uShallow","uDeep","uShallow2","uDeep2","uDay","uCloudShadow"])
+                 "uSunDir","uSunCol","uAmbCol","uGlint","uShallow","uDeep","uShallow2","uDeep2","uDay","uCloudShadow","uBlk"])
   UW[n]=gl.getUniformLocation(waterProg,n);
 // 天空/云/雾共享 uniform: 三个程序(天空/主/水面)各取一份位置, 每帧由 applySkyUniforms() 统一灌入
 const SKY_UNIFS=["uZenith","uHorizon","uGround","uBand","uSkySun","uSunGlowCol","uCloudLit","uCloudSh","uCloudOff",
@@ -3625,6 +3657,140 @@ function cellSky(bx,bz,x,y,z){
   return v>0?v:0;
 }
 
+/* ---------- 方块光(夜里灯光成池): 建网格时从自发光方块做 BFS 洪泛(Minecraft 式, 0..15 级, 每格衰减 1, 不透光方块挡住) ----------
+   区域 = 本区块 + 外扩 1 格(顶点取样会落到的格子) 再外扩 BL_R 格。所有能照到取样格的光路(长度 ≤ BL_R)都完整落在区域内,
+   所以相邻两块区块对同一格算出的光级完全一致 —— 接缝不会错位。区域外再包一圈"墙"(不透光), BFS 无需边界判断。
+   区域里一个光源都没有 → 整段跳过(沙漠大多数区块), 建网格几乎零额外开销。
+   结果按顶点(与天光同一组邻格取平均)写进 aF 的 2048 位以上, 见 packAF / mainProg。 */
+const EMIT_LV=new Uint8Array(256);                    // 光源等级
+EMIT_LV[LANTERN]=14; EMIT_LV[LAVA]=13; EMIT_LV[MAGMA]=11; EMIT_LV[NEON]=11; EMIT_LV[WINDOW]=11;
+EMIT_LV[CRYSTAL]=9; EMIT_LV[GLOWVEIN]=9; EMIT_LV[SALTCRYSTAL]=9; EMIT_LV[AMETHYST]=9;
+const BL_OPQ=new Uint8Array(256);                     // 挡光(= OPAQUE)
+for(let i=0;i<256;i++) BL_OPQ[i]=OPAQUE(i)?1:0;
+const BL_R=13;                                        // 最远传播格数(14 级光源 13 格外还剩 1 级)
+const BL_W=CS+2+2*BL_R+2;                             // 区域边长(含外圈墙) = 46
+const _blL=new Uint8Array(BL_W*BL_W*(H+2)), _blO=new Uint8Array(BL_W*BL_W*(H+2));
+const _blB=[]; for(let i=0;i<16;i++) _blB.push([]);   // 按光级分桶的队列(从高到低处理, 每格第一次赋值即最终值)
+const _blSeed=[];
+// 当前区块的光场(buildChunkMesh 期间有效): on=区域内有光源; ox/oz = 区域(含墙)左下角的世界坐标; y0 = 第 1 行(墙)的 y
+const blF={on:false, ox:0, oz:0, y0:0, bh:0, lo:0, hi:-1};   // lo..hi: 本区块取样范围内有光的 y 带
+function blBuild(bx,bz){
+  blF.on=false;
+  const ox=bx-1-BL_R-1, oz=bz-1-BL_R-1;               // 含墙
+  // 1) 只扫光源(最便宜的一遍), 记下光源的 y 范围
+  let ymin=H, ymax=-1;
+  _blSeed.length=0;
+  for(let ccx=(ox+1)>>4; ccx<=(ox+BL_W-2)>>4; ccx++) for(let ccz=(oz+1)>>4; ccz<=(oz+BL_W-2)>>4; ccz++){
+    const ch=world.get(key(ccx,ccz)); if(!ch) continue;
+    const B=ch.blocks;
+    const x0=Math.max(ox+1,ccx*CS), x1=Math.min(ox+BL_W-2,ccx*CS+CS-1);
+    const z0=Math.max(oz+1,ccz*CS), z1=Math.min(oz+BL_W-2,ccz*CS+CS-1);
+    for(let x=x0;x<=x1;x++) for(let z=z0;z<=z1;z++){
+      const col=((x&15)*CS+(z&15))*H;
+      for(let y=0;y<H;y++){
+        const lv=EMIT_LV[B[col+y]];
+        if(lv){ _blSeed.push(x,y,z,lv); if(y<ymin) ymin=y; if(y>ymax) ymax=y; }
+      }
+    }
+  }
+  if(ymax<0) return false;
+  // 2) 只在 [最低光源-R, 最高光源+R] 的 y 带里建挡光表与光场(上下各一行墙)
+  const ylo=Math.max(0,ymin-BL_R), yhi=Math.min(H-1,ymax+BL_R);
+  const y0=ylo-1, bh=yhi-ylo+3, n=BL_W*BL_W*bh;
+  const O=_blO, L=_blL;
+  O.fill(1,0,n); L.fill(0,0,n);
+  for(let ccx=(ox+1)>>4; ccx<=(ox+BL_W-2)>>4; ccx++) for(let ccz=(oz+1)>>4; ccz<=(oz+BL_W-2)>>4; ccz++){
+    const ch=world.get(key(ccx,ccz));
+    const x0=Math.max(ox+1,ccx*CS), x1=Math.min(ox+BL_W-2,ccx*CS+CS-1);
+    const z0=Math.max(oz+1,ccz*CS), z1=Math.min(oz+BL_W-2,ccz*CS+CS-1);
+    for(let x=x0;x<=x1;x++) for(let z=z0;z<=z1;z++){
+      const base=((x-ox)*BL_W+(z-oz))*bh-y0;
+      if(!ch){ for(let y=ylo;y<=yhi;y++) O[base+y]=0; continue; }   // 未生成区块按空气(与 gb 一致)
+      const B=ch.blocks, col=((x&15)*CS+(z&15))*H;
+      for(let y=ylo;y<=yhi;y++) O[base+y]=BL_OPQ[B[col+y]];
+    }
+  }
+  // 3) 分桶 BFS
+  const sx=BL_W*bh, offs=[sx,-sx,bh,-bh,1,-1];
+  for(let i=0;i<16;i++) _blB[i].length=0;
+  for(let i=0;i<_blSeed.length;i+=4){
+    const idx=((_blSeed[i]-ox)*BL_W+(_blSeed[i+2]-oz))*bh+(_blSeed[i+1]-y0), lv=_blSeed[i+3];
+    if(L[idx]<lv){ L[idx]=lv; _blB[lv].push(idx); }
+  }
+  for(let lv=15; lv>=2; lv--){
+    const q=_blB[lv], nl=lv-1, qn=_blB[nl];
+    for(let k=0;k<q.length;k++){
+      const idx=q[k];
+      if(L[idx]!==lv) continue;
+      for(let d=0;d<6;d++){
+        const m=idx+offs[d];
+        if(!O[m] && L[m]<nl){ L[m]=nl; if(nl>1) qn.push(m); }
+      }
+    }
+  }
+  // 4) 本区块取样范围(外扩 1 格)里真正亮着的 y 带: 顶点只在这条带里查光(光源常在地下岩浆海, 地表大片顶点直接跳过)
+  let lo=H, hi=-1;
+  for(let x=bx-1;x<=bx+CS;x++) for(let z=bz-1;z<=bz+CS;z++){
+    const base=((x-ox)*BL_W+(z-oz))*bh-y0;
+    for(let y=ylo;y<lo;y++) if(L[base+y]){ lo=y; break; }
+    for(let y=yhi;y>hi;y--) if(L[base+y]){ hi=y; break; }
+  }
+  if(hi<0) return false;                              // 光照不到本区块
+  blF.on=true; blF.ox=ox; blF.oz=oz; blF.y0=y0; blF.bh=bh; blF.lo=lo; blF.hi=hi;
+  return true;
+}
+// 当前光场里某格的光级(0..15); 仅对本区块外扩 1 格内的格子保证精确
+function blAt(x,y,z){
+  if(!blF.on) return 0;
+  const iy=y-blF.y0;
+  if(iy<1 || iy>=blF.bh-1) return 0;
+  return _blL[((x-blF.ox)*BL_W+(z-blF.oz))*blF.bh+iy];
+}
+// 把本区块自己的光场存下一份(只存有光的 y 带), 供生物/玩家模型在灯下被照亮
+function blStoreChunk(c,bx,bz){
+  c.bl=null;
+  if(!blF.on) return;
+  const L=_blL, bh=blF.bh, y0=blF.y0;
+  let lo=H, hi=-1;
+  for(let x=0;x<CS;x++) for(let z=0;z<CS;z++){
+    const base=((bx+x-blF.ox)*BL_W+(bz+z-blF.oz))*bh-y0;
+    for(let y=blF.lo;y<=blF.hi;y++) if(L[base+y]){ if(y<lo) lo=y; if(y>hi) hi=y; }
+  }
+  if(hi<0) return;
+  const hh=hi-lo+1, a=new Uint8Array(CS*CS*hh);
+  for(let x=0;x<CS;x++) for(let z=0;z<CS;z++){
+    const base=((bx+x-blF.ox)*BL_W+(bz+z-blF.oz))*bh-y0, b=(x*CS+z)*hh-lo;
+    for(let y=lo;y<=hi;y++) a[b+y]=L[base+y];
+  }
+  c.bl={a, lo, hh};
+}
+// 世界坐标处的方块光(0..15), 渲染生物时查
+function blockLightAt(x,y,z){
+  x=Math.floor(x); y=Math.floor(y); z=Math.floor(z);
+  const c=world.get(key(x>>4,z>>4));
+  if(!c || !c.bl) return 0;
+  const iy=y-c.bl.lo;
+  if(iy<0 || iy>=c.bl.hh) return 0;
+  return c.bl.a[((x&15)*CS+(z&15))*c.bl.hh+iy];
+}
+/* 区块顶点 aF 编码(浮点精确: 最大 2048*15+2047 < 2^24):
+   aF = 面(0..7) + 8*天光(0..15) + 128*高位类别(0..15; 地形=风摆类别 0..2, 水=沼泽(1)+2*岸格数(0..4)) + 2048*方块光(0..15)
+   解码顺序: 方块光 → 类别 → 天光 → 面(mainProg / waterProg / selftest 共用这一顺序) */
+const packAF=(f,sky,cls,bl)=>f+8*sky+128*cls+2048*bl;
+function unpackAF(v){
+  const bl=Math.floor(v/2048); v-=bl*2048;
+  const cls=Math.floor(v/128); v-=cls*128;
+  const sky=Math.floor(v/8);
+  return {bl, cls, sky, f:v-sky*8};
+}
+// 底面(朝下)的天光: 下方是大片空气(浮空岛底、悬崖挑檐) → 地面反光照亮底面; 洞顶(下方空隙 ≤ 6 格)不变
+function openBelowSky(x,y,z){
+  let n=0;
+  while(n<16 && y-n>=0 && !SKY_OCC(gb(x,y-n,z))) n++;
+  if(y-n<0) n=16;
+  return n<=6 ? 0 : Math.min(1,(n-6)/10);
+}
+
 // 太阳阴影贴图状态(资源在 setupShadow 里创建); 放在网格生成之前, 区块重建时可以标记阴影需要重画
 const shadow={fbo:null, tex:null, size:0, range:0, pcf:0, ok:false, dirty:true,
               cx:1e9, cy:1e9, cz:1e9, dir:[0,1,0], lpv:new Float32Array(16), renders:0};
@@ -3668,6 +3834,8 @@ function buildChunkMesh(c){
     else { const wx=bx+ix, wz=bz+iz; while(y>=0 && !SKY_OCC(gb(wx,y,wz))) y--; }
     _hm[(ix+1)*(CS+2)+(iz+1)]=y;
   }
+  const blOn=blBuild(bx,bz);                        // 方块光场(区域内没有光源/照不到本区块 → false, 下面全部跳过)
+  const blLo=blF.lo-1, blHi=blF.hi+1;               // 顶点取样格在面前方格 ±1 内, 前方格出了这条带就不用查
   for(let lx=0; lx<CS; lx++) for(let lz=0; lz<CS; lz++){
     const col=(lx*CS+lz)*H, wx=bx+lx, wz=bz+lz;
     for(let y=0; y<H; y++){
@@ -3686,7 +3854,7 @@ function buildChunkMesh(c){
              [[0.85,0,0.15],[0.15,0,0.85],[0.15,1,0.85],[0.85,1,0.15]]];
         for(const q of quads){
           const uvs=[[uu0,v1],[u1,v1],[u1,vv0],[uu0,vv0]];
-          const pf=6+8*Math.round(cellSky(bx,bz,wx,y,wz)*15);
+          const pf=6+8*Math.round(cellSky(bx,bz,wx,y,wz)*15)+2048*(blOn&&y>=blLo&&y<=blHi?blAt(wx,y,wz):0);
           for(let k=0;k<4;k++) pV.push(wx+q[k][0], y+q[k][1], wz+q[k][2], uvs[k][0], uvs[k][1], 0.92, pf+128*swayClass(id, q[k][1]>=0.5));
           // 只输出一套绕序: 植物层在关闭背面剔除后绘制, GL 天然双面可见, 无需再复制背面 → 省一半植物顶点。
           pI.push(pN,pN+1,pN+2, pN,pN+2,pN+3);
@@ -3720,13 +3888,14 @@ function buildChunkMesh(c){
           if(rot===1){ const t=ta; ta=tb; tb=1-t; } else if(rot===2){ ta=1-ta; tb=1-tb; } else if(rot===3){ const t=ta; ta=1-tb; tb=t; }
           _uvA[k]=ta; _uvB[k]=tb;
         }
+        const skyB = (f===3 && !isW && !EMISSIVE(id)) ? openBelowSky(wx,y-1,wz) : 0;   // 底面: 下方空旷 → 地面反光
         for(let k=0;k<4;k++){
           const i=CORNERS[k][0], j=CORNERS[k][1];
           let px = (d[0]===1?1:0) + i*F.u[0] + j*F.v[0];
           let py = (d[1]===1?1:0) + i*F.u[1] + j*F.v[1];
           let pz = (d[2]===1?1:0) + i*F.u[2] + j*F.v[2];
           if(wTop && py===1) py=0.86;
-          let light=1, sky, vhi=hiF;
+          let light=1, sky, vhi=hiF, bl=0;
           const fx=wx+d[0], fy=y+d[1], fz=wz+d[2];   // 面前方那一格
           if(EMISSIVE(id)){ light=2.2; ao[k]=3; sky=1; }  // 灯笼自发光, 夜里也亮
           else if(!isW){
@@ -3744,8 +3913,25 @@ function buildChunkMesh(c){
             if(!o2){ ss+=cellSky(bx,bz,s2x,s2y,s2z); sn++; }
             if(!oc && !(o1&&o2)){ ss+=cellSky(bx,bz,s1x+sj*F.v[0], s1y+sj*F.v[1], s1z+sj*F.v[2]); sn++; }
             sky=ss/sn;
+            if(skyB>sky) sky=skyB;
+            if(blOn && fy>=blLo && fy<=blHi){        // 方块光: 同一组邻格取平均
+              let bs=blAt(fx,fy,fz);
+              if(!o1) bs+=blAt(s1x,s1y,s1z);
+              if(!o2) bs+=blAt(s2x,s2y,s2z);
+              if(!oc && !(o1&&o2)) bs+=blAt(s1x+sj*F.v[0], s1y+sj*F.v[1], s1z+sj*F.v[2]);
+              bl=Math.round(bs/sn);
+            }
           } else {
             ao[k]=3; sky=cellSky(bx,bz,fx,fy,fz);
+            if(blOn && fy>=blLo && fy<=blHi){        // 水: 面前方格 + 角点两侧与对角(不透光格不计)
+              const si=i?1:-1, sj=j?1:-1;
+              const ax=fx+si*F.u[0], ay=fy+si*F.u[1], az=fz+si*F.u[2];
+              const cx2=fx+sj*F.v[0], cy2=fy+sj*F.v[1], cz2=fz+sj*F.v[2];
+              let bs=blAt(fx,fy,fz), bn=1;
+              if(!BL_OPQ[gb(ax,ay,az)]){ bs+=blAt(ax,ay,az); bn++; }
+              if(!BL_OPQ[gb(cx2,cy2,cz2)]){ bs+=blAt(cx2,cy2,cz2); bn++; }
+              bl=Math.round(bs/bn);
+            }
             // 水: aL 改存水深。顶面按角点取 4 列平均(岸边→0); 其余面取本格水深
             if(f===2 && wTop){
               const X=wx+px, Z=wz+pz;
@@ -3756,7 +3942,7 @@ function buildChunkMesh(c){
           }
           const uu=u0+(_uvA[k]?TS-EP:EP);
           const vv=v0+(_uvB[k]?TV-EPV:EPV);
-          V.push(wx+px, y+py, wz+pz, uu, vv, light, f+8*Math.round(sky*15)+vhi);
+          V.push(wx+px, y+py, wz+pz, uu, vv, light, f+8*Math.round(sky*15)+vhi+2048*bl);
         }
         const b=isW?wN:oN;
         // AO 各向异性时翻转四边形对角线以避免插值撕裂; F.fl 面再整体反绕以统一外表面为背面(供 cullFace(FRONT))。
@@ -3781,6 +3967,7 @@ function buildChunkMesh(c){
     return {vbo,ibo,n:inds.length};
   };
   c.mesh={opaque:up(oV,oI), water:up(wV,wI), plant:up(pV,pI)};
+  blStoreChunk(c,bx,bz); c.blOn=blOn; blF.on=false;
   // 阴影范围内的区块变了(挖/放方块、新加载) → 下一帧重画阴影贴图
   if(Math.max(Math.abs(bx+8-shadow.cx), Math.abs(bz+8-shadow.cz)) < shadow.range+56) shadow.dirty=true;
 }
@@ -5805,7 +5992,11 @@ function drawEntity(ent){
   else if(ent.def.fly)  gl.uniform3f(U.uTint,1.1,1.0,0.9);     // 飞龙暖色
   else if(ent.def.boss) gl.uniform3f(U.uTint,1.15,0.9,1.15);   // 僵尸王偏紫,更威慑
   else                  gl.uniform3f(U.uTint,1,1,1);
+  // 旧式 6 分量布局的 aF 是常量 7(面=7 → 生物分支); 在灯下时叠上方块光(2048 位), 画完复原, 免得粒子沿用
+  const ebl=blockLightAt(ent.x, ent.y+(ent.def.h||1)*0.5, ent.z);
+  if(ebl) gl.vertexAttrib1f(A_F,7+2048*ebl);
   gl.drawArrays(gl.TRIANGLES,0,entArr.length/6);
+  if(ebl) gl.vertexAttrib1f(A_F,7);
 }
 
 /* ---- 实体物理 ---- */
@@ -7235,9 +7426,9 @@ function explode(cx,cy,cz,scale){
   _gcx=1e9;
   // 重建受影响区块及其邻居
   const rebuild=new Set(touched);
-  for(const c of touched) for(const [ox,oz] of [[1,0],[-1,0],[0,1],[0,-1]]){
+  for(const c of touched) for(let ox=-1;ox<=1;ox++) for(let oz=-1;oz<=1;oz++){
     const n=world.get(key(c.cx+ox,c.cz+oz));
-    if(n&&n.mesh) rebuild.add(n);
+    if(n&&n.mesh && ((ox===0||oz===0) || n.blOn)) rebuild.add(n);   // 对角邻块只在它的光场里有光源时才可能变
   }
   for(const c of rebuild) buildChunkMesh(c);
   // 爆炸粒子
@@ -8129,6 +8320,52 @@ function renderShadowMap(L){
 let fov=70*Math.PI/180;
 const mix3=(a,b,t)=>[a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t];
 
+/* ---- 生物软阴影团: 找脚下地面(向下至多 6 格的第一块实心方块顶面), 离地越高越淡越散 ---- */
+function blobGroundY(x,y,z){
+  const fx=Math.floor(x), fz=Math.floor(z);
+  for(let by=Math.floor(y+0.2), n=0; n<7 && by>=0; by--, n++){
+    const id=getBlock(fx,by,fz);
+    if(id===WATER || id===LAVA) return null;      // 水里/岩浆里不画
+    if(SOLID(id)) return by+1;
+  }
+  return null;
+}
+// 阴影团不透明度: 贴地 1 → 离地 4 格 0
+const blobFade=dh=>clamp(1-dh/4,0,1);
+const _blobArr=[];
+function drawBlobShadows(pv, camX, camZ, fogNear, fogFar, sunI){
+  const arr=_blobArr; arr.length=0;
+  const vis=(0.6+0.4*sunI)*(1-0.5*_sky.sand);
+  const add=(e,w)=>{
+    const d=Math.hypot(e.x-camX,e.z-camZ);
+    if(d>40) return;
+    const gy=blobGroundY(e.x,e.y,e.z); if(gy===null) return;
+    const dh=Math.max(0,e.y-gy);
+    let a=0.6*blobFade(dh)*vis*(1-smoothstep(28,40,d));
+    if(fogFar>fogNear) a*=1-smoothstep(fogNear,fogFar,d);
+    if(a<0.01) return;
+    const r=Math.max(0.32,w*1.6)*(1+dh*0.18), y=gy+0.02;
+    const q=[[-1,-1],[1,-1],[1,1],[-1,-1],[1,1],[-1,1]];
+    for(const [qx,qz] of q) arr.push(e.x+qx*r, y, e.z+qz*r, qx, qz, a);
+  };
+  for(const m of mobs){ if(m && !m.burrowed && m.def) add(m, (m.def.w||0.3)*(m.def.scale||1)); }
+  if(camMode>0) add(player, PW);
+  if(!arr.length) return;
+  gl.useProgram(blobProg);
+  gl.uniformMatrix4fv(UB_PV,false,pv);
+  gl.bindBuffer(gl.ARRAY_BUFFER,blobVbo);
+  uploadDyn(arr);
+  aFArray(false);
+  gl.vertexAttribPointer(0,3,gl.FLOAT,false,24,0);
+  gl.vertexAttribPointer(1,3,gl.FLOAT,false,24,12);
+  gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+  gl.depthMask(false);
+  gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(-1,-2);
+  gl.drawArrays(gl.TRIANGLES,0,arr.length/6);
+  gl.disable(gl.POLYGON_OFFSET_FILL);
+  gl.depthMask(true); gl.disable(gl.BLEND);
+  gl.useProgram(mainProg);
+}
 function render(now){
   if(ctxLost) return;                       // 上下文丢失期间不绘制
   // 宽高必须 >=1: 窗口最小化/面板隐藏时为 0 会让投影矩阵变 NaN → 白屏
@@ -8295,6 +8532,8 @@ function render(now){
   gl.uniform3fv(U.uSunDir,LS.light);
   gl.uniform3fv(U.uSunCol,LS.sunCol);
   gl.uniform3fv(U.uAmbCol,LS.ambCol);
+  const blK=blockLightK(sunH);
+  gl.uniform1f(U.uBlk,blK);
   gl.uniform1f(U.uShadowOn,shadow.ok?1:0);
   gl.uniform1f(U.uPCF,shadow.pcf);
   gl.uniform1f(U.uShadowTexel,shadow.ok?1/shadow.size:0);
@@ -8336,6 +8575,8 @@ function render(now){
     bindChunkAttribs();
     gl.drawElements(gl.TRIANGLES,c.mesh.plant.n,gl.UNSIGNED_INT,0);
   }
+  // 生物/玩家脚下的软阴影团: 地形之后、模型之前(半透明压暗地面, 不写深度)
+  drawBlobShadows(pv, camX, camZ, fogNear, fogFar, LS.sunI);
 
   // 生物模型 & 箭矢
   for(const m of mobs){
@@ -8485,6 +8726,7 @@ function render(now){
     gl.uniform3fv(UW.uSunDir,LS.light);
     gl.uniform3fv(UW.uSunCol,LS.sunCol);
     gl.uniform3fv(UW.uAmbCol,LS.ambCol);
+    gl.uniform1f(UW.uBlk,blK);
     gl.uniform1f(UW.uDay,daylight/baseDaylight);
     gl.uniform1f(UW.uCloudShadow,uw?0:cloudShK);
     // 高光颜色: 白天取太阳色(低空偏橙), 夜里是淡淡的月光
@@ -11053,7 +11295,7 @@ function selftest(){
         put(X0+4,WATER_Y,Z0+4,STONE); put(X0+4,WATER_Y+1,Z0+4,TALLGRASS); put(X0+4,WATER_Y+4,Z0+13,LEAVES);
         const rd=(m)=>{ if(!m) return new Float32Array(0); gl.bindBuffer(gl.ARRAY_BUFFER,m.vbo);
           const a=new Float32Array(gl.getBufferParameter(gl.ARRAY_BUFFER,gl.BUFFER_SIZE)/4); gl.getBufferSubData(gl.ARRAY_BUFFER,0,a); return a; };
-        const dec=(v)=>{ const cls=Math.floor(v/128+0.001); return {cls, f:(v-cls*128)%8}; };
+        const dec=unpackAF;                         // 解码顺序 方块光 → 类别 → 天光 → 面
         let wOk=true, wFaces=0, shoreV=0, openV=0, seam=0, pOk=true, pN=0, pSway=0, leafN=0, leafOk=true;
         try{
           buildChunkMesh(A);
@@ -11080,6 +11322,82 @@ function selftest(){
         ok("光影3: 植物仅顶端顶点带风摆(类别1)", pOk && pN===8 && pSway===4, "verts="+pN+" sway="+pSway);
         ok("光影3: 树叶顶点全部带风摆类别 2", leafOk && leafN===24, "verts="+leafN);
       }
+    }
+
+    // ---- 方块光(夜里的灯光池) / 浮空岛底面天光 / 生物软阴影 ----
+    {
+      // aF 打包往返: 各字段取遍边界值, 且 Float32 精确
+      let rt=true;
+      for(const f of [0,5,6,7]) for(const sky of [0,7,15]) for(const cls of [0,1,2,9,15]) for(const bl of [0,1,8,15]){
+        const v=packAF(f,sky,cls,bl), d=unpackAF(Math.fround(v));
+        if(Math.fround(v)!==v || d.f!==f || d.sky!==sky || d.cls!==cls || d.bl!==bl) rt=false;
+      }
+      ok("方块光: aF 打包往返(面/天光/类别/方块光)且 Float32 精确", rt && packAF(7,15,15,15)<(1<<24), "max="+packAF(7,15,15,15));
+      ok("方块光: 强度 深夜>黄昏>正午, 正午只剩一点", blockLightK(-0.1)>blockLightK(0.15) && blockLightK(0.15)>blockLightK(1) && blockLightK(1)<0.5, "");
+      // 合成区块对 A|B(沿 x 相邻, 远离一切): 石头地面 y=20; B 里一盏灯笼(离接缝 6 格); 一道石墙逼光绕路; 一个密封石盒
+      const X0=192000, Z0=192000, cxA=X0/CS, czA=Z0/CS, FY=20;
+      const mk=(cx,cz)=>{ const c={cx,cz,blocks:new Uint8Array(CS*CS*H),mesh:null}; world.set(key(cx,cz),c); return c; };
+      const A=mk(cxA,czA), B=mk(cxA+1,czA), E=mk(cxA+5,czA);
+      const put=(x,y,z,id)=>{ world.get(key(x>>4,z>>4)).blocks[((x&15)*CS+(z&15))*H+y]=id; };
+      for(let x=X0;x<X0+2*CS;x++) for(let z=Z0;z<Z0+CS;z++) put(x,FY,z,STONE);
+      const LX=X0+CS+6, LY=FY+2, LZ=Z0+8;
+      put(LX,LY,LZ,LANTERN);
+      for(let z=Z0+6;z<=Z0+10;z++) for(let y=FY+1;y<=FY+3;y++) put(X0+CS+2,y,z,STONE);   // 矮墙: 墙后的光要翻过墙顶/绕过墙端
+      const SX=X0+CS+9, SZ=Z0+3;                                                         // 密封石盒(内部 1 格空气)
+      for(let dx=-1;dx<=1;dx++) for(let dy=-1;dy<=1;dy++) for(let dz=-1;dz<=1;dz++) if(dx||dy||dz) put(SX+dx,FY+2+dy,SZ+dz,STONE);
+      let lvOk=false, skipOk=false, seamCells=0, seamBad=0, seamV=0, seamVBad=0, entOk=false, lit=0;
+      try{
+        _gcx=1e9;
+        skipOk = blBuild(E.cx*CS,E.cz*CS)===false;                                      // 无光源 → 整段跳过
+        blBuild(B.cx*CS,B.cz*CS);
+        const at=(dx,dy,dz)=>blAt(LX+dx,LY+dy,LZ+dz);
+        lvOk = at(0,0,0)===14 && at(1,0,0)===13 && at(2,0,0)===12 && at(-1,0,0)===13 && at(0,3,0)===11
+            && at(-3,0,0)===11 && at(-4,0,0)===0 /* 墙内 */ && blAt(SX,FY+2,SZ)===0 /* 密封盒内 */ && at(0,-2,0)===0 /* 地面石头 */;
+        // 墙后贴墙一格要翻墙绕路(上 2 + 横 5 + 下 2 = 9 步 → 5 级), 比直线距离给的 9 级暗
+        const behind=blAt(X0+CS+1,LY,LZ);
+        lvOk = lvOk && behind===5;
+        // 接缝: A 与 B 对重叠取样格(x = B 起点-1 与 B 起点)算出的光级逐格一致
+        const snapB=[]; for(let x=X0+CS-1;x<=X0+CS;x++) for(let z=Z0-1;z<=Z0+CS;z++) for(let y=0;y<H;y++) snapB.push(blAt(x,y,z));
+        blBuild(A.cx*CS,A.cz*CS);
+        let k=0; for(let x=X0+CS-1;x<=X0+CS;x++) for(let z=Z0-1;z<=Z0+CS;z++) for(let y=0;y<H;y++){ const v=blAt(x,y,z); if(v||snapB[k]) seamCells++; if(v!==snapB[k]) seamBad++; k++; }
+        blF.on=false;
+        // 网格层面: A、B 地面顶面在接缝线 x=B 起点上的共享顶点, 解码出的方块光相同
+        if(IS_GL2){
+          buildChunkMesh(A); buildChunkMesh(B);
+          const rd=(m)=>{ if(!m) return new Float32Array(0); gl.bindBuffer(gl.ARRAY_BUFFER,m.vbo);
+            const a=new Float32Array(gl.getBufferParameter(gl.ARRAY_BUFFER,gl.BUFFER_SIZE)/4); gl.getBufferSubData(gl.ARRAY_BUFFER,0,a); return a; };
+          const va=rd(A.mesh.opaque), vb=rd(B.mesh.opaque), mA=new Map();
+          for(let i=0;i<va.length;i+=7){ const d=unpackAF(va[i+6]); if(d.f===2 && va[i]===X0+CS && va[i+1]===FY+1) mA.set(va[i+2],d.bl); if(d.bl) lit++; }
+          for(let i=0;i<vb.length;i+=7){ const d=unpackAF(vb[i+6]); if(d.f===2 && vb[i]===X0+CS && vb[i+1]===FY+1 && mA.has(vb[i+2])){ seamV++; if(mA.get(vb[i+2])!==d.bl) seamVBad++; } }
+          entOk = blockLightAt(LX+1.5,LY+0.2,LZ+0.5)===13 && blockLightAt(LX+0.5,LY,LZ-5.5)===8 && B.blOn===true;
+        } else { seamV=1; lit=1; entOk=true; }
+      } finally {
+        for(const c of [A,B,E]){ if(c.mesh) destroyMesh(c.mesh); world.delete(key(c.cx,c.cz)); }
+        _gcx=1e9; blF.on=false;
+      }
+      ok("方块光: BFS 光级 灯笼 14、每格衰减 1、不透光方块挡住、墙后绕路更暗、密封盒内为 0", lvOk, "");
+      ok("方块光: 区域内没有光源的区块整段跳过", skipOk, "");
+      ok("方块光: 相邻区块对接缝取样格算出的光级逐格一致", seamBad===0 && seamCells>20, "cells="+seamCells+" bad="+seamBad);
+      ok("方块光: 接缝两侧共享顶点的方块光相同(网格回读)", seamVBad===0 && seamV>=CS && lit>0, "shared="+seamV+" bad="+seamVBad+" litA="+lit);
+      ok("方块光: 生物查询用的区块光场与网格一致(灯旁 13 / 6 格外 8)", entOk, "");
+      // 浮空岛底面: 下方空旷 → 天光拉满; 洞顶(下方 4 格空隙)不变
+      const X1=224000, Z1=224000, C=mk(X1/CS,Z1/CS);
+      let isl=-1, cave=-1;
+      try{
+        for(let x=X1;x<X1+CS;x++) for(let z=Z1;z<Z1+CS;z++){ C.blocks[((x&15)*CS+(z&15))*H+10]=STONE; }
+        C.blocks[((3)*CS+3)*H+40]=STONE;                      // 悬空一块(下面 29 格空气)
+        C.blocks[((8)*CS+8)*H+15]=STONE;                      // "洞顶"(下面 4 格空气)
+        _gcx=1e9;
+        isl=openBelowSky(X1+3,39,Z1+3); cave=openBelowSky(X1+8,14,Z1+8);
+      } finally { world.delete(key(C.cx,C.cz)); _gcx=1e9; }
+      ok("浮空岛底面: 下方大片空气 → 天光 1; 洞顶不变(0)", isl===1 && cave===0, "island="+isl+" cave="+cave);
+      // 软阴影: 贴地最浓、离地 4 格消失; 地面高度取脚下实心块顶面
+      const gx=Math.floor(player.x), gz=Math.floor(player.z);
+      let gyTop=-1; for(let y=H-1;y>=0;y--){ if(SOLID(getBlock(gx,y,gz))){ gyTop=y; break; } }
+      const gy=blobGroundY(gx+0.5,gyTop+1.5,gz+0.5), under=getBlock(gx,gyTop+1,gz);
+      ok("软阴影: 不透明度 贴地 1 → 离地 4 格 0", blobFade(0)===1 && blobFade(4)===0 && blobFade(2)>0 && blobFade(2)<1, "");
+      ok("软阴影: 地面高度 = 脚下实心方块顶面(水/岩浆上不画)", gyTop<0 || under===WATER || under===LAVA || gy===gyTop+1 || getBlock(gx,gyTop,gz)===WATER, "gy="+gy+" top="+gyTop);
+      ok("软阴影: 着色器已链接", gl.getProgramParameter(blobProg,gl.LINK_STATUS), "");
     }
 
     // ---- 丰富批次: 地图(仙人掌) / 画面(夜空) / 玩法(Boss血条) / 任务(悬赏) ----
