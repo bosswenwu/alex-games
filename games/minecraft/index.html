@@ -3280,6 +3280,16 @@ function cellSky(bx,bz,x,y,z){
 // 太阳阴影贴图状态(资源在 setupShadow 里创建); 放在网格生成之前, 区块重建时可以标记阴影需要重画
 const shadow={fbo:null, tex:null, size:0, range:0, pcf:0, ok:false, dirty:true,
               cx:1e9, cy:1e9, cz:1e9, dir:[0,1,0], lpv:new Float32Array(16), renders:0};
+/* 同种方块逐块随机旋转/镜像贴图(按世界坐标哈希, 稳定不闪): 打散大片草地/沙地/石面的"格子重复感"。
+   UV_ROT[id]: [顶底面模式, 侧面模式]; 顶底 2=四向旋转+镜像 1=只转180°(沙纹等有方向的纹理) 0=不动;
+   侧面 1=左右镜像(草皮边/岩层保持朝上) 0=不动。松沙陷坑与沙子同模式, 伪装不露馅。 */
+const UV_ROT=new Uint8Array(256*2);
+for(const [id,tb,sd] of [[GRASS,2,1],[DIRT,2,1],[STONE,2,1],[SNOW,2,1],[GRAVEL,2,1],[SUSGRAVEL,2,1],
+    [COBBLE,2,1],[MOSSY,2,1],[LEAVES,2,1],[PINE_LEAF,2,1],[BLACKSAND,2,1],[SALTCRUST,2,1],[BASALT,2,0],
+    [SAND,1,0],[LOOSESAND,1,0],[OBSIDIAN,2,1]]){   // 砂岩/风蚀岩/陶土是成层条纹, 一转就成棋盘格, 不参与
+  UV_ROT[id*2]=tb; UV_ROT[id*2+1]=sd;
+}
+const _uvA=[0,0,0,0], _uvB=[0,0,0,0];
 function buildChunkMesh(c){
   const bx=c.cx*CS, bz=c.cz*CS;
   const oV=[], oI=[], wV=[], wI=[], pV=[], pI=[];   // p*: 十字植物单独成层, 在 disable(CULL_FACE) 后绘制
@@ -3327,6 +3337,21 @@ function buildChunkMesh(c){
         const tile = f===2?def.t : f===3?def.b : def.s;
         const u0=(tile%16)*TS, v0=Math.floor(tile/16)*TS;
         const V=isW?wV:oV, I=isW?wI:oI;
+        // 本面的贴图朝向: rot(0..3 个 90°) + mir(左右镜像)
+        let rot=0, mir=0;
+        const rm=UV_ROT[id*2+(f===2||f===3?0:1)];
+        if(rm){
+          const hsh=Math.imul(wx,73856093)^Math.imul(y,19349663)^Math.imul(wz,83492791)^f;
+          const hb=(hsh>>>7)^(hsh>>>15);
+          if(f===2||f===3){ rot = rm===2 ? (hb&3) : ((hb&1)<<1); mir = rm===2 ? ((hb>>2)&1) : 0; }
+          else mir=hb&1;
+        }
+        for(let k=0;k<4;k++){
+          const vj0=(F.v[1]===1)?(1-CORNERS[k][1]):CORNERS[k][1];
+          let ta=mir?1-CORNERS[k][0]:CORNERS[k][0], tb=vj0;
+          if(rot===1){ const t=ta; ta=tb; tb=1-t; } else if(rot===2){ ta=1-ta; tb=1-tb; } else if(rot===3){ const t=ta; ta=1-tb; tb=t; }
+          _uvA[k]=ta; _uvB[k]=tb;
+        }
         for(let k=0;k<4;k++){
           const i=CORNERS[k][0], j=CORNERS[k][1];
           let px = (d[0]===1?1:0) + i*F.u[0] + j*F.v[0];
@@ -3352,9 +3377,8 @@ function buildChunkMesh(c){
             if(!oc && !(o1&&o2)){ ss+=cellSky(bx,bz,s1x+sj*F.v[0], s1y+sj*F.v[1], s1z+sj*F.v[2]); sn++; }
             sky=ss/sn;
           } else { ao[k]=3; sky=cellSky(bx,bz,fx,fy,fz); }
-          const uu=u0+(i?TS-EP:EP);
-          const vj=(F.v[1]===1)?(1-j):j;
-          const vv=v0+(vj?TS-EP:EP);
+          const uu=u0+(_uvA[k]?TS-EP:EP);
+          const vv=v0+(_uvB[k]?TS-EP:EP);
           V.push(wx+px, y+py, wz+pz, uu, vv, light, f+8*Math.round(sky*15));
         }
         const b=isW?wN:oN;
@@ -10025,6 +10049,8 @@ function selftest(){
       ok("光影: 深度纹理阴影可用(WebGL2 或 WEBGL_depth_texture)且贴图已建", !HAS_DEPTH_TEX || GFX_PRESETS[gfxLevel].shadow===false || (shadow.ok && shadow.size>=1024),
          "gl2="+IS_GL2+" depthTex="+HAS_DEPTH_TEX+" ok="+shadow.ok+" size="+shadow.size);
       const g0=gfxLevel; setGfx(0); const offOk=!shadow.ok; setGfx(g0);
+      ok("材质: 逐块旋转——松沙陷坑与沙子同模式(伪装不露馅), 沙纹只转180°, 草地四向", UV_ROT[LOOSESAND*2]===UV_ROT[SAND*2] && UV_ROT[LOOSESAND*2+1]===UV_ROT[SAND*2+1] && UV_ROT[SAND*2]===1 && UV_ROT[GRASS*2]===2,
+         "sand="+UV_ROT[SAND*2]+" loose="+UV_ROT[LOOSESAND*2]);
       ok("光影: 画质切到「低」关闭阴影, 切回恢复", offOk && (shadow.ok || !HAS_DEPTH_TEX), "restored="+shadow.ok);
     }
 
