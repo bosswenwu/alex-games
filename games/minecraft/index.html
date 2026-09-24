@@ -4572,7 +4572,56 @@ const NPC_ROLES={
   oracle:{ name:"神谕祭司", tag:"𓂀", greet:"神明垂听。献上供品，换取庇佑与预言。" },
 };
 /* 交易/祝福清单: cost 为 [{b:blockId,n}|{r:relicN}], run() 执行并返回提示 */
+/* 🏘 村落集市: 摊主按村独立记账——每天补货(回头客的理由), 买满 5 次成老主顾(方块价八折), 12 次解锁「绿洲之约」 */
+const marketState={};                    // stallKey -> {day, left:[各货剩余], rep}
+function tradeRouteHint(){               // 商路图: 指向最近的"还没去过的那一类"地标
+  const seen=landTypesSeen();
+  const pcx=Math.floor(player.x/CELL), pcz=Math.floor(player.z/CELL);
+  let best=null, bestD=Infinity;
+  for(let sx=pcx-16; sx<=pcx+16; sx++) for(let sz=pcz-16; sz<=pcz+16; sz++){
+    const st=structureAt(sx,sz);
+    if(!st || !LANDMARKS[st.type] || seen.has(st.type) || trophies.has(st.type)) continue;
+    const d=Math.hypot(st.x-player.x, st.z-player.z);
+    if(d<bestD){ bestD=d; best=st; }
+  }
+  if(!best) return "商路图上的地标你都去过了，老商人啧啧称奇。";
+  const brg=Math.atan2(best.x-player.x,-(best.z-player.z)), rel=((brg-player.yaw)*180/Math.PI+360)%360;
+  const dir=["正前方","右前","右侧","右后","身后","左后","左侧","左前"][Math.round(rel/45)%8];
+  addXP(10);
+  return "商路图："+LANDMARKS[best.type]+" 在"+dir+" 约 "+Math.round(bestD)+"m，还没去过";
+}
+const VIL_OFFERS=[
+  {t:"灯火补给", d:"仙人掌 x6 → 灯笼 x4",               cost:[{b:CACTUS,n:6}],     stock:4, run(){ giveBlock(LANTERN,4); return "换得 灯笼 x4"; }},
+  {t:"建房料",   d:"砂岩 x10 → 灰泥 x8 + 木框窗 x2",     cost:[{b:SANDSTONE,n:10}], stock:3, run(){ giveBlock(PLASTER,8); giveBlock(WINDOW_WOOD,2); return "换得 灰泥 x8 + 木框窗 x2"; }},
+  {t:"棕榈木",   d:"沙子 x16 → 棕榈木 x6",               cost:[{b:SAND,n:16}],      stock:3, run(){ giveBlock(PALM_LOG,6); return "换得 棕榈木 x6"; }},
+  {t:"商路图",   d:"金矿 x1 → 指向最近一处没去过的地标", cost:[{b:GOLD_ORE,n:1}],   stock:1, run(){ return tradeRouteHint(); }},
+  {t:"鎏金饰面", d:"文物碎片 x2 → 鎏金 x3",              cost:[{r:2}],              stock:2, run(){ giveBlock(GILDED,3); return "换得 鎏金 x3"; }},
+  {t:"绿洲之约", d:"钻石 x1 → 埃及声望 +5 · 120s 回血祝福", cost:[{b:GEM_ORE,n:1}], stock:1, rep:12,
+   run(){ faction.egypt=Math.min(100,faction.egypt+5); applyBless("regen",120); return "绿洲之约：埃及声望 +5，回血祝福 120s"; }}
+];
+function villageMarket(key){
+  let m=marketState[key];
+  if(!m){
+    m=marketState[key]={day:0, left:[], rep:0};
+    const keys=Object.keys(marketState);
+    if(keys.length>16){ keys.sort((a,b)=>marketState[a].day-marketState[b].day); delete marketState[keys[0]===key?keys[1]:keys[0]]; }   // 最多记 16 个村, 丢最久没来的
+  }
+  if(dayCount>m.day){ m.day=dayCount; m.left=VIL_OFFERS.map(o=>o.stock); }   // 新的一天: 补货
+  return m;
+}
+function villageOffers(key){
+  const m=villageMarket(key), disc=m.rep>=5;
+  const out=[];
+  VIL_OFFERS.forEach((o,i)=>{
+    if(o.rep && m.rep<o.rep) return;
+    const left=m.left[i]|0;
+    out.push({t:o.t+(disc?" · 老主顾八折":""), d:o.d+"　库存 "+left+"/"+o.stock+(left<=0?" · 明日补货":""),
+      cost:o.cost.map(c=>(c.b!=null && disc)?{b:c.b,n:Math.ceil(c.n*0.8)}:c), run:o.run, mk:key, mi:i, soldOut:left<=0});
+  });
+  return out;
+}
 function npcOffers(role){
+  if(role==="trader" && talkNpc && talkNpc.stallKey) return villageOffers(talkNpc.stallKey);
   if(role==="trader") return [
     {t:"沙石换灯笼", d:"沙子 x12 → 灯笼 x4", cost:[{b:SAND,n:12}], run(){ giveBlock(LANTERN,4); return "换得 灯笼 x4"; }},
     {t:"金换火药", d:"金矿 x2 → TNT x4", cost:[{b:GOLD_ORE,n:2}], run(){ giveBlock(TNT,4); return "换得 TNT x4"; }},
@@ -4588,7 +4637,7 @@ function npcOffers(role){
     {t:"神谕预言", d:"金矿 x1 → 指引最近的地标", cost:[{b:GOLD_ORE,n:1}], run(){ return oracleProphecy(); }},
   ];
 }
-function offerHave(o){ return o.cost.every(c=> c.r!=null ? npcState.relics>=c.r : bagCount(c.b)>=c.n ); }
+function offerHave(o){ return !o.soldOut && o.cost.every(c=> c.r!=null ? npcState.relics>=c.r : bagCount(c.b)>=c.n ); }
 function offerPay(o){ for(const c of o.cost){ if(c.r!=null) npcState.relics-=c.r; else bagTake(c.b,c.n); } }
 function offerCostText(o){ return o.cost.map(c=> c.r!=null ? ("文物 "+npcState.relics+"/"+c.r) : (BLOCKS[c.b].name+" "+bagCount(c.b)+"/"+c.n)).join("　"); }
 function oracleProphecy(){
@@ -4668,7 +4717,7 @@ function spawnVillageTrader(vs){
   if(!vilStandable(X,y,Z)) return false;
   const M=P.market, yaw=Math.atan2(M.fx,-M.fz);                                        // 面朝集市前方(村心)
   mobs.push(newVillagerMob(X+0.5, y, Z+0.5, {pause:true, yaw, tgtYaw:yaw, pinned:true,
-    npcRole:"trader", npcName:NPC_ROLES.trader.name}));
+    npcRole:"trader", npcName:NPC_ROLES.trader.name, stallKey:"v:"+vs.x+":"+vs.z}));   // 集市摊主: 各村独立的每日库存与熟客度
   return true;
 }
 // 路线: (离开沿街屋门口等) → 环路上当前角度的点 → 沿环路弧线 → 目标所在角度 → 目标点。环路外侧的门/摊/井都有直路连到环路。
@@ -4766,9 +4815,15 @@ function renderNPC(){
 function npcBuy(i){
   const npc=talkNpc; if(!npc) return;
   const o=npcOffers(npc.npcRole)[i]; if(!o) return;
+  if(o.soldOut){ showName("⚠ 今天卖完了，明日补货"); return; }
   if(!offerHave(o)){ showName("⚠ 供品不足：需要 "+offerCostText(o)); return; }
   offerPay(o);
-  const msg=o.run();
+  let msg=o.run();
+  if(o.mk){
+    const m=marketState[o.mk]; m.left[o.mi]--; m.rep++;
+    if(m.rep===5) msg+="　🤝 成了老主顾，以后方块价八折";
+    if(m.rep===12) msg+="　🌴 摊主邀你立下「绿洲之约」";
+  }
   if(npc.npcRole==="trader") npcState.trades++;
   showName("✦ "+msg);
   sfxLevel && sfxLevel();
@@ -7912,6 +7967,100 @@ const _sky={t:-1, cover:0.42, sand:0, murk:0, arid:0, fogM:1, wind:1,
   zen:[0,0,0], hor:[0,0,0], gnd:[0,0,0], band:[0,0,0], glow:[0,0,0], sun:[0,1,0],
   cloudLit:[1,1,1], cloudSh:[0.6,0.65,0.75], coff:[0,0], camY:60, time:0, oct:5,
   fogCol:[0.5,0.6,0.8], eyeL:[0,60,0], worig:[0,0,0], fogNear:100, fogFar:150, fogA:0.004, fogB:0.05, skyFog:1};
+/* =========================================================
+   远景剪影(第三轮): 已加载区块之外, 两圈"山脊卡片"(半径 330 / 700)——每 1° 取该方向一段距离内的最高地形,
+   再叠上金字塔/宫殿/斗兽场/要塞/渡槽的轮廓; 按群系上色, 用天空同色雾压成一近一远两层渐蓝的山脊线。
+   只画不碰: 不改地形与存档; 玩家走出 64 格才分帧重建。
+   ========================================================= */
+const HZ_N=360, HZ_R=[330,700], HZ_BAND=[[176,340],[340,720]], HZ_FOG=[0.60,0.80];
+const horizonProg = makeShader(`
+  attribute vec3 aPos; attribute vec4 aCol;
+  uniform mat4 uPV; uniform vec3 uEye;
+  varying vec3 vCol, vRel; varying float vK;
+  void main(){ gl_Position = uPV*vec4(aPos,1.0); vCol=aCol.rgb; vK=aCol.a; vRel=aPos-uEye; }`,
+  FS_PREC+`
+  varying vec3 vCol, vRel; varying float vK;
+  uniform float uBright;
+  ${SKY_GLSL}
+  ${FOG_GLSL}
+  void main(){
+    float d = length(vRel); vec3 dir = vRel/max(d,0.001);
+    vec3 c = vCol*uBright;
+    gl_FragColor = vec4(mix(c, fogColor(dir), clamp(vK + (1.0-vK)*0.25*fogAmount(vRel, d, 1.0), 0.0, 1.0)), 1.0);
+  }`, {aPos:0, aCol:1});
+const UHZ={}; for(const n of ["uPV","uEye","uBright"]) UHZ[n]=gl.getUniformLocation(horizonProg,n);
+const SKL_HZ=skyUniformLocs(horizonProg);
+const horizon={vbo:gl.createBuffer(), n:0, cx:1e9, cz:1e9, stage:null, done:0, top:[new Float32Array(HZ_N),new Float32Array(HZ_N)], col:[[],[]]};
+const HZ_COL={[BIO_DESERT]:[0.85,0.73,0.53],[BIO_MESA]:[0.71,0.42,0.31],[BIO_CANYON]:[0.77,0.48,0.31],[BIO_VOLCANO]:[0.23,0.20,0.20],
+              [BIO_SALTLAKE]:[0.90,0.89,0.86],[BIO_SNOW]:[0.95,0.96,0.97]};
+const HZ_GRASS=[0.49,0.62,0.31];
+function horizonLandmarkBump(x,z){       // 地标轮廓: 在剪影上顶出金字塔尖/宫殿/斗兽场环/要塞墙
+  const st=structureAt(Math.floor(x/CELL),Math.floor(z/CELL));
+  if(!st) return 0;
+  const dx=x-st.x, dz=z-st.z, cheb=Math.max(Math.abs(dx),Math.abs(dz)), r=Math.hypot(dx,dz);
+  switch(st.type){
+    case "pyramid":   return Math.max(0,22-cheb*0.9);
+    case "palace":    return cheb<14?18:0;
+    case "colosseum": return Math.abs(r-15)<3?13:0;
+    case "castrum":   return (Math.abs(cheb-17)<2)?11:0;
+    case "aqueduct":  return Math.abs(dz)<2&&Math.abs(dx)<30?11:0;
+    case "city":      return cheb<20?30:0;
+    default: return 0;
+  }
+}
+function horizonProfileAt(band, a, cx, cz){   // 某方向某一圈的最高点(含地标), 返回 [高度, 颜色]
+  const [r0,r1]=HZ_BAND[band], ca=Math.cos(a), sa=Math.sin(a);
+  let best=-1e9, bx=cx, bz=cz;
+  for(let r=r0;r<=r1;r+=16){
+    const x=Math.floor(cx+ca*r), z=Math.floor(cz+sa*r);
+    const hv=Math.max(heightAt(x,z),WATER_Y)+horizonLandmarkBump(x,z);
+    if(hv>best){ best=hv; bx=x; bz=z; }
+  }
+  const b=biomeAt(bx,bz), col=HZ_COL[b]||HZ_GRASS;
+  return [Math.round(best), col];
+}
+function updateHorizon(){
+  if(gfxLevel<1) return;
+  if(!horizon.stage && Math.hypot(player.x-horizon.cx, player.z-horizon.cz)>64){
+    horizon.stage={cx:Math.round(player.x), cz:Math.round(player.z), top:[new Float32Array(HZ_N),new Float32Array(HZ_N)], col:[[],[]], i:0};
+  }
+  const S=horizon.stage; if(!S) return;
+  for(let k=0;k<60 && S.i<HZ_N;k++,S.i++){      // 每帧只算 60 个方位, 6 帧建完(高度缓存兜住 heightAt)
+    const a=S.i/HZ_N*Math.PI*2;
+    for(let b=0;b<2;b++){ const [t,c]=horizonProfileAt(b,a,S.cx,S.cz); S.top[b][S.i]=t; S.col[b][S.i]=c; }
+  }
+  if(S.i<HZ_N) return;
+  const v=new Float32Array(2*HZ_N*6*7); let o=0;
+  const lo=WATER_Y-4;
+  for(let b=1;b>=0;b--){                                   // 先远后近
+    const R=HZ_R[b], fk=HZ_FOG[b];
+    for(let i=0;i<HZ_N;i++){
+      const a0=i/HZ_N*Math.PI*2, a1=(i+1)/HZ_N*Math.PI*2, t=Math.max(lo+1,S.top[b][i]), c=S.col[b][i];
+      const x0=S.cx+Math.cos(a0)*R, z0=S.cz+Math.sin(a0)*R, x1=S.cx+Math.cos(a1)*R, z1=S.cz+Math.sin(a1)*R;
+      const q=[[x0,lo,z0],[x1,lo,z1],[x1,t,z1],[x0,lo,z0],[x1,t,z1],[x0,t,z0]];
+      // 卡片底边全没入雾(k=1), 只让顶部的锯齿山脊线透出来 → 读作远山, 而不是一圈立着的彩色围墙
+      for(const [x,y,z] of q){ v[o++]=x; v[o++]=y; v[o++]=z; v[o++]=c[0]; v[o++]=c[1]; v[o++]=c[2]; v[o++]=(y===lo?1.0:fk); }
+    }
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER,horizon.vbo);
+  gl.bufferData(gl.ARRAY_BUFFER,v,gl.STATIC_DRAW);
+  horizon.n=o/7; horizon.cx=S.cx; horizon.cz=S.cz; horizon.top=S.top; horizon.col=S.col; horizon.stage=null; horizon.done++;
+}
+function drawHorizon(pv,camX,camY,camZ,bright){
+  if(gfxLevel<1 || !horizon.n) return;
+  gl.useProgram(horizonProg);
+  applySkyUniforms(SKL_HZ);
+  gl.uniformMatrix4fv(UHZ.uPV,false,pv);
+  gl.uniform3f(UHZ.uEye,camX,camY,camZ);
+  gl.uniform1f(UHZ.uBright,bright);
+  gl.enable(gl.DEPTH_TEST); gl.depthMask(false); gl.disable(gl.CULL_FACE);
+  gl.bindBuffer(gl.ARRAY_BUFFER,horizon.vbo);
+  gl.enableVertexAttribArray(0); gl.enableVertexAttribArray(1);
+  gl.vertexAttribPointer(0,3,gl.FLOAT,false,28,0);
+  gl.vertexAttribPointer(1,4,gl.FLOAT,false,28,12);
+  gl.drawArrays(gl.TRIANGLES,0,horizon.n);
+  gl.depthMask(true);
+}
 function applySkyUniforms(L){
   const S=_sky;
   gl.uniform3fv(L.uZenith,S.zen); gl.uniform3fv(L.uHorizon,S.hor); gl.uniform3fv(L.uGround,S.gnd);
@@ -8791,6 +8940,8 @@ function render(now){
     gl.vertexAttribPointer(ASK_P,2,gl.FLOAT,false,8,0);
     gl.drawArrays(gl.TRIANGLES,0,3);
     gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
+    updateHorizon();
+    drawHorizon(pv,camX,camY,camZ,0.30+0.62*LS.sunI);   // 远景剪影: 天空之后、区块之前(被真实地形自然遮挡)
   }
 
   // 主着色器公共 uniform
@@ -9396,7 +9547,7 @@ function collectSave(){
     v:1, seed:SEED, ts:Date.now(),
     px:+player.x.toFixed(2), py:+player.y.toFixed(2), pz:+player.z.toFixed(2),
     yaw:+player.yaw.toFixed(3), pitch:+player.pitch.toFixed(3),
-    hp, maxHp, lvl, xp, armor, cores, kills, dayCount, bioSeen:[...bioSeen], landSeen:[...landSeen], trophies:[...trophies], weather,
+    hp, maxHp, lvl, xp, armor, cores, kills, dayCount, bioSeen:[...bioSeen], landSeen:[...landSeen], trophies:[...trophies], market:marketState, weather,
     npc:{ relics:npcState.relics, traderMet:npcState.traderMet, oracleMet:npcState.oracleMet, trades:npcState.trades, blessings:npcState.blessings },
     arch:{ pottery:archState.pottery, pages:archState.pages, digs:archState.digs, shards:archState.shards.slice(), setComplete:!!archState.setComplete },
     arena:{ bestWave:arenaState.bestWave, cleared:arenaState.cleared, keys:arenaState.keys },
@@ -9462,6 +9613,9 @@ function loadGame(){
   armor=s.armor??0; cores=s.cores|0; kills=s.kills??0; dayCount=s.dayCount??1;
   bioSeen.clear(); if(Array.isArray(s.bioSeen)) for(const b of s.bioSeen) bioSeen.add(b|0);   // 恢复图鉴(老存档缺字段→空,自然兼容)
   landSeen.clear(); if(Array.isArray(s.landSeen)) for(const k of s.landSeen) landSeen.add(String(k));
+  for(const k in marketState) delete marketState[k];
+  if(s.market && typeof s.market==="object") for(const k in s.market){ const m=s.market[k];
+    if(m && Array.isArray(m.left)) marketState[k]={day:m.day|0, left:m.left.map(v=>v|0), rep:m.rep|0}; }   // 老存档无此字段 → 空
   trophies.clear(); if(Array.isArray(s.trophies)) for(const k of s.trophies) if(LAND_TROPHY[k]) trophies.add(String(k));   // 老存档无此字段 → 空
   // NPC 系统: 恢复文物与来往记录(老存档无 npc 字段 → 全部归零, 自然向后兼容)
   const N=s.npc||{};
@@ -10894,14 +11048,18 @@ function selftest(){
     // 7. 触屏摇杆能真正驱动位移
     let touchErr=null, moved=0;
     try{
-      const before={x:player.x,z:player.z};
-      touchState.active=true; touchState.moveX=0; touchState.moveY=-1;   // 摇杆推到最前
-      const t0=performance.now(); lastT=t0;
+      // 新世界出生在村口, 正前方可能恰被路灯/墙/村民挡住 → 四个朝向依次试, 有一个能走开即可(每次试前回到原位)
+      const start={x:player.x,y:player.y,z:player.z,yaw:player.yaw};
       const wasSoft=softLock; softLock=true;
-      for(let i=1;i<=30;i++) frame(t0+i*33);
-      softLock=wasSoft;
-      touchState.active=false; touchState.moveX=0; touchState.moveY=0;
-      moved=Math.hypot(player.x-before.x, player.z-before.z);
+      for(let k=0;k<4 && moved<=1;k++){
+        player.x=start.x; player.y=start.y; player.z=start.z; player.vx=player.vz=0; player.yaw=start.yaw+k*Math.PI/2;
+        touchState.active=true; touchState.moveX=0; touchState.moveY=-1;   // 摇杆推到最前
+        const t0=performance.now(); lastT=t0;
+        for(let i=1;i<=30;i++) frame(t0+i*33);
+        touchState.active=false; touchState.moveX=0; touchState.moveY=0;
+        moved=Math.hypot(player.x-start.x, player.z-start.z);
+      }
+      softLock=wasSoft; player.yaw=start.yaw;
     }catch(e){ touchErr=e.message; }
     ok("模拟触屏摇杆能驱动玩家移动", !touchErr && moved>1, touchErr||("位移="+moved.toFixed(2)+"m"));
 
@@ -10996,7 +11154,7 @@ function selftest(){
                  onGround:false,pause:true,burning:false,held:null,npcRole:"trader",npcName:"商队商人"});
     }
     ok("能生成可交谈的商队商人NPC", countNPC("trader")>=1, "trader="+countNPC("trader"));
-    talkNpc=mobs.find(m=>m.npcRole==="trader")||null;
+    talkNpc=mobs.find(m=>m.npcRole==="trader" && !m.stallKey)||null;   // 流动商人(村落摊主是另一套每日库存菜单)
     ok("可识别当前可交谈NPC", !!talkNpc && talkNpc.npcRole==="trader", "talk="+(talkNpc&&talkNpc.npcRole));
     bag.clear(); bagAdd(SAND,12);
     const lantB=bagCount(LANTERN);
@@ -11536,6 +11694,36 @@ function selftest(){
         ok("地标珍藏: 每种地标都有奖励(四址 LAND_LOOT 或珍藏), 同一地标只领一次, 进存档, 常驻加成生效",
            miss.length===0 && a===true && b===false && m1===Math.min(40,mhS+2) && m2===m1 && Array.isArray(sv.trophies) && sv.trophies.includes("pyramid") && perks,
            "miss="+miss.join(",")+" a="+a+" b="+b+" hp="+mhS+"→"+m1+"→"+m2);
+      }
+      // 村落集市: 库存售罄挡购买 / 次日补货 / 买满 5 次老主顾八折 / 进存档
+      {
+        const bagS=new Map(bag), dayS=dayCount, talkS=talkNpc, mkS=JSON.stringify(marketState), panelS=npcPanelOpen;
+        for(const k in marketState) delete marketState[k];
+        talkNpc={npcRole:"trader", stallKey:"v:test", npcName:"t"};
+        bag.set(CACTUS,999); bag.set(SANDSTONE,999);
+        let bought=0; for(let i=0;i<8;i++){ const o=npcOffers("trader")[0]; if(offerHave(o)){ npcBuy(0); bought++; } }
+        const soldOut=npcOffers("trader")[0].soldOut===true && !offerHave(npcOffers("trader")[0]);
+        dayCount++; const restock=npcOffers("trader")[0].soldOut===false && marketState["v:test"].left[0]===VIL_OFFERS[0].stock;
+        npcBuy(1);                                                       // 第 5 次 → 老主顾
+        const disc=marketState["v:test"].rep===5 && npcOffers("trader")[1].cost[0].n===Math.ceil(VIL_OFFERS[1].cost[0].n*0.8);
+        const sv=collectSave(); const saved=!!(sv.market && sv.market["v:test"] && sv.market["v:test"].rep===5);
+        const lockedSpecial=!npcOffers("trader").some(o=>o.t.indexOf("绿洲之约")>=0);
+        bag.clear(); for(const [k,v] of bagS) bag.set(k,v); dayCount=dayS; talkNpc=talkS; npcPanelOpen=panelS;
+        for(const k in marketState) delete marketState[k]; Object.assign(marketState, JSON.parse(mkS));
+        ok("村落集市: 每货每日限量(售罄挡购)、次日补货、买满 5 次八折、未满 12 次不出「绿洲之约」、进存档",
+           bought===VIL_OFFERS[0].stock && soldOut && restock && disc && lockedSpecial && saved, "bought="+bought+" sold="+soldOut+" re="+restock+" disc="+disc+" saved="+saved);
+      }
+      // 远景剪影: 分帧建完两圈 × 360 段; 高度不低于底线; 金字塔处顶出尖
+      {
+        const g0h=gfxLevel; if(gfxLevel<1) setGfx(2);
+        horizon.cx=1e9; horizon.stage=null; const d0=horizon.done;
+        for(let i=0;i<10 && horizon.done===d0;i++) updateHorizon();
+        let okTop=true; for(let b=0;b<2;b++) for(let i=0;i<HZ_N;i++) if(!(horizon.top[b][i]>=WATER_Y)) okTop=false;
+        let pyr=null; for(let sx=-40;sx<=40&&!pyr;sx++) for(let sz=-40;sz<=40&&!pyr;sz++){ const st=structureAt(sx,sz); if(st&&st.type==="pyramid") pyr=st; }
+        const bump=pyr?horizonLandmarkBump(pyr.x,pyr.z):-1;
+        if(g0h<1) setGfx(g0h);
+        ok("远景剪影: 分帧建出 2×360 段山脊卡片, 高度不低于水位, 金字塔顶出尖", horizon.done===d0+1 && horizon.n===2*HZ_N*6 && okTop && (!pyr || bump>=20),
+           "n="+horizon.n+" pyr="+(pyr?bump:"none"));
       }
       ok("材质: 逐块旋转——松沙陷坑与沙子同模式(伪装不露馅), 沙纹只转180°, 草地四向", UV_ROT[LOOSESAND*2]===UV_ROT[SAND*2] && UV_ROT[LOOSESAND*2+1]===UV_ROT[SAND*2+1] && UV_ROT[SAND*2]===1 && UV_ROT[GRASS*2]===2,
          "sand="+UV_ROT[SAND*2]+" loose="+UV_ROT[LOOSESAND*2]);
