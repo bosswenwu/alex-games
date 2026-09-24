@@ -2452,7 +2452,7 @@ const mainProg = makeShader(`
   varying vec3 vN, vRel, vSh;
   uniform sampler2D uTex;
   uniform vec3 uTint, uSunDir, uSunCol, uAmbCol;
-  uniform float uDay, uAlpha, uBlk;
+  uniform float uDay, uAlpha, uBlk, uSandFx;
   uniform int uMode;
   ${SKY_GLSL}
   ${FOG_GLSL}
@@ -2464,7 +2464,7 @@ const mainProg = makeShader(`
     if(uMode==0){ if(c.a<0.5) discard; c.a=1.0; }
     else c.a *= uAlpha;
     vec3 alb = pow(c.rgb, vec3(2.2));
-    vec3 light;
+    vec3 light, spec = vec3(0.0);
     if(vL > 1.5){
       light = vec3(vL*0.55);                         // 自发光方块(灯笼/岩浆/水晶): 不受日照与阴影影响
     } else {
@@ -2486,6 +2486,32 @@ const mainProg = makeShader(`
       float dirVis = sh * clamp(vSky*2.4 - 0.25, 0.0, 1.0);
       if(uCloudShadow > 0.0 && dirVis > 0.0) dirVis *= 1.0 - uCloudShadow*cloudShade(vRel);   // 云影缓缓掠过沙丘
       light = uAmbCol * (hemi * skyAmb * ao) + uSunCol * (direct * dirVis * mix(1.0, ao, 0.45));
+      // 沙面高光(《风之旅人》式): 宽柔光泽 + 掠射边光 + 稀疏沙粒闪光(随视角闪烁, 过泛光阈值会一闪一闪)
+      // 材质按图集格号识别, 不加顶点属性: 沙(松沙同贴图, 陷阱照样伪装) / 盐壳顶 / 雪顶 / 黑沙(弱)
+      if(uSandFx > 0.5 && vKind < 0.5 && dirVis > 0.0){
+        float tid = floor(vUV.y*32.0)*16.0 + floor(vUV.x*16.0);
+        float sandK = abs(tid-${BLOCKS[SAND].t}.0)<0.5 ? 1.0
+                    : (abs(tid-${BLOCKS[SALTCRUST].t}.0)<0.5 || abs(tid-${BLOCKS[SNOW].t}.0)<0.5) ? 0.8
+                    : abs(tid-${BLOCKS[BLACKSAND].t}.0)<0.5 ? 0.35 : 0.0;
+        if(sandK > 0.0){
+          float dist = length(vRel);
+          vec3 V = -vRel / max(dist, 0.001);
+          vec3 Hh = normalize(uSunDir + V);
+          float sheen = pow(max(dot(vN, Hh), 0.0), 10.0) * 0.10;
+          float rim = pow(1.0 - max(dot(vN, V), 0.0), 4.0) * 0.06 * max(dot(vN, uSunDir), 0.0);
+          float glit = 0.0;
+          if(dist < 42.0){
+            vec3 cell = floor((vRel + uEyeL) * 24.0);                    // 约一个贴图像素一颗沙粒
+            float h1 = fract(sin(dot(cell, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+            if(h1 > 0.955){                                              // 约 4.5% 的沙粒会反光
+              vec3 rn = vec3(fract(h1*17.13), fract(h1*31.71), fract(h1*47.37)) - 0.5;
+              vec3 Ng = normalize(vN + rn*1.6);
+              glit = pow(max(dot(reflect(-uSunDir, Ng), V), 0.0), 48.0) * 3.2 * (1.0 - smoothstep(16.0, 42.0, dist));
+            }
+          }
+          spec = uSunCol * ((sheen + rim + glit) * dirVis * sandK);
+        }
+      }
       // 方块光: 灯笼/岩浆/水晶周围的暖色光池(夜里明显, 正午几乎看不出); 平滑衰减, 墙角随 AO 略暗
       if(vBL > 0.0) light += ${BL_COL_GLSL} * (uBlk * pow(vBL, 3.2) * mix(1.0, ao, 0.5));
       // 浅水底的焦散光纹(只在露天水域: 天光可见度门控, 洞穴里不出现)
@@ -2500,7 +2526,7 @@ const mainProg = makeShader(`
         light *= exp(-max(${GLSL_F(WATER_Y)} + 0.86 - wp.y, 0.0) * vec3(0.32, 0.10, 0.075));
       }
     }
-    vec3 col = aces(alb * light * uTint * uDay);
+    vec3 col = aces((alb * light * uTint + spec) * uDay);
     col = pow(col, vec3(1.0/2.2));
     float lum = dot(col, vec3(0.299, 0.587, 0.114));
     col = clamp(mix(vec3(lum), col, 1.06), 0.0, 1.0);   // ACES 会压饱和, 略补; 其余饱和/鲜艳度交给后处理调色(否则草地发荧光)
@@ -2623,7 +2649,7 @@ const blobVbo=gl.createBuffer();
 const U = {}; // uniform 位置
 for(const n of ["uPV","uOffset","uUVOff","uEye","uFogNear","uFogFar","uTex","uFogCol","uDay","uAlpha","uMode","uTint",
                  "uLightPV","uShadowBias","uShadow","uSunDir","uSunCol","uAmbCol","uShadowOn","uShadowTexel","uPCF",
-                 "uWTime","uWind","uWOrig","uCloudShadow","uBlk"])
+                 "uWTime","uWind","uWOrig","uCloudShadow","uBlk","uSandFx"])
   U[n]=gl.getUniformLocation(mainProg,n);
 // 水面程序 uniform
 const UW = {};
@@ -8670,6 +8696,7 @@ function render(now){
   gl.uniform3fv(U.uAmbCol,LS.ambCol);
   const blK=blockLightK(sunH);
   gl.uniform1f(U.uBlk,blK);
+  gl.uniform1f(U.uSandFx, gfxLevel>0 ? 1 : 0);     // 沙面闪光: 「低」档关
   gl.uniform1f(U.uShadowOn,shadow.ok?1:0);
   gl.uniform1f(U.uPCF,shadow.pcf);
   gl.uniform1f(U.uShadowTexel,shadow.ok?1/shadow.size:0);
@@ -11370,6 +11397,8 @@ function selftest(){
       ok("光影: 深度纹理阴影可用(WebGL2 或 WEBGL_depth_texture)且贴图已建", !HAS_DEPTH_TEX || GFX_PRESETS[gfxLevel].shadow===false || (shadow.ok && shadow.size>=1024),
          "gl2="+IS_GL2+" depthTex="+HAS_DEPTH_TEX+" ok="+shadow.ok+" size="+shadow.size);
       const g0=gfxLevel; setGfx(0); const offOk=!shadow.ok; setGfx(g0);
+      const mainSrc=gl.getAttachedShaders(mainProg).map(sh=>gl.getShaderSource(sh)||"").join("\n");
+      ok("沙面高光: 主着色器有沙粒闪光且按画质开关", U.uSandFx!==null && mainSrc.indexOf("sandK")>=0, "loc="+(U.uSandFx!==null));
       ok("材质: 逐块旋转——松沙陷坑与沙子同模式(伪装不露馅), 沙纹只转180°, 草地四向", UV_ROT[LOOSESAND*2]===UV_ROT[SAND*2] && UV_ROT[LOOSESAND*2+1]===UV_ROT[SAND*2+1] && UV_ROT[SAND*2]===1 && UV_ROT[GRASS*2]===2,
          "sand="+UV_ROT[SAND*2]+" loose="+UV_ROT[LOOSESAND*2]);
       // ---- 图集扩页(512×1024)与村落建材 ----
