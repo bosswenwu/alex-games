@@ -206,10 +206,17 @@
   #xpbar .xf { height:100%; width:0%; background:linear-gradient(#7dff5a,#2f9e21); transition:width .18s; }
   #xpbar .xl { position:absolute; left:50%; top:-17px; transform:translateX(-50%); color:#8cff6a;
                font:bold 13px "Microsoft YaHei",sans-serif; text-shadow:2px 2px 0 #000; }
+  /* F1 拍照模式: 藏起 HUD, 但水下/岩浆/着火/受伤/中毒等屏幕色调照常显示; 上下 2.35:1 电影黑边缓入 */
+  body.photo #hud > :not(#watertint):not(#lavatint):not(#firetint):not(#hurttint):not(#poisontint) { visibility:hidden !important; }
+  body.photo #touchui { display:none !important; }
+  .letterbox { position:fixed; left:0; right:0; height:0; background:#000; z-index:9; pointer-events:none; transition:height .3s ease; }
+  #lbTop { top:0; } #lbBot { bottom:0; }
+  body.photo .letterbox { height:max(0px, calc((100vh - 100vw / 2.35) / 2)); }
 </style>
 </head>
 <body>
 <canvas id="gl"></canvas>
+<div id="lbTop" class="letterbox"></div><div id="lbBot" class="letterbox"></div>
 
 <div id="craftPanel">
   <div id="craftHead">背包 &amp; 合成台<span id="craftHint">按 B 关闭</span></div>
@@ -282,7 +289,7 @@
 <div id="fullhelp">
   <div class="fh-card">
     <div class="fh-title">完整帮助 · 按 <b>H</b> 或点此关闭</div>
-    <b>F5</b> 第三人称　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成　<b>Esc</b> 暂停　<b>T</b> 编年史　<b>P</b> 陶片图鉴　<b>K</b> 神话遗物　<b>U</b> 开宝库　<b>R</b> 答斯芬克斯　<b>L</b> 神灯许愿<br>
+    <b>F1</b> 拍照模式　<b>F2</b> 截图　<b>F5</b> 第三人称　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成　<b>Esc</b> 暂停　<b>T</b> 编年史　<b>P</b> 陶片图鉴　<b>K</b> 神话遗物　<b>U</b> 开宝库　<b>R</b> 答斯芬克斯　<b>L</b> 神灯许愿<br>
     <b>物品栏</b>：1烟花 2钩爪 3可乐 4铁剑 5机关枪 6火箭筒 7弓 8=TNT(右键放·左键点燃) 9弹跳板<br>
     <b>2 钩爪</b>甩向准星把你拉过去；<b>3 可乐</b>回血+加速；<b>9 弹跳板</b>踩上去高高弹飞不摔伤<br>
     击杀获得<b>经验</b>升级(提升生命与伤害)。白天长、夜晚短而亮，敌人只是点缀<br>
@@ -2132,10 +2139,13 @@ const BROWSER_TIPS =
 const canvas = document.getElementById("gl");
 let gl=null;
 try{
-  // 优先 WebGL2(深度纹理/后续后处理都靠它); 老环境回退 WebGL1。电脑端开 MSAA 抗锯齿。
+  // 优先 WebGL2(深度纹理/后处理都靠它); 老环境回退 WebGL1。
+  // WebGL2 下「中」档起场景画进离屏 FBO(用 FXAA 抗锯齿), 画布自身的 MSAA 纯属浪费 → 只有存档画质为「低」时才开;
+  // WebGL1 没有后处理, 照旧开画布 MSAA。
+  let gfx0=2; try{ const v=parseInt(localStorage.getItem("sandsea_gfx"),10); if(v>=0) gfx0=v; }catch(e){}
   const glOpts={antialias:true, powerPreference:"high-performance",
                 preserveDrawingBuffer:false, failIfMajorPerformanceCaveat:false};
-  gl = canvas.getContext("webgl2", glOpts)
+  gl = canvas.getContext("webgl2", Object.assign({}, glOpts, {antialias:gfx0===0}))
     || canvas.getContext("webgl", glOpts)
     || canvas.getContext("experimental-webgl");
 }catch(e){ gl=null; }
@@ -4384,6 +4394,8 @@ function enterSoft(){ // 指针锁定不可用时的降级模式(用鼠标指针
 document.addEventListener("keydown",e=>{
   if(e.code==="KeyO" && !e.repeat){ e.preventDefault(); const g=setGfx(gfxLevel+1);
     showName("🎨 画质: "+GFX_NAMES[g]+(g>0&&!shadow.ok?"（设备不支持阴影）":"")+"  · 按 O 切换"); return; }
+  if(e.code==="F1"){ e.preventDefault(); if(!e.repeat) setPhotoMode(!photoMode); return; }   // 拍照模式: 隐藏 HUD
+  if(e.code==="F2"){ e.preventDefault(); if(!e.repeat) takeScreenshot(); return; }             // 截图下载 PNG
   if(e.code==="F3"){ e.preventDefault(); const d=document.getElementById("debug"); d.style.display=d.style.display==="block"?"none":"block"; return; }
   if(e.code==="F5"){ e.preventDefault(); camMode=(camMode+1)%3; showName(["第一人称","第三人称(背后)","第三人称(正面)"][camMode]);
     const vm=document.getElementById("viewmodel"); if(vm) vm.style.display = camMode>0 ? "none" : ""; // 第三人称时藏起第一人称手, 否则手会浮在画面右下
@@ -7173,10 +7185,13 @@ function chunkInFrustum(cx,cz){
    ========================================================= */
 const GFX_NAMES=["低","中","高","极致"];
 const GFX_PRESETS=[
-  {shadow:false},                                   // 低: 无阴影贴图(仍有朝向光照 + 天光遮蔽)
-  {shadow:true, size:1024, range:40, pcf:0},        // 中
-  {shadow:true, size:2048, range:56, pcf:1},        // 高(电脑默认)
-  {shadow:true, size:4096, range:80, pcf:1},        // 极致
+  // post: 后处理(仅 WebGL2)  bloom: 泛光  fxaa: 抗锯齿  heat: 正午热浪  dof: 远景柔化
+  // msaa: 离屏多重采样数。管线已支持(多重采样渲染缓冲 + blit 解析), 但默认关: mainProg 还是 GLSL 100, 没有 centroid 插值,
+  //       MSAA 下远处亚像素小方块面会在像素中心外推 UV, 采到图集相邻格子 → 沙地满是彩色噪点。改用 FXAA; 待主着色器换 GLSL 300 + centroid 再开。
+  {shadow:false, post:false},                                                          // 低: 无阴影贴图、无后处理(直出画布)
+  {shadow:true, size:1024, range:40, pcf:0, post:true, bloom:true, fxaa:true},         // 中: + 泛光/调色/暗角/FXAA
+  {shadow:true, size:2048, range:56, pcf:1, post:true, bloom:true, fxaa:true, msaa:0, heat:true},   // 高(电脑默认): + 正午热浪
+  {shadow:true, size:4096, range:80, pcf:1, post:true, bloom:true, fxaa:true, msaa:0, heat:true, dof:true}, // 极致: + 远景柔化
 ];
 let gfxLevel=2;
 try{ const v=parseInt(localStorage.getItem("sandsea_gfx"),10); if(v>=0 && v<GFX_PRESETS.length) gfxLevel=v; }catch(e){}
@@ -7204,10 +7219,384 @@ function setupShadow(){
   shadow.fbo=fbo; shadow.tex=tex; shadow.size=size; shadow.pcf=P.pcf; shadow.ok=true;
 }
 setupShadow();
+/* =========================================================
+   光影第 4 步: 后处理管线(仅 WebGL2; WebGL1/「低」档直接画到画布, 与原来完全一致)
+   场景 → sceneFBO(RGBA8 + 深度纹理; 预设开 msaa 时先画进多重采样渲染缓冲再 blit 解析, 默认关, 见 GFX_PRESETS)
+   泛光: ½ 分辨率阈值预滤(T=0.80, K=0.20, 13 抽头) → ¼ ⅛ 1/16 1/32 四级下采样 → 帐篷滤波逐级上采样叠加
+   合成(全分辨率一遍): 热浪扰动 → FXAA 3.11 → 远景柔化(极致) → +泛光 → 白平衡/S 曲线/饱和+自然饱和/
+                      冷暗部暖高光/沙色去柠檬黄 → 暗角 → 抖动(消除天空/雾的色带) → 画布
+   场景色已在 mainProg 里做过 ACES 色调映射(LDR, sRGB), 所以阈值按 LDR 设定。
+   ========================================================= */
+let sceneFBO=null;                           // 本帧场景的渲染目标(null=默认帧缓冲); renderShadowMap 结束时恢复到它
+let photoMode=false;                         // F1 拍照模式: 隐藏 HUD, 游戏照常运行
+const POST_CAN=IS_GL2;                       // WebGL1 不跑后处理(保持原有 MSAA 直出)
+const post={ok:false, broken:false, dirty:true, w:0, h:0, level:-1, fbo:null, tex:null, depth:null,
+  msFbo:null, msColor:null, msDepth:null, samples:0, mips:[], dof:[], hdr:false, bloomScale:1,
+  progs:null, heat:0, frames:0, last:{bloom:0, vig:0, wb:[1,1,1]}};
+/* 昼夜后处理参数(纯函数, 便于 selftest): 泛光强度 白天 0.08 · 黄金时刻 0.14 · 夜晚 0.22 · 沙暴 0.16;
+   白平衡 白天中性 · 黄金时刻偏暖(1.04,1,0.93) · 夜晚偏冷(0.93,0.97,1.07); 暗角 白天 0.28 · 夜晚 0.36 · 水下 0.45 */
+function postParams(sh, wx, underwater){
+  const dayK=smoothstep(-0.05,0.15,sh), night=1-dayK;
+  const gold=(1-smoothstep(0.2,0.62,sh))*dayK;
+  let bloom=0.08+(0.14-0.08)*gold;
+  bloom+=(0.22-bloom)*night;
+  if(wx==="sand") bloom=Math.max(bloom,0.16);
+  const wb=[1+0.04*gold-0.07*night, 1-0.03*night, 1-0.07*gold+0.07*night];
+  let vig=0.28+0.08*night;
+  if(underwater) vig=0.45;
+  return {bloom, vig, wb};
+}
+const POST_VS=`#version 300 es
+out vec2 vUV;
+void main(){ vec2 p=vec2(float((gl_VertexID<<1)&2), float(gl_VertexID&2)); vUV=p; gl_Position=vec4(p*2.0-1.0,0.0,1.0); }`;
+// 13 抽头下采样(CoD: Advanced Warfare), 可选阈值软膝预滤
+const POST_DOWN_FS=`#version 300 es
+precision highp float;
+in vec2 vUV; out vec4 o;
+uniform sampler2D uSrc; uniform vec2 uTexel; uniform float uPre, uT, uK, uScale;
+vec3 S(float x,float y){ return texture(uSrc, vUV+uTexel*vec2(x,y)).rgb; }
+void main(){
+  vec3 c = S(0.,0.)*0.125
+    + (S(-2.,-2.)+S(2.,-2.)+S(-2.,2.)+S(2.,2.))*0.03125
+    + (S(0.,-2.)+S(-2.,0.)+S(2.,0.)+S(0.,2.))*0.0625
+    + (S(-1.,-1.)+S(1.,-1.)+S(-1.,1.)+S(1.,1.))*0.125;
+  if(uPre>0.5){
+    float br=max(c.r,max(c.g,c.b));
+    float soft=clamp(br-uT+uK,0.0,2.0*uK); soft=soft*soft/(4.0*uK+1e-4);
+    c*=max(soft,br-uT)/max(br,1e-4);
+  }
+  o=vec4(c*uScale,1.0);
+}`;
+// 9 抽头帐篷上采样(叠加到上一级; 也用作远景柔化的模糊)
+const POST_UP_FS=`#version 300 es
+precision highp float;
+in vec2 vUV; out vec4 o;
+uniform sampler2D uSrc; uniform vec2 uTexel; uniform float uW;
+vec3 S(float x,float y){ return texture(uSrc, vUV+uTexel*vec2(x,y)).rgb; }
+void main(){
+  vec3 c = S(0.,0.)*4.0 + (S(0.,-1.)+S(-1.,0.)+S(1.,0.)+S(0.,1.))*2.0 + (S(-1.,-1.)+S(1.,-1.)+S(-1.,1.)+S(1.,1.));
+  o=vec4(c*(uW/16.0),1.0);
+}`;
+const POST_COMP_FS=`#version 300 es
+precision highp float;
+in vec2 vUV; out vec4 o;
+uniform sampler2D uScene, uBloom, uDepth, uDof;
+uniform vec2 uRcp; uniform float uAspect, uTime, uSubpix, uBloomI, uVig, uHeat, uDofOn, uNear, uFar, uDofNear, uDofFar;
+uniform vec3 uWB;
+float L(vec2 uv){ return dot(texture(uScene,uv).rgb, vec3(0.299,0.587,0.114)); }
+float linZ(vec2 uv){ float d=texture(uDepth,uv).r; return uNear*uFar/(uFar-d*(uFar-uNear)); }
+float hash12(vec2 p){ vec3 p3=fract(vec3(p.xyx)*0.1031); p3+=dot(p3,p3.yzx+33.33); return fract((p3.x+p3.y)*p3.z); }
+vec3 rgb2hsv(vec3 c){ vec4 K=vec4(0.,-1./3.,2./3.,-1.); vec4 p=mix(vec4(c.bg,K.wz),vec4(c.gb,K.xy),step(c.b,c.g));
+  vec4 q=mix(vec4(p.xyw,c.r),vec4(c.r,p.yzx),step(p.x,c.r)); float d=q.x-min(q.w,q.y);
+  return vec3(abs(q.z+(q.w-q.y)/(6.*d+1e-10)), d/(q.x+1e-10), q.x); }
+vec3 hsv2rgb(vec3 c){ vec3 p=abs(fract(c.xxx+vec3(1.,2./3.,1./3.))*6.-3.); return c.z*mix(vec3(1.),clamp(p-1.,0.,1.),c.y); }
+// FXAA 3.11 (quality): edgeThreshold 0.125, edgeThresholdMin 0.0625, subpix 0.75(开 MSAA 时 0.35); uSubpix<0 = 关
+vec3 fxaa(vec2 uv){
+  vec2 r=uRcp;
+  vec3 rgbM=texture(uScene,uv).rgb;
+  if(uSubpix<0.0) return rgbM;
+  float lM=dot(rgbM,vec3(0.299,0.587,0.114));
+  float lS=L(uv+vec2(0.,r.y)), lE=L(uv+vec2(r.x,0.)), lN=L(uv-vec2(0.,r.y)), lW=L(uv-vec2(r.x,0.));
+  float mx=max(max(lN,lW),max(lE,max(lS,lM))), mn=min(min(lN,lW),min(lE,min(lS,lM)));
+  float range=mx-mn;
+  if(range<max(0.0625, mx*0.125)) return rgbM;
+  float lNW=L(uv-r), lSE=L(uv+r), lNE=L(uv+vec2(r.x,-r.y)), lSW=L(uv+vec2(-r.x,r.y));
+  float lNS=lN+lS, lWE=lW+lE;
+  float eH1=-2.*lM+lNS, eV1=-2.*lM+lWE;
+  float lNESE=lNE+lSE, lNWNE=lNW+lNE;
+  float eH2=-2.*lE+lNESE, eV2=-2.*lN+lNWNE;
+  float lNWSW=lNW+lSW, lSWSE=lSW+lSE;
+  float eH=abs(-2.*lW+lNWSW)+abs(eH1)*2.+abs(eH2);
+  float eV=abs(-2.*lS+lSWSE)+abs(eV1)*2.+abs(eV2);
+  bool horz=eH>=eV;
+  float lengthSign=horz?r.y:r.x;
+  if(!horz){ lN=lW; lS=lE; }
+  float subB=((lNS+lWE)*2.+lNWSW+lNESE)/12.-lM;
+  float gN=lN-lM, gS=lS-lM;
+  float lNN=lN+lM, lSS=lS+lM;
+  bool pairN=abs(gN)>=abs(gS);
+  float grad=max(abs(gN),abs(gS));
+  if(pairN) lengthSign=-lengthSign;
+  float subC=clamp(abs(subB)/range,0.,1.);
+  vec2 posB=uv; vec2 off=horz?vec2(r.x,0.):vec2(0.,r.y);
+  if(!horz) posB.x+=lengthSign*0.5; else posB.y+=lengthSign*0.5;
+  vec2 posN=posB-off, posP=posB+off;
+  float subF=(-2.*subC+3.)*subC*subC;
+  if(!pairN) lNN=lSS;
+  float gScaled=grad*0.25;
+  bool mLTZ=(lM-lNN*0.5)<0.;
+  float eN=L(posN)-lNN*0.5, eP=L(posP)-lNN*0.5;
+  bool dN=abs(eN)>=gScaled, dP=abs(eP)>=gScaled;
+  float Q[8]=float[8](1.5,2.,2.,2.,2.,4.,8.,8.);
+  for(int i=0;i<8;i++){
+    if(dN&&dP) break;
+    if(!dN){ posN-=off*Q[i]; eN=L(posN)-lNN*0.5; dN=abs(eN)>=gScaled; }
+    if(!dP){ posP+=off*Q[i]; eP=L(posP)-lNN*0.5; dP=abs(eP)>=gScaled; }
+  }
+  float dstN=horz?uv.x-posN.x:uv.y-posN.y;
+  float dstP=horz?posP.x-uv.x:posP.y-uv.y;
+  bool goodN=(eN<0.)!=mLTZ, goodP=(eP<0.)!=mLTZ;
+  float dst=min(dstN,dstP);
+  bool good=dstN<dstP?goodN:goodP;
+  float pixOff=good?(-dst/(dstN+dstP)+0.5):0.;
+  float fin=max(pixOff, subF*subF*uSubpix);
+  if(!horz) uv.x+=fin*lengthSign; else uv.y+=fin*lengthSign;
+  return texture(uScene,uv).rgb;
+}
+void main(){
+  vec2 uv=vUV;
+  if(uHeat>0.001){   // 正午沙漠热浪: 只扰动远处(60~140 格)的像素
+    float z=linZ(uv);
+    uv.y+=sin(uv.y*230.0+uTime*5.0)*sin(uv.x*37.0+uTime*1.7)*0.0009*uHeat*smoothstep(60.0,140.0,z);
+  }
+  vec3 c=fxaa(uv);
+  if(uDofOn>0.5){    // 极致: 远景大气柔化(近处永不模糊, 不影响操作); 天空不参与
+    float d=texture(uDepth,uv).r;
+    float z=uNear*uFar/(uFar-d*(uFar-uNear));
+    c=mix(c, texture(uDof,uv).rgb, smoothstep(uDofNear,uDofFar,z)*0.55*step(d,0.99999));
+  }
+  c+=texture(uBloom,uv).rgb*uBloomI*vec3(1.0,0.96,0.90);
+  c*=uWB;
+  c=clamp(c,0.,1.);
+  c=mix(c, c*c*(3.0-2.0*c), 0.12);                                   // 柔和 S 曲线
+  float l=dot(c,vec3(0.2126,0.7152,0.0722));
+  float s=max(c.r,max(c.g,c.b))-min(c.r,min(c.g,c.b));
+  c=mix(vec3(l), c, 1.04+0.16*(1.0-s));                               // 饱和 1.04 + 自然饱和 0.16
+  c=clamp(c,0.,1.);
+  c=mix(c, c*vec3(0.62,0.75,1.00)+vec3(0.02,0.03,0.06), 0.10*(1.0-l)*(1.0-l));   // 冷暗部(≈#2B3F66)
+  c=mix(c, c*vec3(1.06,1.00,0.90), 0.08*l*l);                                     // 暖高光(≈#FFE3B8)
+  vec3 h=rgb2hsv(c);                                                   // 沙色去"柠檬黄": 色相 38–62° 降饱和 10% 并偏橙 4°
+  float wy=smoothstep(33./360.,40./360.,h.x)*(1.0-smoothstep(60./360.,67./360.,h.x));
+  h.x-=4./360.*wy; h.y*=1.0-0.10*wy;
+  c=mix(c, hsv2rgb(h), step(0.001,wy));
+  vec2 q=(vUV-0.5)*vec2(uAspect,1.0); float rr=length(q)/length(vec2(uAspect,1.0)*0.5);
+  c*=1.0-uVig*smoothstep(0.45,1.05,rr);                               // 暗角
+  c+=(hash12(gl_FragCoord.xy+fract(uTime)*97.0)-0.5)*(1.5/255.0);     // 抖动, 消除色带
+  o=vec4(c,1.0);
+}`;
+function postCompile(fs){   // 自己编译: 失败只关后处理, 不弹"着色器编译失败"的致命页
+  const sh=(type,src)=>{ const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s);
+    if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){ const log=gl.getShaderInfoLog(s); gl.deleteShader(s); throw new Error(log); } return s; };
+  const p=gl.createProgram();
+  gl.attachShader(p,sh(gl.VERTEX_SHADER,POST_VS)); gl.attachShader(p,sh(gl.FRAGMENT_SHADER,fs));
+  gl.linkProgram(p);
+  if(!gl.getProgramParameter(p,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u={p};
+  const n=gl.getProgramParameter(p,gl.ACTIVE_UNIFORMS);
+  for(let i=0;i<n;i++){ const nm=gl.getActiveUniform(p,i).name; u[nm]=gl.getUniformLocation(p,nm); }
+  return u;
+}
+function postTex(w,h,ifmt,fmt,type,filter){
+  const t=gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D,t);
+  gl.texImage2D(gl.TEXTURE_2D,0,ifmt,w,h,0,fmt,type,null);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,filter);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,filter);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  return t;
+}
+function postTarget(w,h,hdr){   // 一个颜色纹理 + FBO(泛光各级/远景柔化用); 失败返回 null
+  const tex=hdr?postTex(w,h,gl.RGBA16F,gl.RGBA,gl.HALF_FLOAT,gl.LINEAR):postTex(w,h,gl.RGBA8,gl.RGBA,gl.UNSIGNED_BYTE,gl.LINEAR);
+  const fbo=gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,tex,0);
+  if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE){ gl.deleteFramebuffer(fbo); gl.deleteTexture(tex); return null; }
+  return {tex, fbo, w, h};
+}
+function postFree(){
+  const del=t=>{ if(t){ gl.deleteFramebuffer(t.fbo); gl.deleteTexture(t.tex); } };
+  if(post.fbo) gl.deleteFramebuffer(post.fbo);
+  if(post.tex) gl.deleteTexture(post.tex);
+  if(post.depth) gl.deleteTexture(post.depth);
+  if(post.msFbo) gl.deleteFramebuffer(post.msFbo);
+  if(post.msColor) gl.deleteRenderbuffer(post.msColor);
+  if(post.msDepth) gl.deleteRenderbuffer(post.msDepth);
+  post.mips.forEach(del); post.dof.forEach(del);
+  post.fbo=post.tex=post.depth=post.msFbo=post.msColor=post.msDepth=null;
+  post.mips=[]; post.dof=[]; post.samples=0; post.ok=false; post.w=post.h=0; post.level=-1;
+}
+function postBuild(w,h){
+  const P=GFX_PRESETS[gfxLevel];
+  postFree();
+  post.dirty=false; post.w=w; post.h=h; post.level=gfxLevel;
+  if(post.broken) return;
+  try{
+    if(!post.progs){
+      post.progs={down:postCompile(POST_DOWN_FS), up:postCompile(POST_UP_FS), comp:postCompile(POST_COMP_FS)};
+      post.hdr=!!(gl.getExtension("EXT_color_buffer_float")||gl.getExtension("EXT_color_buffer_half_float"));
+    }
+    // 场景目标: RGBA8 颜色(线性过滤, FXAA 要用) + 24 位深度纹理(热浪/远景柔化读深度)
+    post.tex=postTex(w,h,gl.RGBA8,gl.RGBA,gl.UNSIGNED_BYTE,gl.LINEAR);
+    post.depth=postTex(w,h,gl.DEPTH_COMPONENT24,gl.DEPTH_COMPONENT,gl.UNSIGNED_INT,gl.NEAREST);
+    post.fbo=gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER,post.fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,post.tex,0);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.DEPTH_ATTACHMENT,gl.TEXTURE_2D,post.depth,0);
+    if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE) throw new Error("scene fbo incomplete");
+    // 预设 msaa>1: 多重采样渲染缓冲, 每帧 blit 解析到场景纹理(画布自带的 MSAA 对离屏渲染无效)
+    const maxS=P.msaa?(gl.getParameter(gl.MAX_SAMPLES)|0):0;
+    if(maxS>1){
+      const s=Math.min(P.msaa,maxS);
+      post.msColor=gl.createRenderbuffer();
+      gl.bindRenderbuffer(gl.RENDERBUFFER,post.msColor);
+      gl.renderbufferStorageMultisample(gl.RENDERBUFFER,s,gl.RGBA8,w,h);
+      post.msDepth=gl.createRenderbuffer();
+      gl.bindRenderbuffer(gl.RENDERBUFFER,post.msDepth);
+      gl.renderbufferStorageMultisample(gl.RENDERBUFFER,s,gl.DEPTH_COMPONENT24,w,h);
+      gl.bindRenderbuffer(gl.RENDERBUFFER,null);
+      post.msFbo=gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER,post.msFbo);
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.RENDERBUFFER,post.msColor);
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER,gl.DEPTH_ATTACHMENT,gl.RENDERBUFFER,post.msDepth);
+      if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)===gl.FRAMEBUFFER_COMPLETE) post.samples=s;
+      else {                                  // 不支持多重采样: 退回单采样 + FXAA
+        gl.deleteFramebuffer(post.msFbo); gl.deleteRenderbuffer(post.msColor); gl.deleteRenderbuffer(post.msDepth);
+        post.msFbo=post.msColor=post.msDepth=null;
+      }
+    }
+    // 泛光: ½ ¼ ⅛ 1/16 1/32; 有半浮点就存 16F, 否则 RGBA8 预缩 ¼ 防止叠加溢出
+    if(P.bloom){
+      let hdr=post.hdr;
+      for(let i=0;i<5;i++){
+        const d=2<<i, t=postTarget(Math.max(1,Math.ceil(w/d)),Math.max(1,Math.ceil(h/d)),hdr);
+        if(!t && hdr && i===0){ hdr=false; i=-1; continue; }   // 16F 不可渲染 → 全部改 RGBA8
+        if(!t) throw new Error("bloom fbo incomplete");
+        post.mips.push(t);
+      }
+      post.bloomScale=hdr?1:0.25;
+    }
+    if(P.dof){
+      const hw=Math.max(1,Math.ceil(w/2)), hh=Math.max(1,Math.ceil(h/2));
+      const a=postTarget(hw,hh,false), b=postTarget(hw,hh,false);
+      if(a&&b) post.dof=[a,b];
+    }
+    post.ok=true;
+  }catch(e){
+    console.warn("后处理不可用, 回退直出:", e && e.message);
+    postFree(); post.broken=true; post.dirty=false;
+  }
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  gl.bindTexture(gl.TEXTURE_2D,atlasTex);
+}
+/* render() 开头: 选定本帧的场景渲染目标并绑定(「低」档/WebGL1 → 画布) */
+function postBegin(w,h){
+  sceneFBO=null;
+  const P=GFX_PRESETS[gfxLevel];
+  if(!POST_CAN || !P.post || post.broken){
+    if(post.fbo) postFree();
+  } else {
+    if(post.dirty || post.w!==w || post.h!==h || post.level!==gfxLevel) postBuild(w,h);
+    if(post.ok) sceneFBO=post.msFbo||post.fbo;
+  }
+  gl.bindFramebuffer(gl.FRAMEBUFFER,sceneFBO);
+}
+function postPass(prog,dst,srcTex,srcW,srcH){
+  gl.bindFramebuffer(gl.FRAMEBUFFER,dst.fbo);
+  gl.viewport(0,0,dst.w,dst.h);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,srcTex);
+  gl.uniform1i(prog.uSrc,0);
+  gl.uniform2f(prog.uTexel,1/srcW,1/srcH);
+  gl.drawArrays(gl.TRIANGLES,0,3);
+}
+/* render() 结尾: 解析 MSAA → 泛光链 → 远景柔化 → 合成到画布 */
+let _postMaxAttr=0;
+function postEnd(now, uw, fogFar){
+  // 关掉所有顶点属性数组: 全屏三角形用 gl_VertexID 不需要属性; 也避免下一帧开头的天空绘制
+  // 碰到"指向已删除区块缓冲的属性"(INVALID_OPERATION)。各绘制段都会自己重新启用需要的属性。
+  if(!_postMaxAttr) _postMaxAttr=Math.min(16, gl.getParameter(gl.MAX_VERTEX_ATTRIBS)|0)||8;
+  for(let i=0;i<_postMaxAttr;i++) gl.disableVertexAttribArray(i);
+  if(!sceneFBO) return;
+  const P=GFX_PRESETS[gfxLevel], w=post.w, h=post.h, pr=post.progs;
+  gl.disable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND); gl.depthMask(false);
+  // 正午沙漠热浪强度(平滑过渡)
+  let heatT=0;
+  if(P.heat && !uw && weather==="clear" && aridBiome(biomeAt(Math.floor(player.x),Math.floor(player.z)))) heatT=smoothstep(0.5,0.9,sunH);
+  post.heat=P.heat ? post.heat+(heatT-post.heat)*0.03 : 0;
+  const dofOn=post.dof.length===2;
+  const needDepth=post.heat>0.001 || dofOn;
+  if(post.msFbo){
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER,post.msFbo);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER,post.fbo);
+    gl.blitFramebuffer(0,0,w,h,0,0,w,h,gl.COLOR_BUFFER_BIT|(needDepth?gl.DEPTH_BUFFER_BIT:0),gl.NEAREST);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER,null);
+  }
+  const pp=postParams(sunH, weather, uw);
+  post.last=pp;
+  if(post.mips.length){
+    const m=post.mips;
+    gl.useProgram(pr.down.p);
+    gl.uniform1f(pr.down.uPre,1); gl.uniform1f(pr.down.uT,0.80); gl.uniform1f(pr.down.uK,0.20);
+    gl.uniform1f(pr.down.uScale,post.bloomScale);
+    postPass(pr.down,m[0],post.tex,w,h);
+    gl.uniform1f(pr.down.uPre,0); gl.uniform1f(pr.down.uScale,1);
+    for(let i=1;i<m.length;i++) postPass(pr.down,m[i],m[i-1].tex,m[i-1].w,m[i-1].h);
+    gl.useProgram(pr.up.p);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE,gl.ONE);
+    const W=[1.0,0.85,0.7,0.55];
+    for(let i=m.length-1;i>=1;i--){ gl.uniform1f(pr.up.uW,W[i-1]); postPass(pr.up,m[i-1],m[i].tex,m[i].w,m[i].h); }
+    gl.disable(gl.BLEND);
+  }
+  if(dofOn){
+    const [a,b]=post.dof;
+    gl.useProgram(pr.down.p);
+    gl.uniform1f(pr.down.uPre,0); gl.uniform1f(pr.down.uScale,1);
+    postPass(pr.down,a,post.tex,w,h);
+    gl.useProgram(pr.up.p); gl.uniform1f(pr.up.uW,1);
+    postPass(pr.up,b,a.tex,a.w/1.5,a.h/1.5);     // 半径 1.5 texel 的帐篷模糊
+  }
+  // 合成到画布(没开的输入绑场景纹理占位, 避免"未绑定纹理"警告)
+  const c=pr.comp;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  gl.viewport(0,0,w,h);
+  gl.useProgram(c.p);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,post.tex);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D,post.mips.length?post.mips[0].tex:post.tex);
+  gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D,post.depth);
+  gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D,dofOn?post.dof[1].tex:post.tex);
+  gl.uniform1i(c.uScene,0); gl.uniform1i(c.uBloom,1); gl.uniform1i(c.uDepth,2); gl.uniform1i(c.uDof,3);
+  gl.uniform2f(c.uRcp,1/w,1/h);
+  gl.uniform1f(c.uAspect,w/h);
+  gl.uniform1f(c.uTime,(now/1000)%1000);
+  gl.uniform1f(c.uSubpix,P.fxaa?(post.samples?0.35:0.75):-1);
+  gl.uniform1f(c.uBloomI,post.mips.length?pp.bloom/post.bloomScale:0);
+  gl.uniform3f(c.uWB,pp.wb[0],pp.wb[1],pp.wb[2]);
+  gl.uniform1f(c.uVig,pp.vig);
+  gl.uniform1f(c.uHeat,needDepth?post.heat:0);
+  gl.uniform1f(c.uDofOn,dofOn?1:0);
+  gl.uniform1f(c.uNear,0.1); gl.uniform1f(c.uFar,1000);          // 与 render() 里 matPersp 的近/远裁剪面一致
+  gl.uniform1f(c.uDofNear,Math.min(110,fogFar*0.62)); gl.uniform1f(c.uDofFar,Math.max(fogFar*1.25,160));
+  gl.drawArrays(gl.TRIANGLES,0,3);
+  // 还原 render() 依赖的状态
+  for(let u=3;u>=1;u--){ gl.activeTexture(gl.TEXTURE0+u); gl.bindTexture(gl.TEXTURE_2D,null); }
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,atlasTex);
+  gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
+  post.frames++;
+}
+/* F1 拍照模式: 隐藏 HUD(准星/物品栏/任务/手持模型/提示…), 保留水下/岩浆/受伤等屏幕色调, 上下加 2.35:1 电影黑边 */
+function setPhotoMode(on){
+  photoMode=!!on;
+  document.body.classList.toggle("photo",photoMode);
+  return photoMode;
+}
+/* F2 截图: 没开 preserveDrawingBuffer, 所以在同一任务里先画一帧再 toBlob */
+function takeScreenshot(){
+  try{
+    render(performance.now());
+    canvas.toBlob(b=>{
+      if(!b) return;
+      const a=document.createElement("a");
+      a.href=URL.createObjectURL(b); a.download="sandsea-"+Date.now()+".png";
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+    },"image/png");
+  }catch(e){}
+}
 function setGfx(level){
   gfxLevel=((level%GFX_PRESETS.length)+GFX_PRESETS.length)%GFX_PRESETS.length;
   try{ localStorage.setItem("sandsea_gfx", String(gfxLevel)); }catch(e){}
   setupShadow();
+  post.dirty=true;                          // 后处理目标下一帧按新档位重建
   return gfxLevel;
 }
 /* 太阳/月亮: 方位角随一天转一圈, 太阳高度跟随 sunH(与天色/亮度一致), 最高约 62°——斜射才有立体的长影。
@@ -7294,7 +7683,7 @@ function renderShadowMap(L){
   }
   gl.disableVertexAttribArray(AD_POS); gl.disableVertexAttribArray(AD_UV);
   gl.colorMask(true,true,true,true);
-  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,sceneFBO);   // 回到本帧的场景目标(后处理 FBO 或画布)
 }
 
 let fov=70*Math.PI/180;
@@ -7305,6 +7694,7 @@ function render(now){
   // 宽高必须 >=1: 窗口最小化/面板隐藏时为 0 会让投影矩阵变 NaN → 白屏
   const w=Math.max(1,innerWidth*devicePixelRatio|0), h=Math.max(1,innerHeight*devicePixelRatio|0);
   if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h; }
+  postBegin(w,h);                           // 后处理: 场景先画进离屏 FBO(「低」档/WebGL1 直接画布)
   const LS=lightState();
   renderShadowMap(LS.light);                // 阴影贴图只在光源转动/玩家走远/区块变化时重画
   gl.viewport(0,0,w,h);
@@ -7650,6 +8040,7 @@ function render(now){
   aFArray(false);
   gl.depthMask(true);
   gl.disable(gl.BLEND);
+  postEnd(now, uw, fogFar);                 // 后处理: 泛光/FXAA/调色/暗角/抖动 → 画布
 }
 
 /* =========================================================
@@ -10052,6 +10443,68 @@ function selftest(){
       ok("材质: 逐块旋转——松沙陷坑与沙子同模式(伪装不露馅), 沙纹只转180°, 草地四向", UV_ROT[LOOSESAND*2]===UV_ROT[SAND*2] && UV_ROT[LOOSESAND*2+1]===UV_ROT[SAND*2+1] && UV_ROT[SAND*2]===1 && UV_ROT[GRASS*2]===2,
          "sand="+UV_ROT[SAND*2]+" loose="+UV_ROT[LOOSESAND*2]);
       ok("光影: 画质切到「低」关闭阴影, 切回恢复", offOk && (shadow.ok || !HAS_DEPTH_TEX), "restored="+shadow.ok);
+    }
+
+    // ---- 光影(第 4 步): 后处理管线 / 画质档位 / 拍照模式 ----
+    {
+      const P=GFX_PRESETS;
+      ok("后处理: 档位 低=关 / 中=泛光+FXAA / 高=+热浪 / 极致=+远景柔化",
+         !P[0].post && P[1].post && P[1].bloom && P[1].fxaa && !P[1].heat && P[2].heat && P[2].fxaa && !P[2].dof && P[3].dof && P[3].bloom,
+         P.map(x=>(x.post?1:0)+(x.bloom?"b":"")+(x.msaa?"m":"")+(x.dof?"d":"")).join(","));
+      const noon=postParams(1,"clear",false), night=postParams(-0.4,"clear",false), dusk=postParams(0.1,"clear",false);
+      const storm=postParams(1,"sand",false), wet=postParams(1,"clear",true);
+      ok("后处理: 泛光强度 白天0.08 → 黄昏更强 → 夜晚0.22, 沙暴≈0.16",
+         Math.abs(noon.bloom-0.08)<1e-6 && Math.abs(night.bloom-0.22)<1e-6 && dusk.bloom>noon.bloom && dusk.bloom<night.bloom && Math.abs(storm.bloom-0.16)<1e-6,
+         [noon.bloom,dusk.bloom,night.bloom,storm.bloom].map(v=>v.toFixed(3)).join("/"));
+      ok("后处理: 暗角 白天0.28/夜晚0.36/水下0.45; 白平衡 白天中性·夜晚偏冷",
+         Math.abs(noon.vig-0.28)<1e-6 && Math.abs(night.vig-0.36)<1e-6 && wet.vig===0.45 &&
+         noon.wb.every(v=>Math.abs(v-1)<1e-6) && night.wb[2]>1 && night.wb[0]<1, "wbN="+night.wb.map(v=>v.toFixed(2)));
+      // 逐档建 FBO: 低档不建(直出画布), 中档起完整且尺寸对; 高档多重采样; 极致多出远景柔化目标
+      const g0=gfxLevel, rows=[]; let fboOk=true;
+      for(let lv=0; lv<4; lv++){
+        setGfx(lv); postBegin(96,54);
+        const want=POST_CAN && P[lv].post && !post.broken;
+        let good = want ? (post.ok && sceneFBO===(post.msFbo||post.fbo) && post.w===96 && post.h===54) : (sceneFBO===null && !post.fbo);
+        if(want && post.ok){
+          good = good && gl.checkFramebufferStatus(gl.FRAMEBUFFER)===gl.FRAMEBUFFER_COMPLETE
+                      && post.mips.length===(P[lv].bloom?5:0) && (!P[lv].bloom || (post.mips[0].w===48 && post.mips[4].w===3))
+                      && (!P[lv].msaa || post.samples>=2 || (gl.getParameter(gl.MAX_SAMPLES)|0)<2)
+                      && (post.dof.length===(P[lv].dof?2:0));
+        }
+        rows.push(lv+":"+(sceneFBO?"fbo":"canvas")+(post.samples?"x"+post.samples:"")+(post.dof.length?"+dof":""));
+        if(!good) fboOk=false;
+      }
+      // MSAA 路径默认关(见 GFX_PRESETS 注释), 临时给「高」开 4× 验证多重采样渲染缓冲可建
+      { const ms0=P[2].msaa; P[2].msaa=4; setGfx(2); postBegin(96,54);
+        const msOk=!POST_CAN || post.broken || (gl.getParameter(gl.MAX_SAMPLES)|0)<2 || (post.samples>=2 && sceneFBO===post.msFbo);
+        rows.push("msaa:"+post.samples); if(!msOk) fboOk=false; P[2].msaa=ms0; post.dirty=true; }
+      gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+      ok("后处理: 各档 FBO 按需创建且完整(WebGL1 全部直出)", fboOk, "gl2="+IS_GL2+" "+rows.join(" "));
+      // 真画一帧(当前档位)检查无 GL 错误且合成执行
+      setGfx(POST_CAN?2:g0);
+      while(gl.getError()!==gl.NO_ERROR){}
+      const f0=post.frames;
+      let rErr="";
+      try{ render(performance.now()); }catch(e){ rErr=String(e&&e.message); }
+      const glErr=gl.getError();
+      ok("后处理: 「高」档渲染一帧 无 GL 错误且合成到画布", !rErr && glErr===gl.NO_ERROR && (!POST_CAN || post.broken || post.frames===f0+1),
+         "err="+glErr+" "+rErr+" frames="+(post.frames-f0)+" broken="+post.broken);
+      setGfx(g0);
+      // 拍照模式: F1 切换, 隐藏物品栏/准星, 保留水下色调; 再按恢复
+      const pm0=photoMode;
+      if(photoMode) setPhotoMode(false);
+      const hudEl=document.getElementById("hud"), hd0=hudEl.style.display; hudEl.style.display="block";
+      document.dispatchEvent(new KeyboardEvent("keydown",{code:"F1",bubbles:true}));
+      const on=photoMode && document.body.classList.contains("photo");
+      const hbHidden=getComputedStyle(document.getElementById("hotbar")).visibility==="hidden"
+                  && getComputedStyle(document.getElementById("cross")).visibility==="hidden";
+      const tintKept=getComputedStyle(document.getElementById("watertint")).visibility!=="hidden";
+      document.dispatchEvent(new KeyboardEvent("keydown",{code:"F1",bubbles:true}));
+      const off=!photoMode && !document.body.classList.contains("photo")
+             && getComputedStyle(document.getElementById("hotbar")).visibility!=="hidden";
+      hudEl.style.display=hd0; setPhotoMode(pm0);
+      ok("拍照模式: F1 隐藏 HUD(保留水下/岩浆色调), 再按 F1 恢复", on && hbHidden && tintKept && off,
+         "on="+on+" hidden="+hbHidden+" tint="+tintKept+" off="+off);
     }
 
     // ---- 丰富批次: 地图(仙人掌) / 画面(夜空) / 玩法(Boss血条) / 任务(悬赏) ----
