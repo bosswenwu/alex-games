@@ -2198,7 +2198,7 @@ function shaderFatal(log){
     BROWSER_TIPS+'<br><br><span style="opacity:.6;font-size:12px;word-break:break-all">'+
     String(log||"").slice(0,300)+'</span>');
 }
-function makeShader(vsrc, fsrc){
+function makeShader(vsrc, fsrc, binds){
   const compile=(type,src)=>{
     const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s);
     if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){
@@ -2209,54 +2209,106 @@ function makeShader(vsrc, fsrc){
   const p=gl.createProgram();
   gl.attachShader(p,compile(gl.VERTEX_SHADER,vsrc));
   gl.attachShader(p,compile(gl.FRAGMENT_SHADER,fsrc));
+  // 可选: 固定顶点属性槽位(主着色器与水面着色器共用同一套区块顶点属性指针)
+  if(binds) for(const n in binds) gl.bindAttribLocation(p,binds[n],n);
   gl.linkProgram(p);
   if(!gl.getProgramParameter(p,gl.LINK_STATUS)){
     const log=gl.getProgramInfoLog(p); shaderFatal(log); throw new Error(log);
   }
   return p;
 }
-// 主着色器(方块/粒子/云/生物)
+// 主着色器(方块/粒子/生物)
 /* 光影管线(第 1 步):
-   - aF 编码 "面朝向 + 天光": aF = face + 8*sky。face 0..5 = 方块六面, 6 = 十字植物, 7 = 旧式(生物/粒子/云, 明暗已烘进 aL);
+   - aF 编码 "面朝向 + 天光": aF = face + 8*sky。face 0..5 = 方块六面, 6 = 十字植物, 7 = 旧式(生物/粒子, 明暗已烘进 aL);
      sky 0..15 = 该顶点处的天空可见度(区块网格生成时按高度图算), 屋檐下/洞穴/峡谷底更暗。
    - 方块面的 aL 只存环境光遮蔽(AO); 面的明暗改由太阳方向实时计算: 朝阳面亮, 背阳面只剩天光。
    - 太阳阴影贴图(深度纹理, 双线性 PCF 软边); 超出阴影范围的远处退回天光可见度近似。
-   - 线性空间打光 → ACES 电影色调映射 → 大气透视(远处泛天色) + 朝太阳方向的暖色散射雾。 */
-const mainProg = makeShader(`
-  attribute vec3 aPos; attribute vec2 aUV; attribute float aL; attribute float aF;
-  uniform mat4 uPV, uLightPV; uniform vec3 uOffset; uniform vec2 uUVOff; uniform vec3 uEye;
-  uniform float uShadowBias;
-  varying vec2 vUV; varying float vL, vSky, vKind;
-  varying vec3 vN, vRel, vSh;
-  void main(){
-    vec3 p = aPos + uOffset;
-    gl_Position = uPV * vec4(p,1.0);
-    vUV = aUV + uUVOff; vL = aL;
-    float sky = floor(aF/8.0 + 0.01);
-    float f = aF - sky*8.0;
-    vec3 n = vec3(0.0,1.0,0.0);
-    if(f<0.5) n=vec3(1.0,0.0,0.0); else if(f<1.5) n=vec3(-1.0,0.0,0.0);
-    else if(f<2.5) n=vec3(0.0,1.0,0.0); else if(f<3.5) n=vec3(0.0,-1.0,0.0);
-    else if(f<4.5) n=vec3(0.0,0.0,1.0); else if(f<5.5) n=vec3(0.0,0.0,-1.0);
-    vKind = f<5.5 ? 0.0 : (f<6.5 ? 1.0 : 2.0);
-    vSky = f<6.5 ? sky/15.0 : 1.0;
-    vN = n;
-    vRel = p - uEye;
-    // 法线方向外推一点再投影进光源空间: 消除自阴影"粉刺"(shadow acne)
-    vec4 ls = uLightPV * vec4(p + n*uShadowBias, 1.0);
-    vSh = ls.xyz*0.5 + 0.5;
-  }`,`
-  #ifdef GL_FRAGMENT_PRECISION_HIGH
-  precision highp float;
-  #else
-  precision mediump float;
-  #endif
-  varying vec2 vUV; varying float vL, vSky, vKind;
-  varying vec3 vN, vRel, vSh;
-  uniform sampler2D uTex, uShadow;
-  uniform vec3 uFogCol, uTint, uSunDir, uSunCol, uAmbCol, uGlowCol;
-  uniform float uDay, uAlpha, uFogNear, uFogFar, uHaze, uShadowOn, uShadowTexel, uPCF;
-  uniform int uMode;
+   - 线性空间打光 → ACES 电影色调映射 → 大气透视(远处泛天色) + 朝太阳方向的暖色散射雾。
+   光影第 3 步:
+   - aF 高位再编码风摆类别: aF = face + 8*sky + 128*cls(cls 1=植物顶端顶点 2=树叶), 顶点着色器里先剥掉 cls 再解面/天光。
+     位移只取决于世界坐标 → 相邻树叶块共享的角点摆得一模一样, 不会裂缝。
+   - 天空/地形雾色/水面反射共用同一个 skyCol(): 雾色 = skyCol(视线方向), 远山与天际严丝合缝; 再叠解析式高度雾(低处更浓)。
+   - 云改为天空着色器里的程序化 fbm 软云(向阳边亮、背阳面偏蓝、逆光银边), 并在地面投下缓慢移动的云影。
+   - 水面独立着色器 waterProg: 波浪法线 + 菲涅尔天空/云反射 + 太阳高光 + 深浅色 + 岸边泡沫; 浅水底有焦散光纹。
+   - 所有"世界坐标"类噪声都用 uWOrig(每 1024 格对齐的原点)减过的小坐标, 玩家走到百万格外也不丢精度。 */
+const CLOUD_Y=190, CLOUD_SCALE=380;          // 云层高度(远高于浮空岛)/ 云噪声尺度(格)
+const GLSL_F=(v)=>(+v).toFixed(1);
+// 值噪声(无纹理、无种子; 天空/云/雾/水共用)
+const NOISE_GLSL=`
+  float hash12(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+  float vnoise(vec2 p){
+    vec2 i = floor(p), f = fract(p); vec2 u = f*f*(3.0 - 2.0*f);
+    float a = hash12(i), b = hash12(i + vec2(1.0, 0.0)), c = hash12(i + vec2(0.0, 1.0)), d = hash12(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+  }`;
+// 共享天空: 渐变 + Mie 日晕 + 地平线晚霞带; 程序化云
+const SKY_GLSL=NOISE_GLSL+`
+  uniform vec3 uZenith, uHorizon, uGround, uBand, uSkySun, uSunGlowCol, uCloudLit, uCloudSh;
+  uniform vec2 uCloudOff;
+  uniform float uCover, uCamY, uTime, uCloudOct;
+  vec3 skyCol(vec3 r){
+    float up = r.y;
+    vec3 c = mix(uHorizon, uZenith, pow(clamp(up, 0.0, 1.0), 0.45));
+    if(up < 0.0) c = mix(uHorizon, uGround, clamp(-up*5.0, 0.0, 1.0));
+    float mu = max(dot(r, uSkySun), 0.0);
+    c += uSunGlowCol * (0.30*pow(mu, 5.0) + 0.55*pow(mu, 48.0));        // Mie 日晕
+    c += uBand * exp(-abs(up)*8.0) * (0.35 + 0.65*mu);                    // 晚霞带, 朝太阳一侧更浓
+    return c;
+  }
+  float cloudN(vec2 p){
+    float v = 0.0, a = 0.5, w = 0.0;
+    for(int i = 0; i < 5; i++){
+      if(float(i) >= uCloudOct) break;
+      v += a*vnoise(p); w += a; p = p*2.03 + vec2(17.1, -9.3); a *= 0.5;
+    }
+    return v / w;
+  }
+  // 云噪声坐标: 轻微拉伸 + 低频域扭曲, 让云团呈棉絮状而不是一条条卷云
+  vec2 cloudP(vec2 q){
+    q *= vec2(1.0, 1.15);
+    vec2 wq = q*0.6;
+    return q + vec2(vnoise(wq), vnoise(wq + 7.3))*0.6 - 0.3;
+  }
+  // 云层: 射线与 y=CLOUD_Y 平面求交后取 fbm; 返回 (颜色, 不透明度)
+  vec4 clouds(vec3 ray){
+    if(ray.y < 0.012 || uCover < 0.01) return vec4(0.0);
+    float t = (${GLSL_F(CLOUD_Y)} - uCamY) / ray.y;
+    vec2 p = cloudP(uCloudOff + ray.xz*(t/${GLSL_F(CLOUD_SCALE)}));
+    float n = cloudN(p);
+    float lo = 0.74 - 0.52*uCover;                                          // 云量 → 阈值(晴 0.42 ≈ 三成天空有云, 雷暴近乎满天)
+    float a = smoothstep(lo, lo + 0.10, n);
+    if(a <= 0.001) return vec4(0.0);
+    float n2 = cloudN(p + uSkySun.xz*0.05);                                // 朝太阳方向再取一次
+    float lit = clamp((n - n2)*6.0 + 0.55, 0.2, 1.0);                      // 向阳边亮, 云心背光
+    float core = smoothstep(0.0, 0.25, n - lo);                            // 云越厚越暗(积云的灰底)
+    vec3 c = mix(uCloudSh, uCloudLit, lit*(1.0 - 0.45*core));
+    float mu = max(dot(ray, uSkySun), 0.0);
+    c += uSunGlowCol * (pow(mu, 10.0)*a*(1.0 - a)*3.0 + 0.12*pow(mu, 3.0)); // 逆光银边 / 太阳附近的云被点燃
+    c = mix(c, skyCol(ray), clamp(t/6000.0, 0.0, 0.75));                   // 远云没入天色(空气透视)
+    a *= smoothstep(0.012, 0.13, ray.y) * exp(-t/9000.0);
+    return vec4(c, a*0.92);
+  }`;
+// 雾: 距离雾(只负责藏区块边缘)与解析式指数高度雾取大; 雾色 = 天空同方向的颜色
+const FOG_GLSL=`
+  uniform vec3 uFogCol, uEyeL;
+  uniform float uFogNear, uFogFar, uFogA, uFogB, uSkyFog, uSand;
+  float fogAmount(vec3 rel, float d, float skyVis){
+    float y0 = max(uEyeL.y - ${GLSL_F(WATER_Y)}, -10.0);
+    float bdy = uFogB * max(rel.y, -60.0);
+    float k = abs(bdy) > 0.002 ? (1.0 - exp(-bdy)) / bdy : 1.0;
+    float dens = uFogA * exp(-uFogB*y0);
+    if(uSand > 0.01){                                                     // 沙暴: 顺风翻滚的沙幕, 浓淡流动
+      vec2 q = (rel.xz + uEyeL.xz) * vec2(0.035, 0.09) + vec2(uTime*0.9, uTime*0.12);
+      dens *= 1.0 + uSand*(vnoise(q)*1.5 - 0.6);
+    }
+    float hf = (1.0 - exp(-dens * d * k)) * mix(0.3, 1.0, skyVis);       // 洞穴里淡一些, 不会泛出天蓝
+    return max(smoothstep(uFogNear, uFogFar, d), hf);
+  }
+  vec3 fogColor(vec3 dir){ return uSkyFog > 0.5 ? skyCol(dir) : uFogCol; }`;
+// 阴影贴图采样(主着色器与水面共用; 需要 varying vSh 与下列 uniform)
+const SHADOW_GLSL=`
+  uniform sampler2D uShadow;
+  uniform float uShadowOn, uShadowTexel, uPCF;
   float tap(vec2 uv, float z){ return step(z, texture2D(uShadow, uv).r); }
   // 双线性 PCF: 4 次比较按亚像素权重混合, 阴影边缘平滑不锯齿
   float pcf(vec2 uv, float z){
@@ -2278,7 +2330,74 @@ const mainProg = makeShader(`
     } else sh = pcf(s.xy, z);
     vec2 e = min(s.xy, 1.0 - s.xy);
     return mix(1.0, sh, smoothstep(0.0, 0.06, min(e.x, e.y)));   // 阴影范围边缘淡出, 不留硬边
-  }
+  }`;
+// 云影: 从地面沿光线方向找到云层上的交点, 取 3 层 fbm(与天空里的云同形)
+const CLOUDSH_GLSL=`
+  uniform float uCloudShadow;
+  float cloudShade(vec3 rel){
+    vec3 L = uSunDir;
+    float wy = rel.y + uEyeL.y;
+    vec2 cp = cloudP(uCloudOff + (rel.xz + L.xz/max(L.y, 0.15)*(${GLSL_F(CLOUD_Y)} - wy)) / ${GLSL_F(CLOUD_SCALE)});
+    float v = (0.5*vnoise(cp) + 0.25*vnoise(cp*2.03 + vec2(17.1, -9.3)) + 0.125*vnoise(cp*4.1209 + vec2(51.8, -28.2))) / 0.875;
+    float lo = 0.74 - 0.52*uCover;
+    return smoothstep(lo, lo + 0.14, v);
+  }`;
+// 主程序与水面程序共用同一套区块顶点属性槽位(省掉切换程序时重设属性数组)
+const CHUNK_ATTRS={aPos:0, aUV:1, aL:2, aF:3};
+// 顶点着色器里的面法线解码(f = 0..5 方块面)
+const FACE_N_GLSL=`
+    vec3 n = vec3(0.0,1.0,0.0);
+    if(f<0.5) n=vec3(1.0,0.0,0.0); else if(f<1.5) n=vec3(-1.0,0.0,0.0);
+    else if(f<2.5) n=vec3(0.0,1.0,0.0); else if(f<3.5) n=vec3(0.0,-1.0,0.0);
+    else if(f<4.5) n=vec3(0.0,0.0,1.0); else if(f<5.5) n=vec3(0.0,0.0,-1.0);`;
+const FS_PREC=`
+  #ifdef GL_FRAGMENT_PRECISION_HIGH
+  precision highp float;
+  #else
+  precision mediump float;
+  #endif`;
+const mainProg = makeShader(`
+  attribute vec3 aPos; attribute vec2 aUV; attribute float aL; attribute float aF;
+  uniform mat4 uPV, uLightPV; uniform vec3 uOffset; uniform vec2 uUVOff; uniform vec3 uEye;
+  uniform float uShadowBias, uWTime; uniform vec3 uWind, uWOrig;
+  varying vec2 vUV; varying float vL, vSky, vKind;
+  varying vec3 vN, vRel, vSh;
+  void main(){
+    vec3 p = aPos + uOffset;
+    float cls = floor(aF/128.0 + 0.001);
+    float fa = aF - cls*128.0;
+    float sky = floor(fa/8.0 + 0.01);
+    float f = fa - sky*8.0;
+    if(cls > 0.5){                       // 风吹: 植物顶端大幅弯摆, 树叶细碎抖动; 阵风在世界里缓慢推移
+      vec3 q = p - uWOrig;
+      float ph = dot(q.xz, vec2(0.37, 0.21)) + q.y*0.13;
+      float gust = 0.55 + 0.45*sin(uWTime*0.31 + q.x*0.021 + q.z*0.017);
+      float wave = sin(uWTime*1.9 + ph)*0.65 + sin(uWTime*3.3 + ph*1.7)*0.35;
+      float amp = cls < 1.5 ? 0.11 : 0.035;
+      p.xz += uWind.xz * amp * (gust*(0.6 + 0.4*wave) + 0.35*wave);
+      if(cls > 1.5) p.y += 0.015*uWind.y*sin(uWTime*2.7 + ph*2.3)*gust;
+    }
+    gl_Position = uPV * vec4(p,1.0);
+    vUV = aUV + uUVOff; vL = aL;
+    ${FACE_N_GLSL}
+    vKind = f<5.5 ? 0.0 : (f<6.5 ? 1.0 : 2.0);
+    vSky = f<6.5 ? sky/15.0 : 1.0;
+    vN = n;
+    vRel = p - uEye;
+    // 法线方向外推一点再投影进光源空间: 消除自阴影"粉刺"(shadow acne)
+    vec4 ls = uLightPV * vec4(p + n*uShadowBias, 1.0);
+    vSh = ls.xyz*0.5 + 0.5;
+  }`,FS_PREC+`
+  varying vec2 vUV; varying float vL, vSky, vKind;
+  varying vec3 vN, vRel, vSh;
+  uniform sampler2D uTex;
+  uniform vec3 uTint, uSunDir, uSunCol, uAmbCol;
+  uniform float uDay, uAlpha;
+  uniform int uMode;
+  ${SKY_GLSL}
+  ${FOG_GLSL}
+  ${SHADOW_GLSL}
+  ${CLOUDSH_GLSL}
   vec3 aces(vec3 x){ return clamp(x*(2.51*x+0.03)/(x*(2.43*x+0.59)+0.14), 0.0, 1.0); }
   void main(){
     vec4 c = texture2D(uTex, vUV);
@@ -2305,21 +2424,108 @@ const mainProg = makeShader(`
       if(uShadowOn > 0.5 && direct > 0.0) sh = shadowAt();
       float skyAmb = mix(0.34, 1.0, vSky);           // 天光可见度: 洞穴/屋内/峡谷底更暗(但不死黑)
       float dirVis = sh * clamp(vSky*2.4 - 0.25, 0.0, 1.0);
+      if(uCloudShadow > 0.0 && dirVis > 0.0) dirVis *= 1.0 - uCloudShadow*cloudShade(vRel);   // 云影缓缓掠过沙丘
       light = uAmbCol * (hemi * skyAmb * ao) + uSunCol * (direct * dirVis * mix(1.0, ao, 0.45));
+      // 浅水底的焦散光纹(只在露天水域: 天光可见度门控, 洞穴里不出现)
+      vec3 wp = vRel + uEyeL;
+      if(vKind < 1.5 && vSky > 0.8 && wp.y < ${GLSL_F(WATER_Y)}+0.9){
+        float c1 = sin(wp.x*2.1 + sin(wp.z*1.3 + uTime*0.8)*1.2 + uTime*0.9);
+        float c2 = sin(wp.z*2.3 + sin(wp.x*1.1 - uTime*0.7)*1.2 - uTime*1.1);
+        float cc = pow(max(1.0 - abs(c1 + c2)*0.75, 0.0), 4.0);
+        float fade = smoothstep(${GLSL_F(WATER_Y)}-12.0, ${GLSL_F(WATER_Y)}-1.0, wp.y);   // 越深越弱
+        light += uSunCol * (cc * 0.9 * dirVis * fade);
+        // 水体吸收: 越深越偏青、越暗(红光最先被吃掉), 湖底才有纵深感
+        light *= exp(-max(${GLSL_F(WATER_Y)} + 0.86 - wp.y, 0.0) * vec3(0.32, 0.10, 0.075));
+      }
     }
     vec3 col = aces(alb * light * uTint * uDay);
     col = pow(col, vec3(1.0/2.2));
     float lum = dot(col, vec3(0.299, 0.587, 0.114));
     col = clamp(mix(vec3(lum), col, 1.18), 0.0, 1.0);   // ACES 会压饱和, 补回体素色块的鲜明度
-    // --- 雾: 远处先泛天色(大气透视), 再平滑没入雾色; 朝太阳方向的雾偏暖亮 ---
+    // --- 大气透视: 雾色取天空同方向的颜色(朝太阳偏暖亮、背阳偏蓝), 浓度 = 高度雾与距离雾取大 ---
     float d = length(vRel);
-    float sunAmt = pow(max(dot(vRel/max(d,0.001), uSunDir), 0.0), 6.0);
-    vec3 fogc = uFogCol + uGlowCol*sunAmt;
-    float fog = smoothstep(uFogNear, uFogFar, d);
-    float haze = (1.0 - exp(-d*uHaze)) * 0.42;
-    col = mix(col, fogc, max(fog, haze));
+    col = mix(col, fogColor(vRel/max(d, 0.001)), fogAmount(vRel, d, vSky));
     gl_FragColor = vec4(col, c.a);
-  }`);
+  }`, CHUNK_ATTRS);
+// 水面着色器: 只画区块的水层。aL = 该顶点处水深(格, 岸边角点更浅); aF 高位 cls = 沼泽(1) + 2*角点旁的岸格数(0..4)
+const waterProg = makeShader(`
+  attribute vec3 aPos; attribute vec2 aUV; attribute float aL; attribute float aF;
+  uniform mat4 uPV, uLightPV; uniform vec3 uEye, uWOrig; uniform float uWTime, uShadowBias;
+  varying vec3 vRel, vN, vSh; varying float vDepth, vCls, vShore;
+  void main(){
+    vec3 p = aPos;
+    float cls = floor(aF/128.0 + 0.001);
+    float fa = aF - cls*128.0;
+    float sky = floor(fa/8.0 + 0.01);
+    float f = fa - sky*8.0;
+    ${FACE_N_GLSL}
+    vec3 q = p - uWOrig;
+    // 水面顶点(y 的小数 = 0.86)轻微起伏; 侧面上沿同一函数 → 不开缝
+    if(abs(fract(p.y) - 0.86) < 0.02) p.y += 0.03*sin(uWTime*1.3 + q.x*0.7 + q.z*0.45) - 0.015;
+    gl_Position = uPV * vec4(p, 1.0);
+    float land = floor(cls/2.0 + 0.01);
+    vRel = p - uEye; vN = n; vDepth = aL; vCls = cls - land*2.0; vShore = land*0.25;
+    vec4 ls = uLightPV * vec4(p + n*uShadowBias, 1.0);
+    vSh = ls.xyz*0.5 + 0.5;
+  }`,FS_PREC+`
+  varying vec3 vRel, vN, vSh; varying float vDepth, vCls, vShore;
+  uniform vec3 uSunDir, uSunCol, uAmbCol, uGlint, uShallow, uDeep, uShallow2, uDeep2;
+  uniform float uDay;
+  ${SKY_GLSL}
+  ${FOG_GLSL}
+  ${SHADOW_GLSL}
+  ${CLOUDSH_GLSL}
+  // 四组方向正弦叠成的波高(波长约 5.3/3.1/1.7/0.9 格)
+  float wh(vec2 q){
+    return 0.050*sin(dot(q, vec2(0.96, 0.28))*1.19 + uTime*1.15)
+         + 0.035*sin(dot(q, vec2(-0.37, 0.93))*2.03 + uTime*1.45)
+         + 0.012*sin(dot(q, vec2(0.66, -0.75))*3.70 + uTime*1.90)
+         + 0.005*sin(dot(q, vec2(-0.98, -0.20))*6.98 + uTime*2.60);
+  }
+  void main(){
+    vec3 wp = vRel + uEyeL;
+    float d = length(vRel);
+    vec3 V = -vRel / max(d, 0.001);
+    vec3 N = vN;
+    float top = vN.y > 0.5 ? 1.0 : 0.0;
+    if(top > 0.5){
+      vec2 e = vec2(0.08, 0.0);
+      N = normalize(vec3(wh(wp.xz - e.xy) - wh(wp.xz + e.xy), 2.0*e.x, wh(wp.xz - e.yx) - wh(wp.xz + e.yx)));
+      N = normalize(N + vec3(vnoise(wp.xz*1.7 + uTime*0.4) - 0.5, 0.0, vnoise(wp.zx*1.7 - uTime*0.35) - 0.5)*0.12);
+      N = normalize(mix(N, vec3(0.0, 1.0, 0.0), smoothstep(40.0, 140.0, d)*0.7));   // 远处压平, 不闪烁
+    }
+    float below = dot(vN, V) < 0.0 ? 1.0 : 0.0;       // 从水下往上看
+    if(below > 0.5) N = -N;
+    float ndv = max(dot(N, V), 0.0);
+    float fres = 0.03 + 0.97*pow(1.0 - ndv, 5.0);
+    vec3 R = reflect(-V, N); R.y = abs(R.y);
+    vec3 refl = skyCol(R);
+    vec4 cl = clouds(R); refl = mix(refl, cl.rgb, cl.a*0.8);
+    float sh = 1.0;
+    if(uShadowOn > 0.5) sh = shadowAt();
+    float cs = 1.0;
+    if(uCloudShadow > 0.0) cs = 1.0 - uCloudShadow*cloudShade(vRel);
+    float rs = max(dot(R, uSunDir), 0.0);
+    float spec = pow(rs, 220.0)*3.5 + pow(rs, 24.0)*0.10;   // 锐利日芒 + 宽泛的波光
+    float k = 1.0 - exp(-vDepth*0.6);
+    vec3 cS = mix(uShallow, uShallow2, vCls), cD = mix(uDeep, uDeep2, vCls);
+    vec3 lk = (uAmbCol*0.9 + uSunCol*0.45*max(uSunDir.y, 0.0)*mix(0.55, 1.0, sh*cs)) * uDay;
+    vec3 lg = pow(clamp(lk, 0.0, 2.0), vec3(0.4545));  // 线性光强 → 伽马空间的明暗倍率
+    vec3 body = mix(cS, cD, k) * lg;
+    vec3 col = mix(body, refl*mix(0.75, 1.0, cs), fres*(1.0 - below)) + uGlint*spec*sh*cs*(1.0 - below);
+    // 岸边泡沫: 岸格数(角点插值)与浅水共同给出岸线带, 两层流动噪声打碎成泡沫, 再叠一道随时间推向岸的浪线
+    float fn = vnoise(wp.xz*3.0 + vec2(uTime*0.3, uTime*0.1))*0.6 + vnoise(wp.xz*7.0 - vec2(0.0, uTime*0.4))*0.4;
+    float shore = max(clamp(vShore*2.0, 0.0, 1.0), smoothstep(0.75, 0.15, vDepth)) * top;
+    float foam = shore * smoothstep(0.5, 0.68, fn*0.75 + shore*0.5 - 0.12 + 0.1*sin(shore*9.0 - uTime*2.2));
+    col = mix(col, vec3(0.93, 0.96, 0.94)*lg*1.1, foam*0.75);
+    float alpha = clamp(mix(0.48, 0.92, k) + fres*0.35 + foam*0.4, 0.0, 1.0);
+    if(below > 0.5){                                  // 水下仰望水面: 透出天光的亮青色
+      col = mix(cD*lg, skyCol(vec3(0.0, 1.0, 0.0))*lg, 0.45 + 0.35*ndv);
+      alpha = 0.7;
+    }
+    col = mix(col, fogColor(-V), fogAmount(vRel, d, 1.0));
+    gl_FragColor = vec4(col, alpha);
+  }`, CHUNK_ATTRS);
 // 阴影深度着色器: 只写深度(深度纹理), 十字植物/树叶按贴图 alpha 抠像, 影子才有镂空
 const depthProg = makeShader(`
   attribute vec3 aPos; attribute vec2 aUV;
@@ -2338,8 +2544,19 @@ const colProg = makeShader(`
   void main(){ gl_FragColor = uColor; }`);
 const U = {}; // uniform 位置
 for(const n of ["uPV","uOffset","uUVOff","uEye","uFogNear","uFogFar","uTex","uFogCol","uDay","uAlpha","uMode","uTint",
-                 "uLightPV","uShadowBias","uShadow","uSunDir","uSunCol","uAmbCol","uGlowCol","uHaze","uShadowOn","uShadowTexel","uPCF"])
+                 "uLightPV","uShadowBias","uShadow","uSunDir","uSunCol","uAmbCol","uShadowOn","uShadowTexel","uPCF",
+                 "uWTime","uWind","uWOrig","uCloudShadow"])
   U[n]=gl.getUniformLocation(mainProg,n);
+// 水面程序 uniform
+const UW = {};
+for(const n of ["uPV","uLightPV","uEye","uWOrig","uWTime","uShadowBias","uShadow","uShadowOn","uShadowTexel","uPCF",
+                 "uSunDir","uSunCol","uAmbCol","uGlint","uShallow","uDeep","uShallow2","uDeep2","uDay","uCloudShadow"])
+  UW[n]=gl.getUniformLocation(waterProg,n);
+// 天空/云/雾共享 uniform: 三个程序(天空/主/水面)各取一份位置, 每帧由 applySkyUniforms() 统一灌入
+const SKY_UNIFS=["uZenith","uHorizon","uGround","uBand","uSkySun","uSunGlowCol","uCloudLit","uCloudSh","uCloudOff",
+                 "uCover","uCamY","uTime","uCloudOct","uFogCol","uEyeL","uFogNear","uFogFar","uFogA","uFogB","uSkyFog","uSand"];
+function skyUniformLocs(prog){ const o={}; for(const n of SKY_UNIFS) o[n]=gl.getUniformLocation(prog,n); return o; }
+const SKL_MAIN=skyUniformLocs(mainProg), SKL_WATER=skyUniformLocs(waterProg);
 const UC = {};
 for(const n of ["uPV","uOffset","uColor"]) UC[n]=gl.getUniformLocation(colProg,n);
 const A_POS=gl.getAttribLocation(mainProg,"aPos"), A_UV=gl.getAttribLocation(mainProg,"aUV"), A_L=gl.getAttribLocation(mainProg,"aL");
@@ -3300,12 +3517,30 @@ for(const [id,tb,sd] of [[GRASS,2,1],[DIRT,2,1],[STONE,2,1],[SNOW,2,1],[GRAVEL,2
   UV_ROT[id*2]=tb; UV_ROT[id*2+1]=sd;
 }
 const _uvA=[0,0,0,0], _uvB=[0,0,0,0];
+// 风摆类别(写进 aF 的 128 位以上, 见 mainProg): 1 = 十字植物的顶端顶点(根部不动), 2 = 树叶(整块细碎抖动), 0 = 不动
+function swayClass(id, topVert){
+  if(PLANT(id)) return (id!==LILY && topVert) ? 1 : 0;
+  return (id===LEAVES || id===PINE_LEAF) ? 2 : 0;
+}
+// 水面角点深度: 共享该角点的 4 列水深取平均(非水列记 0), 再减去水面下沉的 0.14 → 岸边角点趋近 0, 供泡沫/深浅色
+const waterCornerDepth=(a,b,c,d)=>Math.max(0,(a+b+c+d)/4-0.14);
 function buildChunkMesh(c){
   const bx=c.cx*CS, bz=c.cz*CS;
+  // gb() 缓存"上次访问的区块", 连"不存在"(null)也会缓存; 邻区块之后才生成时缓存仍是 null →
+  // 区块边界上会冒出朝向"空气"的多余面(水里表现为一道道亮线)。每次建网格前先让缓存失效。
+  _gcx=1e9;
+  // 水深缓存: 某格往下连续的水格数(最多 8), 非水 = 0; 键用区块局部坐标(含外扩 1 格)
+  const _wd=new Map();
+  const wcol=(x,y,z)=>{
+    const k=((x-bx+1)*(CS+2)+(z-bz+1))*H+y;
+    let v=_wd.get(k); if(v!==undefined) return v;
+    v=0; for(let yy=y; yy>=0 && yy>y-8 && gb(x,yy,z)===WATER; yy--) v++;
+    _wd.set(k,v); return v;
+  };
   const oV=[], oI=[], wV=[], wI=[], pV=[], pI=[];   // p*: 十字植物单独成层, 在 disable(CULL_FACE) 后绘制
   let oN=0, wN=0, pN=0;
   const ao=[0,0,0,0];
-  // 顶点格式: x,y,z, u,v, aL(AO 或自发光强度), aF(面朝向 + 8*天光0..15), 见 mainProg 注释
+  // 顶点格式: x,y,z, u,v, aL(AO 或自发光强度; 水层=水深), aF(面朝向 + 8*天光0..15 + 128*高位类别), 见 mainProg 注释
   for(let ix=-1; ix<=CS; ix++) for(let iz=-1; iz<=CS; iz++){
     let y=H-1;
     if(ix>=0 && ix<CS && iz>=0 && iz<CS){ const col=(ix*CS+iz)*H; while(y>=0 && !SKY_OCC(c.blocks[col+y])) y--; }
@@ -3331,7 +3566,7 @@ function buildChunkMesh(c){
         for(const q of quads){
           const uvs=[[uu0,v1],[u1,v1],[u1,vv0],[uu0,vv0]];
           const pf=6+8*Math.round(cellSky(bx,bz,wx,y,wz)*15);
-          for(let k=0;k<4;k++) pV.push(wx+q[k][0], y+q[k][1], wz+q[k][2], uvs[k][0], uvs[k][1], 0.92, pf);
+          for(let k=0;k<4;k++) pV.push(wx+q[k][0], y+q[k][1], wz+q[k][2], uvs[k][0], uvs[k][1], 0.92, pf+128*swayClass(id, q[k][1]>=0.5));
           // 只输出一套绕序: 植物层在关闭背面剔除后绘制, GL 天然双面可见, 无需再复制背面 → 省一半植物顶点。
           pI.push(pN,pN+1,pN+2, pN,pN+2,pN+3);
           pN+=4;
@@ -3339,6 +3574,8 @@ function buildChunkMesh(c){
         continue;
       }
       const wTop = isW && gb(wx,y+1,wz)!==WATER;
+      // 高位附加码: 树叶 = 风摆类别 2; 水 = 水色类别(1 = 沼泽)
+      const hiF = isW ? (biomeAt(wx,wz)===BIO_SWAMP ? 128 : 0) : 128*swayClass(id,false);
       for(let f=0; f<6; f++){
         const F=FACES[f], d=F.d;
         const nid=gb(wx+d[0], y+d[1], wz+d[2]);
@@ -3368,7 +3605,7 @@ function buildChunkMesh(c){
           let py = (d[1]===1?1:0) + i*F.u[1] + j*F.v[1];
           let pz = (d[2]===1?1:0) + i*F.u[2] + j*F.v[2];
           if(wTop && py===1) py=0.86;
-          let light=1, sky;
+          let light=1, sky, vhi=hiF;
           const fx=wx+d[0], fy=y+d[1], fz=wz+d[2];   // 面前方那一格
           if(EMISSIVE(id)){ light=2.2; ao[k]=3; sky=1; }  // 灯笼自发光, 夜里也亮
           else if(!isW){
@@ -3386,10 +3623,19 @@ function buildChunkMesh(c){
             if(!o2){ ss+=cellSky(bx,bz,s2x,s2y,s2z); sn++; }
             if(!oc && !(o1&&o2)){ ss+=cellSky(bx,bz,s1x+sj*F.v[0], s1y+sj*F.v[1], s1z+sj*F.v[2]); sn++; }
             sky=ss/sn;
-          } else { ao[k]=3; sky=cellSky(bx,bz,fx,fy,fz); }
+          } else {
+            ao[k]=3; sky=cellSky(bx,bz,fx,fy,fz);
+            // 水: aL 改存水深。顶面按角点取 4 列平均(岸边→0); 其余面取本格水深
+            if(f===2 && wTop){
+              const X=wx+px, Z=wz+pz;
+              const a0=wcol(X-1,y,Z-1), a1=wcol(X,y,Z-1), a2=wcol(X-1,y,Z), a3=wcol(X,y,Z);
+              light=waterCornerDepth(a0,a1,a2,a3);
+              vhi+=256*((a0?0:1)+(a1?0:1)+(a2?0:1)+(a3?0:1));   // 角点周围的岸(非水)格数 0..4 → 岸边泡沫
+            } else light=wcol(wx,y,wz);
+          }
           const uu=u0+(_uvA[k]?TS-EP:EP);
           const vv=v0+(_uvB[k]?TS-EP:EP);
-          V.push(wx+px, y+py, wz+pz, uu, vv, light, f+8*Math.round(sky*15));
+          V.push(wx+px, y+py, wz+pz, uu, vv, light, f+8*Math.round(sky*15)+vhi);
         }
         const b=isW?wN:oN;
         // AO 各向异性时翻转四边形对角线以避免插值撕裂; F.fl 面再整体反绕以统一外表面为背面(供 cullFace(FRONT))。
@@ -7024,46 +7270,69 @@ const selVbo=gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER,selVbo);
   gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(L),gl.STATIC_DRAW);
 }
-const sunVbo=gl.createBuffer();
-/* ---------- 天穹: 竖直渐变 + 日晕 ----------
-   原本天空是单一 clearColor(一整片平色), 是全画面最"塑料"的地方。
-   这里在清屏后先铺一张全屏渐变, 再叠一圈太阳光晕, 成本约等于一次全屏填充。 */
+/* ---------- 天穹(光影第 3 步): 世界空间天空 + 圆形日月 + 程序化软云 ----------
+   每个像素按相机基向量还原世界方向 ray, 颜色 = skyCol(ray)(与地形雾色/水面反射同一个函数),
+   再叠星空(天球上固定, 不再贴屏)、带临边昏暗的圆日、带环形山的月亮, 最后盖上 fbm 软云。 */
 // 夜色系数: 白天 0 → 夜里 1(供夜空繁星强度用; 也可被 selftest 断言)
 function skyNightFactor(h){ return Math.max(0, Math.min(1, (0.10 - h) / 0.20)); }
 const skyProg = makeShader(`
   attribute vec2 aP; varying vec2 vN;
-  void main(){ vN = aP; gl_Position = vec4(aP, 0.999, 1.0); }`,`
-  precision mediump float;
+  void main(){ vN = aP; gl_Position = vec4(aP, 0.999, 1.0); }`,FS_PREC+`
   varying vec2 vN;
-  uniform vec3 uZenith, uHorizon, uGlowCol;
-  uniform vec2 uSun; uniform float uGlow, uAspect, uNight, uYaw;
-  float sHash(vec2 p){ return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }
+  uniform vec3 uFwd, uRight, uUp, uMoonDir, uSunDisc, uMoonCol;
+  uniform float uTanH, uAspect, uPix, uNight, uSunVis, uSunR, uMoonVis;
+  ${SKY_GLSL}
+  float hash13(vec3 p){ p = fract(p*0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y)*p.z); }
   void main(){
-    // 天顶->地平线的渐变(幂次让靠近地平线的过渡更紧)
-    float t = clamp(vN.y * 0.5 + 0.5, 0.0, 1.0);
-    vec3 col = mix(uHorizon, uZenith, pow(t, 0.85));
-    // 夜空繁星: 仅夜里、仅高天出现; 随相机偏航横向漂移, 近似天球转动而非贴屏
-    if(uNight > 0.01){
-      vec2 sp = vec2(vN.x * uAspect + uYaw * 0.9, vN.y) * 46.0;
-      float h = sHash(floor(sp));
-      if(h > 0.982){
-        float d = length(fract(sp) - 0.5);
-        float star = smoothstep(0.10, 0.0, d) * (h - 0.982) / 0.018;
-        col += vec3(star) * uNight * smoothstep(0.18, 0.65, t);
+    vec3 ray = normalize(uFwd + vN.x*uTanH*uAspect*uRight + vN.y*uTanH*uUp);
+    vec3 col = skyCol(ray);
+    float hor = smoothstep(-0.03, 0.015, ray.y);         // 地平线以下不画日月星
+    // 繁星: 天球上的 3D 格点随机撒点, 位置固定在世界里; 轻微闪烁
+    if(uNight > 0.01 && ray.y > 0.0){
+      vec3 sp = ray*140.0; vec3 cell = floor(sp);
+      float h = hash13(cell);
+      if(h > 0.991){
+        vec3 jit = vec3(hash13(cell + 7.1), hash13(cell + 3.3), hash13(cell + 1.7))*0.5 + 0.25;
+        float dd = length(fract(sp) - jit);
+        float tw = 0.75 + 0.25*sin(uTime*(1.5 + h*30.0) + h*100.0);
+        col += vec3(0.9, 0.95, 1.0) * smoothstep(0.3, 0.0, dd) * (0.35 + 0.65*(h - 0.991)/0.009) * uNight * tw * smoothstep(0.02, 0.25, ray.y);
       }
     }
-    // 太阳光晕: 屏幕空间径向衰减, 需按宽高比修正避免拉成椭圆
-    vec2 d = vec2((vN.x - uSun.x) * uAspect, vN.y - uSun.y);
-    float r = length(d);
-    col += uGlowCol * (uGlow * (exp(-r * 2.6) * 0.75 + exp(-r * 8.0) * 0.55));
+    // 月亮: 圆盘 + 值噪声环形山 + 淡淡月晕
+    float cosM = dot(ray, uMoonDir);
+    if(uMoonVis > 0.01 && cosM > 0.99){
+      float mr = 0.028;
+      float ang = acos(clamp(cosM, -1.0, 1.0));
+      float disc = 1.0 - smoothstep(mr - uPix, mr + uPix, ang);
+      vec3 ax = normalize(cross(uMoonDir, vec3(0.0, 1.0, 0.001)));
+      vec3 ay = cross(ax, uMoonDir);
+      vec2 lp = vec2(dot(ray, ax), dot(ray, ay)) / mr;
+      float cr = vnoise(lp*2.6 + 11.0)*0.65 + vnoise(lp*6.0 - 4.0)*0.35;
+      vec3 mc = uMoonCol * (0.88 + 0.26*(cr - 0.5)) * mix(0.82, 1.0, sqrt(max(1.0 - dot(lp, lp), 0.0)));
+      col = mix(col, mc, disc*uMoonVis*hor);
+    }
+    col += uMoonCol * 0.10 * pow(max(cosM, 0.0), 300.0) * uMoonVis * hor;
+    // 太阳: 抗锯齿圆盘 + 临边昏暗 + 贴身日冕(盘外的大日晕由 skyCol 负责)
+    float cosS = dot(ray, uSkySun);
+    if(cosS > 0.99){
+      float ang = acos(clamp(cosS, -1.0, 1.0));
+      float disc = 1.0 - smoothstep(uSunR - uPix, uSunR + uPix, ang);
+      float limb = mix(0.78, 1.0, sqrt(max(1.0 - (ang/uSunR)*(ang/uSunR), 0.0)));
+      col = mix(col, uSunDisc*limb, disc*uSunVis*hor);
+    }
+    col += uSunDisc * 0.30 * pow(max(cosS, 0.0), 700.0) * uSunVis * hor;
+    // 云盖在日月星之上(云会遮住太阳)
+    vec4 cl = clouds(ray);
+    col = mix(col, cl.rgb, cl.a);
     gl_FragColor = vec4(col, 1.0);
   }`);
-const USK={}; for(const n of ["uZenith","uHorizon","uGlowCol","uSun","uGlow","uAspect","uNight","uYaw"]) USK[n]=gl.getUniformLocation(skyProg,n);
+const USK={}; for(const n of ["uFwd","uRight","uUp","uMoonDir","uSunDisc","uMoonCol","uTanH","uAspect","uPix","uNight","uSunVis","uSunR","uMoonVis"]) USK[n]=gl.getUniformLocation(skyProg,n);
+const SKL_SKY=skyUniformLocs(skyProg);
 const ASK_P=gl.getAttribLocation(skyProg,"aP");
 const skyVbo=gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER,skyVbo);
 gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1, 3,-1, -1,3]),gl.STATIC_DRAW);
-/* 把世界方向投影成 NDC, 用于定位太阳光晕 */
+/* 把世界方向投影成 NDC(屏幕上的太阳位置; 后处理的体积光等可复用) */
 function projectDir(pv,camX,camY,camZ,dx,dy,dz){
   const L=Math.hypot(dx,dy,dz)||1;
   const x=camX+dx/L*400, y=camY+dy/L*400, z=camZ+dz/L*400;
@@ -7071,17 +7340,56 @@ function projectDir(pv,camX,camY,camZ,dx,dy,dz){
   if(cw<=0.0001) return null;                       // 在相机背后
   return [(pv[0]*x+pv[4]*y+pv[8]*z+pv[12])/cw, (pv[1]*x+pv[5]*y+pv[9]*z+pv[13])/cw];
 }
-// 云 UV 偏移必须取模到 [0,1): 见 render() 里的说明(mediump 精度)。
-// 存成全局是为了让 selftest() 能对这个不变量下真断言。
+// 相机基向量(与 view 矩阵 RotX(pitch)·RotY(yaw) 一致): 前/右/上, 天空着色器据此还原每个像素的世界方向
+function camBasis(yaw,pitch){
+  const cy=Math.cos(yaw), sy=Math.sin(yaw), cp=Math.cos(pitch), sp=Math.sin(pitch);
+  return {fwd:[sy*cp,-sp,-cy*cp], right:[cy,0,sy], up:[sy*sp,cp,-cy*sp]};
+}
+// 云层噪声偏移必须取模: 着色器里若直接用 player.x/尺度 这种大数, 精度不足云会塌成"跟着人走的白块"。
+// cloudUV 是取模后的 [0,1) 偏移(×512 即着色器里的 uCloudOff), 存成全局让 selftest() 对这个不变量下真断言。
 const wrapUV=(a)=>{ const m=a%1; return m<0?m+1:m; };
 const cloudUV=[0,0];
-// 云面片
-const cloudVbo=gl.createBuffer();
-{
-  const S=768, R=6, y=0;
-  const v=[-S,y,-S, 0,0,1,  S,y,-S, R,0,1,  S,y,S, R,R,1,  -S,y,-S, 0,0,1,  S,y,S, R,R,1,  -S,y,S, 0,R,1];
-  gl.bindBuffer(gl.ARRAY_BUFFER,cloudVbo);
-  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(v),gl.STATIC_DRAW);
+/* 天色关键帧(按太阳高度 sunH 插值; sRGB, 天空直接输出不过色调映射)。
+   sunH 的取值是 -0.10(午夜)… 1(正午), 0 = 日落/日出。 */
+const hexRGB=(h,k)=>{ k=(k===undefined?1:k); return [parseInt(h.slice(1,3),16)/255*k, parseInt(h.slice(3,5),16)/255*k, parseInt(h.slice(5,7),16)/255*k]; };
+const SKY_KEYS=[ // [sunH, 天顶, 地平线, 地面(下半球), 晚霞带, 日晕色, 高度雾密度]
+  [-0.10, hexRGB("#1D2B57"), hexRGB("#34487A"), hexRGB("#232A40"), [0,0,0],                 [0,0,0],                  0.0045], // 夜(仍是明亮的深蓝, 不会漆黑)
+  [-0.05, hexRGB("#1D2B57"), hexRGB("#6A4A6E"), hexRGB("#3A3346"), hexRGB("#C0506A",0.30), hexRGB("#FF9070",0.30), 0.0060], // 暮
+  [ 0.00, hexRGB("#2F4476"), hexRGB("#F48A52"), hexRGB("#8A6A5C"), hexRGB("#FF6A3A",0.85), hexRGB("#FFB070",1.00), 0.0075], // 日落
+  [ 0.12, hexRGB("#4F6FAE"), hexRGB("#F0C394"), hexRGB("#B8977A"), hexRGB("#FF9A55",0.45), hexRGB("#FFC080",0.80), 0.0060], // 黄金时刻
+  [ 0.30, hexRGB("#4A7CC4"), hexRGB("#CCDCEA"), hexRGB("#C4B69A"), hexRGB("#F2C89A",0.12), hexRGB("#FFE0B0",0.45), 0.0040],
+  [ 0.60, hexRGB("#3D78C9"), hexRGB("#B9D3EA"), hexRGB("#C9BDA2"), [0,0,0],                 hexRGB("#FFE9C8",0.35), 0.0035], // 正午
+];
+const lerp3=(a,b,t)=>[a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t];
+function skyKeys(h){
+  const K=SKY_KEYS; let i=0;
+  if(h>=K[K.length-1][0]) i=K.length-2; else while(i<K.length-2 && h>K[i+1][0]) i++;
+  const a=K[i], b=K[i+1];
+  let t=(h-a[0])/(b[0]-a[0]); t=t<0?0:t>1?1:t; t=t*t*(3-2*t);
+  return {zen:lerp3(a[1],b[1],t), hor:lerp3(a[2],b[2],t), gnd:lerp3(a[3],b[3],t),
+          band:lerp3(a[4],b[4],t), glow:lerp3(a[5],b[5],t), fogA:a[6]+(b[6]-a[6])*t};
+}
+// 云量目标: 晴 0.42(干旱群系更晴 0.34) / 雨 0.66 / 雷暴 0.82 / 沙暴 0.55
+function cloudCoverTarget(w, arid){
+  return w==="sand"?0.55 : w==="storm"?0.82 : w!=="clear"?0.66 : 0.42-0.08*(arid||0);
+}
+const DUST_HOR=hexRGB("#E6D2AE"), SAND_ZEN=hexRGB("#B48A58"), SAND_HOR=hexRGB("#D6A96C"), SAND_CLOUD=hexRGB("#C9A06A");
+// 每帧的天空/大气状态(天气与群系切换都平滑过渡: 云量约 20 秒卷入, 沙暴 2.5 秒起、4 秒散)
+const _sky={t:-1, cover:0.42, sand:0, murk:0, arid:0, fogM:1, wind:1,
+  zen:[0,0,0], hor:[0,0,0], gnd:[0,0,0], band:[0,0,0], glow:[0,0,0], sun:[0,1,0],
+  cloudLit:[1,1,1], cloudSh:[0.6,0.65,0.75], coff:[0,0], camY:60, time:0, oct:5,
+  fogCol:[0.5,0.6,0.8], eyeL:[0,60,0], worig:[0,0,0], fogNear:100, fogFar:150, fogA:0.004, fogB:0.05, skyFog:1};
+function applySkyUniforms(L){
+  const S=_sky;
+  gl.uniform3fv(L.uZenith,S.zen); gl.uniform3fv(L.uHorizon,S.hor); gl.uniform3fv(L.uGround,S.gnd);
+  gl.uniform3fv(L.uBand,S.band); gl.uniform3fv(L.uSkySun,S.sun); gl.uniform3fv(L.uSunGlowCol,S.glow);
+  gl.uniform3fv(L.uCloudLit,S.cloudLit); gl.uniform3fv(L.uCloudSh,S.cloudSh);
+  gl.uniform2f(L.uCloudOff,S.coff[0],S.coff[1]);
+  gl.uniform1f(L.uCover,S.cover); gl.uniform1f(L.uCamY,S.camY); gl.uniform1f(L.uTime,S.time); gl.uniform1f(L.uCloudOct,S.oct);
+  gl.uniform3fv(L.uFogCol,S.fogCol); gl.uniform3fv(L.uEyeL,S.eyeL);
+  gl.uniform1f(L.uFogNear,S.fogNear); gl.uniform1f(L.uFogFar,S.fogFar);
+  gl.uniform1f(L.uFogA,S.fogA*S.fogM); gl.uniform1f(L.uFogB,S.fogB);
+  gl.uniform1f(L.uSkyFog,S.skyFog); gl.uniform1f(L.uSand,S.sand);
 }
 
 /* ---------- 区块管理 ---------- */
@@ -7188,10 +7496,11 @@ const GFX_PRESETS=[
   // post: 后处理(仅 WebGL2)  bloom: 泛光  fxaa: 抗锯齿  heat: 正午热浪  dof: 远景柔化
   // msaa: 离屏多重采样数。管线已支持(多重采样渲染缓冲 + blit 解析), 但默认关: mainProg 还是 GLSL 100, 没有 centroid 插值,
   //       MSAA 下远处亚像素小方块面会在像素中心外推 UV, 采到图集相邻格子 → 沙地满是彩色噪点。改用 FXAA; 待主着色器换 GLSL 300 + centroid 再开。
-  {shadow:false, post:false},                                                          // 低: 无阴影贴图、无后处理(直出画布)
-  {shadow:true, size:1024, range:40, pcf:0, post:true, bloom:true, fxaa:true},         // 中: + 泛光/调色/暗角/FXAA
-  {shadow:true, size:2048, range:56, pcf:1, post:true, bloom:true, fxaa:true, msaa:0, heat:true},   // 高(电脑默认): + 正午热浪
-  {shadow:true, size:4096, range:80, pcf:1, post:true, bloom:true, fxaa:true, msaa:0, heat:true, dof:true}, // 极致: + 远景柔化
+  // clouds = 云噪声层数(3..5), cshadow = 地面云影开关
+  {shadow:false, post:false, clouds:3, cshadow:0},                                                          // 低: 无阴影贴图、无后处理(直出画布)
+  {shadow:true, size:1024, range:40, pcf:0, post:true, bloom:true, fxaa:true, clouds:4, cshadow:1},         // 中: + 泛光/调色/暗角/FXAA
+  {shadow:true, size:2048, range:56, pcf:1, post:true, bloom:true, fxaa:true, msaa:0, heat:true, clouds:5, cshadow:1},   // 高(电脑默认): + 正午热浪
+  {shadow:true, size:4096, range:80, pcf:1, post:true, bloom:true, fxaa:true, msaa:0, heat:true, dof:true, clouds:5, cshadow:1}, // 极致: + 远景柔化
 ];
 let gfxLevel=2;
 try{ const v=parseInt(localStorage.getItem("sandsea_gfx"),10); if(v>=0 && v<GFX_PRESETS.length) gfxLevel=v; }catch(e){}
@@ -7702,48 +8011,79 @@ function render(now){
   // 昼夜
   const baseDaylight=0.62+0.55*smoothstep(-0.06,0.18,sunH);
   let daylight=baseDaylight;   // 夜晚也保持明亮, 永远不会一片漆黑
-  let sky=mix3([0.16,0.22,0.42],[0.478,0.71,0.996],smoothstep(-0.14,0.12,sunH)); // 夜空改成明亮的深蓝
-  const glow=clamp(1-Math.abs(sunH)*4.5,0,1)*smoothstep(-0.3,0,sunH);
-  sky=mix3(sky,[0.98,0.52,0.28],glow*0.55);
-  // 天气: 阴云压暗天空; 闪电瞬间照亮全场
-  if(weather!=="clear"){
-    if(weather==="sand"){
-      daylight*=0.86;
-      sky=mix3(sky,[0.82,0.62,0.36],0.42);   // 沙暴改为暖金薄雾, 不再灰暗压抑
-    } else {
-      const murk = weather==="storm" ? 0.88 : 0.95;   // 阴天只是稍暗, 不再灰蒙蒙
-      daylight*=murk;
-      sky=mix3(sky,[0.52,0.56,0.62], weather==="storm"?0.34:0.18);
-    }
+  // ---- 光影第 3 步: 天色关键帧 → 天气/群系/闪电修饰; 云量/沙暴/阴雨/风力全部按时间常数平滑过渡 ----
+  const firstSky=_sky.t<0, dts=firstSky?0:Math.min(0.25,Math.max(0,(now-_sky.t)/1000)); _sky.t=now;
+  const ease=tau=>firstSky?1:1-Math.exp(-dts/tau);
+  const pbio=playing()?biomeAt(Math.floor(player.x),Math.floor(player.z)):-1;
+  const isSand=weather==="sand", isStorm=weather==="storm", isRain=weather!=="clear" && !isSand && !isStorm;
+  _sky.arid += (((pbio>=0 && aridBiome(pbio))?1:0)-_sky.arid)*ease(4);
+  _sky.cover+= (cloudCoverTarget(weather,_sky.arid)-_sky.cover)*ease(6);                            // 约 20 秒卷入
+  _sky.sand += ((isSand?1:0)-_sky.sand)*ease(isSand?0.8:1.3);                                     // 2.5 秒起 / 4 秒散
+  _sky.murk += ((isStorm?1:isRain?0.55:0)-_sky.murk)*ease(3);
+  _sky.fogM += ((pbio===BIO_SALTLAKE?0.7:pbio===BIO_VOLCANO?1.8:1)-_sky.fogM)*ease(3);           // 盐湖空气通透 / 火山烟尘
+  _sky.wind += ((isSand?3.0:isStorm?2.2:isRain?1.6:1.0)-_sky.wind)*ease(1.5);
+  const SK=skyKeys(sunH), dayK=smoothstep(-0.08,0.25,sunH), dimK=0.3+0.7*dayK;
+  let zen=SK.zen, hor=SK.hor, gnd=SK.gnd, band=SK.band, sglow=SK.glow;
+  if(_sky.arid>0.01) hor=lerp3(hor,DUST_HOR,0.25*_sky.arid*dayK);          // 干旱群系: 地平线泛暖沙尘, 头顶仍是蓝天
+  if(weather!=="clear") daylight*= isSand?0.86 : isStorm?0.88 : 0.95;       // 阴天只是稍暗, 不再灰蒙蒙
+  if(_sky.murk>0.01){                                                       // 阴雨: 整片天泛灰, 霞光与日晕减弱
+    const m=0.34*_sky.murk, grey=[0.52*dimK,0.56*dimK,0.62*dimK];
+    zen=lerp3(zen,grey,m); hor=lerp3(hor,grey,m); gnd=lerp3(gnd,grey,m);
+    band=lerp3(band,[0,0,0],0.8*_sky.murk); sglow=lerp3(sglow,[0,0,0],0.6*_sky.murk);
   }
-  if(lightT>0){
-    const f=Math.min(1,lightT/0.35);
+  if(_sky.sand>0.01){                                                       // 沙暴: 暖金色的沙尘天幕(不再灰暗压抑)
+    const s=0.85*_sky.sand;
+    zen=lerp3(zen,[SAND_ZEN[0]*dimK,SAND_ZEN[1]*dimK,SAND_ZEN[2]*dimK],s);
+    hor=lerp3(hor,[SAND_HOR[0]*dimK,SAND_HOR[1]*dimK,SAND_HOR[2]*dimK],s);
+    gnd=lerp3(gnd,[SAND_HOR[0]*dimK*0.85,SAND_HOR[1]*dimK*0.85,SAND_HOR[2]*dimK*0.85],s);
+    band=lerp3(band,[0,0,0],_sky.sand); sglow=lerp3(sglow,[0,0,0],_sky.sand);
+  }
+  if(lightT>0){                                                             // 闪电瞬间照亮全场
+    const f=Math.min(1,lightT/0.35), W=[0.92,0.94,1.0];
     daylight=Math.max(daylight, 0.6+f*0.9);
-    sky=mix3(sky,[0.92,0.94,1.0],f*0.85);
+    zen=lerp3(zen,W,f*0.85); hor=lerp3(hor,W,f*0.85); gnd=lerp3(gnd,W,f*0.85);
   }
-  // ---- 群系氛围: 站到不同群系, 天空/雾/亮度平滑改变 ----
+  // ---- 群系氛围: 站到不同群系, 天空/雾/亮度平滑改变(70% 混进地平线与地面, 30% 混进天顶 → 头顶仍见蓝天) ----
   {
     let tgtCol=[0,0,0], tgtAmt=0, tgtDay=1;
-    if(playing()){
-      const pbio=biomeAt(Math.floor(player.x),Math.floor(player.z));
-      if(pbio===BIO_VOLCANO){      tgtCol=[0.50,0.25,0.19]; tgtAmt=0.55; tgtDay=0.86; } // 灰烬橙红·烟尘压暗
-      else if(pbio===BIO_SALTLAKE){tgtCol=[0.87,0.89,0.94]; tgtAmt=0.46; tgtDay=1.16; } // 惨白高反光·刺眼
-      else if(pbio===BIO_CANYON){  tgtCol=[0.74,0.51,0.33]; tgtAmt=0.42; tgtDay=1.02; } // 沙尘橙黄
-      else if(pbio===BIO_FOREST){  tgtCol=[0.42,0.62,0.78]; tgtAmt=0.38; tgtDay=0.94; } // 晶洞高地冷青
-      else if(pbio===BIO_TAIGA){   tgtCol=[0.62,0.48,0.36]; tgtAmt=0.34; tgtDay=1.00; } // 遗迹带暮色褐
-      else if(pbio===BIO_SNOW){    tgtCol=[0.82,0.88,0.98]; tgtAmt=0.24; tgtDay=1.05; } // 雪域冷蓝
-    }
+    if(pbio===BIO_VOLCANO){      tgtCol=[0.50,0.25,0.19]; tgtAmt=0.55; tgtDay=0.86; } // 灰烬橙红·烟尘压暗
+    else if(pbio===BIO_SALTLAKE){tgtCol=[0.87,0.89,0.94]; tgtAmt=0.46; tgtDay=1.16; } // 惨白高反光·刺眼
+    else if(pbio===BIO_CANYON){  tgtCol=[0.74,0.51,0.33]; tgtAmt=0.42; tgtDay=1.02; } // 沙尘橙黄
+    else if(pbio===BIO_FOREST){  tgtCol=[0.42,0.62,0.78]; tgtAmt=0.38; tgtDay=0.94; } // 晶洞高地冷青
+    else if(pbio===BIO_TAIGA){   tgtCol=[0.62,0.48,0.36]; tgtAmt=0.34; tgtDay=1.00; } // 遗迹带暮色褐
+    else if(pbio===BIO_SNOW){    tgtCol=[0.82,0.88,0.98]; tgtAmt=0.24; tgtDay=1.05; } // 雪域冷蓝
     if(_atmoAmt<0.02 && tgtAmt>0){ _atmoCol=tgtCol.slice(); }  // 首次切入直接取色, 避免从黑过渡
     _atmoAmt += (tgtAmt-_atmoAmt)*0.06;
     _atmoDay += (tgtDay-_atmoDay)*0.06;
     for(let i=0;i<3;i++) _atmoCol[i]+=(tgtCol[i]-_atmoCol[i])*0.06;
-    if(_atmoAmt>0.004){ sky=mix3(sky,_atmoCol,_atmoAmt); daylight*=_atmoDay; }
+    if(_atmoAmt>0.004){
+      const ac=[_atmoCol[0]*dimK,_atmoCol[1]*dimK,_atmoCol[2]*dimK];
+      zen=lerp3(zen,ac,0.3*_atmoAmt); hor=lerp3(hor,ac,0.7*_atmoAmt); gnd=lerp3(gnd,ac,0.7*_atmoAmt);
+      daylight*=_atmoDay;
+    }
+  }
+  const sky=hor;                              // 清屏色 = 地平线色(天空着色器之外的兜底)
+  _sky.zen=zen; _sky.hor=hor; _sky.gnd=gnd; _sky.band=band; _sky.glow=sglow; _sky.sun=LS.sun;
+  // 云的受光面/背光面颜色: 白天白里透暖(日落自动染橙), 背光面取天色偏蓝; 夜里暗蓝灰; 雷雨压暗; 沙暴染沙色
+  {
+    const lit=[Math.min(1.35,1+(sglow[0]*2.2-1)*0.35), Math.min(1.35,1+(sglow[1]*2.2-1)*0.35), Math.min(1.35,1+(sglow[2]*2.2-1)*0.35)];
+    let cL=lerp3([0.15,0.18,0.28],lit,dayK);
+    let cS=[(zen[0]+hor[0])*0.39+0.08*dayK, (zen[1]+hor[1])*0.39+0.08*dayK, (zen[2]+hor[2])*0.39+0.08*dayK];
+    const mk=_sky.murk;
+    if(mk>0.01){ cL=lerp3(cL,[cL[0]*0.62,cL[1]*0.64,cL[2]*0.68],mk); cS=lerp3(cS,[cS[0]*0.6,cS[1]*0.6,cS[2]*0.62],mk); }
+    if(_sky.sand>0.01){ const sc=[SAND_CLOUD[0]*dimK,SAND_CLOUD[1]*dimK,SAND_CLOUD[2]*dimK]; cL=lerp3(cL,sc,0.6*_sky.sand); cS=lerp3(cS,[sc[0]*0.8,sc[1]*0.8,sc[2]*0.8],0.6*_sky.sand); }
+    _sky.cloudLit=cL; _sky.cloudSh=cS;
   }
   const uw=eyeInWater();
-  const fogCol = uw ? [0.08,0.22,0.55] : (weather==="sand" ? mix3(sky,[0.78,0.58,0.34],0.35) : sky);
+  const fogCol = uw ? [0.08,0.22,0.55] : hor;
   let fogFar = uw ? 22 : RENDER*CS*1.05;
   let fogNear= uw ? 2  : fogFar*0.68;
-  if(weather==="sand" && !uw){ fogFar=34; fogNear=12; }   // 沙暴不再白到看不见: 近处清晰, 远处才起黄雾
+  if(!uw && _sky.sand>0.01){ fogFar+=(60-fogFar)*_sky.sand; fogNear+=(10-fogNear)*_sky.sand; }   // 沙暴: 近处清晰, 远处没入黄沙
+  _sky.fogCol=fogCol; _sky.fogNear=fogNear; _sky.fogFar=fogFar; _sky.skyFog=uw?0:1;
+  _sky.fogA = uw ? 0 : SK.fogA*(1+2.5*_sky.murk);
+  _sky.fogA += (0.06-_sky.fogA)*(uw?0:_sky.sand);
+  _sky.fogB = 0.05+(0.02-0.05)*_sky.sand;      // 沙暴的雾墙更高
+  _sky.oct = GFX_PRESETS[gfxLevel].clouds||5;
   document.getElementById("watertint").style.display=uw?"block":"none";
   document.getElementById("lavatint").style.display=eyeInLava()?"block":"none";
   document.getElementById("firetint").style.display=(burnT>0&&!eyeInLava())?"block":"none";
@@ -7752,7 +8092,6 @@ function render(now){
   gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
   gl.enable(gl.DEPTH_TEST);
   gl.disable(gl.CULL_FACE);
-
 
   // 矩阵 (支持第三人称相机)
   const eyeY=player.y+(player.sneak?EYE-0.12:EYE);
@@ -7773,20 +8112,36 @@ function render(now){
   const view=matMul(matMul(matRotX(vPitch),matRotY(vYaw)),matTrans(-camX,-camY,-camZ));
   const pv=matMul(proj,view);
   updateFrustum(pv);                          // 每帧刷新视锥平面, 供区块剔除
-  // --- 天穹渐变 + 日晕(水下不画, 水下有自己的蓝调) ---
+  // 相机相关的天空状态: 小坐标原点(每 1024 格对齐)、云层偏移(取模, 见 cloudUV 说明)、着色器时间
+  {
+    const ox=Math.floor(camX/1024)*1024, oz=Math.floor(camZ/1024)*1024, tcl=now/1000;
+    _sky.worig=[ox,0,oz]; _sky.eyeL=[camX-ox,camY,camZ-oz]; _sky.camY=camY;
+    _sky.time=tcl%3600;
+    cloudUV[0]=wrapUV((camX/CLOUD_SCALE+0.004*tcl)/512); cloudUV[1]=wrapUV((camZ/CLOUD_SCALE+0.0015*tcl)/512);
+    _sky.coff=[cloudUV[0]*512, cloudUV[1]*512];
+  }
+  const cloudShK = GFX_PRESETS[gfxLevel].cshadow ? 0.45*(1-0.5*_sky.murk) : 0;   // 地面云影强度
+  // --- 天穹: 渐变 + 日月 + 星空 + 软云(水下不画, 水下有自己的蓝调) ---
   if(!uw){
-    const sn=projectDir(pv,camX,camY,camZ,LS.sun[0],LS.sun[1],LS.sun[2]);
     gl.useProgram(skyProg);
     gl.depthMask(false); gl.disable(gl.DEPTH_TEST);
-    // 天顶比地平线更深更冷, 地平线偏暖 —— 这是真实天空的基本结构
-    gl.uniform3f(USK.uZenith,  sky[0]*0.72, sky[1]*0.80, Math.min(1,sky[2]*1.06));
-    gl.uniform3f(USK.uHorizon, Math.min(1,sky[0]*1.20+0.06), Math.min(1,sky[1]*1.12+0.04), sky[2]);
-    gl.uniform3f(USK.uGlowCol, 1.0, 0.80, 0.52);
-    gl.uniform1f(USK.uGlow, sn ? (0.16+0.55*glow) : 0.0);
-    gl.uniform2f(USK.uSun, sn?sn[0]:0, sn?sn[1]:2);
-    gl.uniform1f(USK.uAspect, canvas.width/Math.max(1,canvas.height));
-    gl.uniform1f(USK.uNight, skyNightFactor(sunH));   // 夜空繁星强度
-    gl.uniform1f(USK.uYaw, vYaw);                     // 随相机偏航让星空漂移
+    applySkyUniforms(SKL_SKY);
+    const B=camBasis(vYaw,vPitch), tanH=Math.tan(fov/2);
+    gl.uniform3fv(USK.uFwd,B.fwd); gl.uniform3fv(USK.uRight,B.right); gl.uniform3fv(USK.uUp,B.up);
+    gl.uniform1f(USK.uTanH,tanH);
+    gl.uniform1f(USK.uAspect,w/h);
+    gl.uniform1f(USK.uPix,2*tanH/h);                                  // 一个像素对应的角度(日月圆盘抗锯齿)
+    gl.uniform1f(USK.uNight, skyNightFactor(sunH)*(1-0.8*_sky.murk)*(1-_sky.sand));   // 夜空繁星强度
+    // 太阳圆盘: 正午白里透黄, 低空橙红; 沙暴里变成一枚苍白、放大的漫射日轮
+    const wm=LS.warm*LS.warm;
+    let disc=lerp3([1.5,1.42,1.25],[1.45,0.72,0.34],wm);
+    disc=lerp3(disc,[1.0,0.9,0.69],_sky.sand);
+    gl.uniform3fv(USK.uSunDisc,disc);
+    gl.uniform1f(USK.uSunR,0.024*(1+1.2*_sky.sand));
+    gl.uniform1f(USK.uSunVis,1-0.6*_sky.murk);
+    gl.uniform3fv(USK.uMoonDir,LS.moon);
+    gl.uniform3f(USK.uMoonCol,0.886,0.902,0.941);
+    gl.uniform1f(USK.uMoonVis,(1-smoothstep(0.05,0.3,sunH))*(1-0.7*_sky.murk)*(1-_sky.sand));
     gl.bindBuffer(gl.ARRAY_BUFFER,skyVbo);
     gl.enableVertexAttribArray(ASK_P);
     gl.vertexAttribPointer(ASK_P,2,gl.FLOAT,false,8,0);
@@ -7794,52 +8149,21 @@ function render(now){
     gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
   }
 
-  // 太阳 & 月亮
-  if(!uw){
-    gl.useProgram(colProg);
-    gl.uniformMatrix4fv(UC.uPV,false,pv);
-    gl.uniform3f(UC.uOffset,0,0,0);
-    gl.depthMask(false);
-    const drawCelestial=(dx,dy,dz,size,col)=>{
-      const len=Math.hypot(dx,dy,dz); dx/=len; dy/=len; dz/=len;
-      const cx2=camX+dx*400, cy2=camY+dy*400, cz2=camZ+dz*400;
-      // 面向相机的两个切向量
-      let rx=-dz, ry=0, rz=dx;
-      const rl=Math.hypot(rx,ry,rz)||1; rx/=rl; rz/=rl;
-      const ux=ry*dz-rz*dy, uy2=rz*dx-rx*dz, uz=rx*dy-ry*dx;
-      const s=size;
-      const q=[cx2-rx*s-ux*s,cy2-uy2*s,cz2-rz*s-uz*s, cx2+rx*s-ux*s,cy2-uy2*s,cz2+rz*s-uz*s, cx2+rx*s+ux*s,cy2+uy2*s,cz2+rz*s+uz*s,
-               cx2-rx*s-ux*s,cy2-uy2*s,cz2-rz*s-uz*s, cx2+rx*s+ux*s,cy2+uy2*s,cz2+rz*s+uz*s, cx2-rx*s+ux*s,cy2+uy2*s,cz2-rz*s+uz*s];
-      gl.bindBuffer(gl.ARRAY_BUFFER,sunVbo);
-      uploadDyn(q);
-      gl.enableVertexAttribArray(AC_POS);
-      gl.vertexAttribPointer(AC_POS,3,gl.FLOAT,false,12,0);
-      gl.uniform4fv(UC.uColor,col);
-      gl.drawArrays(gl.TRIANGLES,0,6);
-    };
-    // 日月位置与光照方向一致(影子朝向对得上天上的太阳)
-    drawCelestial(LS.sun[0],LS.sun[1],LS.sun[2], 28,[1,0.98,0.82,1]);
-    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);   // 白天月亮淡成一抹
-    drawCelestial(LS.moon[0],LS.moon[1],LS.moon[2], 18,[0.88,0.9,0.95,1-0.8*LS.sunI]);
-    gl.disable(gl.BLEND);
-    gl.depthMask(true);
-  }
-
   // 主着色器公共 uniform
   gl.useProgram(mainProg);
   enableMeshAttribs();                        // 主属性数组只启用一次, 之后各次绘制只重设指针(省掉每帧上千次冗余 enable)
+  applySkyUniforms(SKL_MAIN);                 // 天色/云/雾(雾色 = skyCol(视线方向) + 高度雾)
   gl.uniformMatrix4fv(U.uPV,false,pv);
   gl.uniform3f(U.uEye,camX,camY,camZ);
+  gl.uniform3fv(U.uWOrig,_sky.worig);
+  gl.uniform1f(U.uWTime,_sky.time);
+  gl.uniform3f(U.uWind,0.8*_sky.wind,Math.min(2,_sky.wind),0.45*_sky.wind);   // 风向偏东南; 雨/雷暴/沙暴依次更猛
+  gl.uniform1f(U.uCloudShadow,uw?0:cloudShK);
   gl.uniform3f(U.uTint,1,1,1);
-  gl.uniform1f(U.uFogNear,fogNear);
-  gl.uniform1f(U.uFogFar,fogFar);
-  gl.uniform3fv(U.uFogCol,fogCol);
   gl.uniform1f(U.uDay,daylight/baseDaylight);   // 昼夜明暗交给日光/天光颜色, 这里只剩天气/群系/闪电的曝光倍率
   gl.uniform3fv(U.uSunDir,LS.light);
   gl.uniform3fv(U.uSunCol,LS.sunCol);
   gl.uniform3fv(U.uAmbCol,LS.ambCol);
-  gl.uniform3fv(U.uGlowCol,uw?[0,0,0]:LS.glowCol);
-  gl.uniform1f(U.uHaze,uw?0:1.2/Math.max(8,fogFar));
   gl.uniform1f(U.uShadowOn,shadow.ok?1:0);
   gl.uniform1f(U.uPCF,shadow.pcf);
   gl.uniform1f(U.uShadowTexel,shadow.ok?1/shadow.size:0);
@@ -7906,9 +8230,17 @@ function render(now){
     const arr=[];
     for(const p of particles){
       const s=p.size, e2=TS*0.18;
+      // 默认: 面向相机的方片; p.st>0(沙暴沙粒): 沿速度方向拉长成细条, 读起来是被风卷着飞的沙线
+      let ax=rx, ay=0, az=rz, bx=ux, by=uy2, bz=uz, sa=s, sb=s;
+      if(p.st){
+        const vl=Math.hypot(p.vx,p.vy,p.vz)||1; let vx=p.vx/vl, vy=p.vy/vl, vz=p.vz/vl;
+        const dd=vx*ldx+vy*ldy+vz*ldz; vx-=dd*ldx; vy-=dd*ldy; vz-=dd*ldz;
+        const l2=Math.hypot(vx,vy,vz);
+        if(l2>0.05){ ax=vx/l2; ay=vy/l2; az=vz/l2; bx=ldy*az-ldz*ay; by=ldz*ax-ldx*az; bz=ldx*ay-ldy*ax; sa=s*p.st; sb=s*0.3; }
+      }
       const c4=[[-1,-1,0,0],[1,-1,e2,0],[1,1,e2,e2],[-1,-1,0,0],[1,1,e2,e2],[-1,1,0,e2]];
       for(const [a,b2,du,dv] of c4)
-        arr.push(p.x+(rx*a+ux*b2)*s, p.y+(uy2*b2)*s, p.z+(rz*a+uz*b2)*s, p.u+du, p.v+dv, p.l);
+        arr.push(p.x+ax*a*sa+bx*b2*sb, p.y+ay*a*sa+by*b2*sb, p.z+az*a*sa+bz*b2*sb, p.u+du, p.v+dv, p.l);
     }
     gl.bindBuffer(gl.ARRAY_BUFFER,partVbo);
     uploadDyn(arr);
@@ -8001,41 +8333,47 @@ function render(now){
     gl.disable(gl.BLEND);
   }
 
-  // 云 + 水 (半透明)
-  gl.useProgram(mainProg);
-  gl.enable(gl.BLEND);
-  gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
-  gl.depthMask(false);
-  gl.uniform1i(U.uMode,1);
-  if(!uw){
-    gl.bindTexture(gl.TEXTURE_2D,cloudTex);
-    gl.uniform1f(U.uShadowOn,0);                  // 云不接收地面阴影
-    gl.uniform1f(U.uAlpha,0.85);
-    gl.uniform3f(U.uOffset,player.x,74,player.z);
-    // 云纹理是 REPEAT 平铺(周期=1.0 UV), 所以偏移只在小数部分有意义。
-    // 必须取模后再传: 片元着色器是 mediump, 玩家走远后 player.x/256 绝对值变大,
-    // 相对精度不足会让云塌缩成"跟着人走的大白块"(手机/核显上尤其明显)。
-    cloudUV[0]=wrapUV((player.x+now/1000*1.5)/256); cloudUV[1]=wrapUV(player.z/256);
-    gl.uniform2f(U.uUVOff, cloudUV[0], cloudUV[1]);
-    gl.bindBuffer(gl.ARRAY_BUFFER,cloudVbo);
-    bindMeshAttribs();
-    gl.drawArrays(gl.TRIANGLES,0,6);
-    gl.uniform3f(U.uOffset,0,0,0);
-    gl.uniform2f(U.uUVOff,0,0);
-    gl.uniform1f(U.uShadowOn,shadow.ok?1:0);
-    gl.bindTexture(gl.TEXTURE_2D,atlasTex);
-  }
-  gl.uniform1f(U.uAlpha,0.68);
-  waterList.sort((a,b)=>{
-    const da=(b.cx*CS+8-player.x)**2+(b.cz*CS+8-player.z)**2;
-    const db=(a.cx*CS+8-player.x)**2+(a.cz*CS+8-player.z)**2;
-    return da-db;
-  });
-  for(const c of waterList){
-    gl.bindBuffer(gl.ARRAY_BUFFER,c.mesh.water.vbo);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,c.mesh.water.ibo);
-    bindChunkAttribs();
-    gl.drawElements(gl.TRIANGLES,c.mesh.water.n,gl.UNSIGNED_INT,0);
+  // 水面(光影第 3 步): 独立着色器——波浪法线 / 菲涅尔天空与云反射 / 太阳高光 / 深浅色 / 岸边泡沫
+  // (云已画进天空着色器; cloudUV 仍每帧更新, 见上)
+  if(waterList.length){
+    gl.useProgram(waterProg);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+    gl.depthMask(false);
+    applySkyUniforms(SKL_WATER);
+    gl.uniformMatrix4fv(UW.uPV,false,pv);
+    gl.uniform3f(UW.uEye,camX,camY,camZ);
+    gl.uniform3fv(UW.uWOrig,_sky.worig);
+    gl.uniform1f(UW.uWTime,_sky.time);
+    gl.uniformMatrix4fv(UW.uLightPV,false,shadow.lpv);
+    gl.uniform1f(UW.uShadowBias,shadow.ok?(2*shadow.range/shadow.size)*1.8+0.02:0);
+    gl.uniform1i(UW.uShadow,1);
+    gl.uniform1f(UW.uShadowOn,shadow.ok?1:0);
+    gl.uniform1f(UW.uShadowTexel,shadow.ok?1/shadow.size:0);
+    gl.uniform1f(UW.uPCF,0);
+    gl.uniform3fv(UW.uSunDir,LS.light);
+    gl.uniform3fv(UW.uSunCol,LS.sunCol);
+    gl.uniform3fv(UW.uAmbCol,LS.ambCol);
+    gl.uniform1f(UW.uDay,daylight/baseDaylight);
+    gl.uniform1f(UW.uCloudShadow,uw?0:cloudShK);
+    // 高光颜色: 白天取太阳色(低空偏橙), 夜里是淡淡的月光
+    const gI=LS.sunI>0.02 ? LS.sunI : 0.25*(1-smoothstep(-0.05,0.15,sunH));
+    const gc=LS.sunI>0.02 ? lerp3([1.0,0.95,0.85],[1.0,0.62,0.32],LS.warm*LS.warm) : [0.75,0.82,1.0];
+    gl.uniform3f(UW.uGlint,gc[0]*gI,gc[1]*gI,gc[2]*gI);
+    gl.uniform3f(UW.uShallow,0.27,0.74,0.70);  gl.uniform3f(UW.uDeep,0.06,0.31,0.43);    // 绿洲/尼罗河: #45BDB3 → #0F4F6E
+    gl.uniform3f(UW.uShallow2,0.43,0.54,0.31); gl.uniform3f(UW.uDeep2,0.17,0.23,0.16);   // 沼泽: #6E8A4E → #2C3B2A
+    waterList.sort((a,b)=>{
+      const da=(b.cx*CS+8-player.x)**2+(b.cz*CS+8-player.z)**2;
+      const db=(a.cx*CS+8-player.x)**2+(a.cz*CS+8-player.z)**2;
+      return da-db;
+    });
+    for(const c of waterList){
+      gl.bindBuffer(gl.ARRAY_BUFFER,c.mesh.water.vbo);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,c.mesh.water.ibo);
+      bindChunkAttribs();                      // 与 mainProg 同一套属性槽位(CHUNK_ATTRS)
+      gl.drawElements(gl.TRIANGLES,c.mesh.water.n,gl.UNSIGNED_INT,0);
+    }
+    gl.useProgram(mainProg);
   }
   aFArray(false);
   gl.depthMask(true);
@@ -8074,15 +8412,15 @@ function updateWeather(dt){
   const bio=biomeAt(Math.floor(player.x),Math.floor(player.z));
   const snowing = bio===BIO_SNOW;
   if(weather==="sand"){
-    const n=14;   // 此处 RENDER>6 已由上方 `if(RENDER<=6) return` 保证, 原三项式恒真, 化简
+    const n=22;   // 此处 RENDER>6 已由上方 `if(RENDER<=6) return` 保证, 原三项式恒真, 化简
     for(let i=0;i<n;i++){
       const a=Math.random()*6.283, d=Math.random()*12;
       const px=player.x+Math.sin(a)*d, pz=player.z+Math.cos(a)*d;
-      particles.push({
+      particles.push({                                   // 细长沙线(渲染时沿速度拉长, 见 render() 粒子段)
         x:px, y:player.y+0.4+Math.random()*3.2, z:pz,
-        vx:6+Math.random()*5, vy:(Math.random()-.5)*1.2, vz:(Math.random()-.5)*2.2,
-        life:0.7+Math.random()*0.4, size:0.08+Math.random()*0.06,
-        u:4*TS, v:0, l:1.15
+        vx:10+Math.random()*6, vy:(Math.random()-.5)*1.2, vz:(Math.random()-.5)*2.2,
+        life:0.6+Math.random()*0.4, size:0.05+Math.random()*0.04, st:4.5,
+        u:4*TS, v:0, l:0.95
       });
     }
     return;
@@ -8665,14 +9003,16 @@ drawViewmodel();
   const list=[];
   for(let dx=-RENDER-1;dx<=RENDER+1;dx++) for(let dz=-RENDER-1;dz<=RENDER+1;dz++) list.push([cx+dx,cz+dz,Math.max(Math.abs(dx),Math.abs(dz))]);
   list.sort((a,b)=>a[2]-b[2]);
-  const total=list.length;
+  // 两遍: 先生成全部区块数据, 再建网格。边生成边建网格时, 外一圈的邻区块还不存在,
+  // 区块边界上会多出朝向"空气"的面(水面上一道道亮线, 地形里是看不见的冗余面)。
+  const nGen=list.length, total=nGen*2;
   let i=0;
   (function step(){
     const t0=performance.now();
     while(i<total && performance.now()-t0<14){
-      const [ccx,ccz,d]=list[i++];
+      const [ccx,ccz,d]=list[i<nGen?i:i-nGen]; i++;
       const c=ensureData(ccx,ccz);
-      if(d<=RENDER && !c.mesh) buildChunkMesh(c);
+      if(i>nGen && d<=RENDER && !c.mesh) buildChunkMesh(c);
     }
     startbtn.textContent=`生成世界中… ${Math.round(i/total*100)}%`;
     if(i<total) setTimeout(step,0);
@@ -10505,6 +10845,74 @@ function selftest(){
       hudEl.style.display=hd0; setPhotoMode(pm0);
       ok("拍照模式: F1 隐藏 HUD(保留水下/岩浆色调), 再按 F1 恢复", on && hbHidden && tintKept && off,
          "on="+on+" hidden="+hbHidden+" tint="+tintKept+" off="+off);
+    }
+
+    // ---- 光影(第 3 步): 天色关键帧 / 云量 / 相机基向量 / 风摆与水面网格编码 / 着色器 ----
+    {
+      const lum=c=>0.299*c[0]+0.587*c[1]+0.114*c[2];
+      const noon=skyKeys(1), set=skyKeys(0), night=skyKeys(-0.1);
+      ok("光影3: 正午天顶比地平线更深更蓝", noon.zen[2]>noon.zen[0]*1.5 && lum(noon.zen)<lum(noon.hor), "zen="+noon.zen.map(v=>v.toFixed(2))+" hor="+noon.hor.map(v=>v.toFixed(2)));
+      ok("光影3: 日落地平线暖橙且晚霞带亮起", set.hor[0]>set.hor[2]*1.4 && lum(set.band)>0.3 && lum(noon.band)===0, "hor="+set.hor.map(v=>v.toFixed(2)));
+      ok("光影3: 夜空仍是明亮深蓝(不漆黑)", lum(night.hor)>0.15 && night.zen[2]>night.zen[0], "hor="+lum(night.hor).toFixed(2));
+      let jump=0;
+      for(let hh=-0.15; hh<1.05; hh+=0.001){ const a=skyKeys(hh), b=skyKeys(hh+0.001);
+        for(const k of ["zen","hor","gnd","band","glow"]) for(let i=0;i<3;i++) jump=Math.max(jump,Math.abs(a[k][i]-b[k][i])); }
+      ok("光影3: 天色随太阳高度连续变化(无跳变)", jump<0.03, "最大步进="+jump.toFixed(3));
+      ok("光影3: 高度雾日落比正午浓", set.fogA>noon.fogA && noon.fogA>0, "noon="+noon.fogA+" set="+set.fogA);
+      ok("光影3: 云量 雷暴>雨>沙暴>晴>干旱晴", cloudCoverTarget("storm",0)>cloudCoverTarget("rain",0) && cloudCoverTarget("rain",0)>cloudCoverTarget("sand",0)
+         && cloudCoverTarget("sand",0)>cloudCoverTarget("clear",0) && cloudCoverTarget("clear",1)<cloudCoverTarget("clear",0), "");
+      const yw=0.7, pt=0.3, B=camBasis(yw,pt), dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+      const lf=[Math.sin(yw)*Math.cos(pt), -Math.sin(pt), -Math.cos(yw)*Math.cos(pt)];
+      ok("光影3: 天空相机基向量与视线一致且正交归一", near(dot(B.fwd,lf),1,1e-9) && near(dot(B.fwd,B.right),0,1e-9) && near(dot(B.fwd,B.up),0,1e-9)
+         && near(dot(B.right,B.up),0,1e-9) && near(dot(B.up,B.up),1,1e-9) && B.up[1]>0, "");
+      ok("光影3: 风摆类别 草顶=1/草根=0/树叶=2/睡莲与石头=0", swayClass(TALLGRASS,true)===1 && swayClass(TALLGRASS,false)===0 && swayClass(LEAVES,false)===2
+         && swayClass(PINE_LEAF,true)===2 && swayClass(LILY,true)===0 && swayClass(STONE,true)===0, "");
+      ok("光影3: 水面角点深度 岸边更浅/开阔 1 格深=0.86", waterCornerDepth(0,0,0,0)===0 && near(waterCornerDepth(1,1,1,1),0.86) && waterCornerDepth(3,3,0,0)<waterCornerDepth(3,3,3,3), "");
+      ok("光影3: 天空/主/水面着色器均已链接", [skyProg,mainProg,waterProg].every(pg=>gl.getProgramParameter(pg,gl.LINK_STATUS)), "");
+      ok("光影3: 主程序与水面程序共用区块属性槽位", A_POS===0 && A_UV===1 && A_L===2 && A_F===3 && gl.getAttribLocation(waterProg,"aPos")===0 && gl.getAttribLocation(waterProg,"aF")===3,
+         "A="+[A_POS,A_UV,A_L,A_F]);
+      // 合成测试区块对 A|B(远离一切, 沿 x 相邻): 跨区块边界的 12×6 水池(3 格深, 石头围岸) + 一株高草 + 一块树叶。
+      // 回读网格(仅 WebGL2 有 getBufferSubData): 水面只有顶面、岸边角点带岸格数、区块边界无多余侧面; 植物仅顶端顶点带风摆; 树叶全带类别 2
+      if(IS_GL2){
+        const X0=160000, Z0=160000, cxA=X0/CS, czA=Z0/CS;
+        gb(X0+CS, WATER_Y, Z0);                     // 先让 gb 缓存住"B 不存在", 检验建网格前的缓存失效
+        const mk=(cx,cz)=>{ const c={cx,cz,blocks:new Uint8Array(CS*CS*H),mesh:null}; world.set(key(cx,cz),c); return c; };
+        const A=mk(cxA,czA); mk(cxA+1,czA);
+        const put=(x,y,z,id)=>{ world.get(key(x>>4,z>>4)).blocks[((x&15)*CS+(z&15))*H+y]=id; };
+        for(let x=X0+9;x<=X0+22;x++) for(let z=Z0+3;z<=Z0+10;z++) for(let y=0;y<=WATER_Y;y++){
+          const inner=x>X0+9 && x<X0+22 && z>Z0+3 && z<Z0+10;
+          put(x,y,z, inner && y>=WATER_Y-2 ? WATER : STONE);
+        }
+        put(X0+4,WATER_Y,Z0+4,STONE); put(X0+4,WATER_Y+1,Z0+4,TALLGRASS); put(X0+4,WATER_Y+4,Z0+13,LEAVES);
+        const rd=(m)=>{ if(!m) return new Float32Array(0); gl.bindBuffer(gl.ARRAY_BUFFER,m.vbo);
+          const a=new Float32Array(gl.getBufferParameter(gl.ARRAY_BUFFER,gl.BUFFER_SIZE)/4); gl.getBufferSubData(gl.ARRAY_BUFFER,0,a); return a; };
+        const dec=(v)=>{ const cls=Math.floor(v/128+0.001); return {cls, f:(v-cls*128)%8}; };
+        let wOk=true, wFaces=0, shoreV=0, openV=0, seam=0, pOk=true, pN=0, pSway=0, leafN=0, leafOk=true;
+        try{
+          buildChunkMesh(A);
+          const wa=rd(A.mesh.water);
+          for(let i=0;i<wa.length;i+=28){
+            const {f}=dec(wa[i+6]); wFaces++;
+            if(f!==2) wOk=false;
+            let mx=1e9;
+            for(let k=0;k<4;k++){ const j=i+k*7, d=dec(wa[j+6]), land=Math.floor(d.cls/2);
+              mx=Math.min(mx,wa[j]); if(wa[j+5]<0 || wa[j+5]>3) wOk=false;
+              if(land>0) shoreV++; else if(near(wa[j+5],2.86,1e-4)) openV++; }
+            if(f===0 && mx===X0+CS) seam++;
+          }
+          const pa=rd(A.mesh.plant);
+          for(let i=0;i<pa.length;i+=7){ const d=dec(pa[i+6]); pN++; if(d.f!==6) pOk=false; if(d.cls===1){ pSway++; if(pa[i+1]<WATER_Y+1.5) pOk=false; } else if(d.cls!==0) pOk=false; }
+          const oa=rd(A.mesh.opaque);
+          for(let i=0;i<oa.length;i+=7){ if(oa[i+1]>=WATER_Y+4 && oa[i+1]<=WATER_Y+5 && oa[i+2]>=Z0+13 && oa[i+2]<=Z0+14){ leafN++; if(dec(oa[i+6]).cls!==2) leafOk=false; } }
+        } finally {
+          if(A.mesh) destroyMesh(A.mesh);
+          world.delete(key(cxA,czA)); world.delete(key(cxA+1,czA)); _gcx=1e9;
+        }
+        ok("光影3: 水面网格 仅顶面/岸边角点带岸格数/开阔处水深 2.86", wOk && wFaces===36 && shoreV>0 && openV>0, "faces="+wFaces+" shore="+shoreV+" open="+openV);
+        ok("光影3: 跨区块水池的区块边界无多余侧面", seam===0 && wFaces===36, "seam="+seam);
+        ok("光影3: 植物仅顶端顶点带风摆(类别1)", pOk && pN===8 && pSway===4, "verts="+pN+" sway="+pSway);
+        ok("光影3: 树叶顶点全部带风摆类别 2", leafOk && leafN===24, "verts="+leafN);
+      }
     }
 
     // ---- 丰富批次: 地图(仙人掌) / 画面(夜空) / 玩法(Boss血条) / 任务(悬赏) ----
