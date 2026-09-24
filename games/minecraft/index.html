@@ -701,14 +701,11 @@ function genChunk(cx, cz){
         put(gx,h+2,gz-1,SANDSTONE,true); put(gx,h+2,gz-2,SANDSTONE,false);             // 头骨方向
       }
     }
-    // 绿洲棕榈: 只沿沙漠里的河岸(尼罗河两侧)零星生长, 给绿洲补一抹绿
-    if(bio===BIO_DESERT && h>WATER_Y && h<=WATER_Y+3 && Math.abs(riverField(gx,gz))<0.06
-       && b[col+h]!==AIR && hash2(gx*23+1, gz*23-3)<0.05){
-      const th=4+((hash2(gx,gz)*3)|0);
-      for(let k=1;k<=th;k++) put(gx,h+k,gz,LOG,true);           // 棕榈干(复用橡木原木)
-      const cy=h+th;
-      put(gx,cy+1,gz,LEAVES,false);
-      for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){ put(gx+dx,cy,gz+dz,LEAVES,false); put(gx+dx*2,cy-1,gz+dz*2,LEAVES,false); }  // 下垂的棕榈冠
+    // 河岸芦苇: 沙漠河道(尼罗河)两岸的浅滩长一丛丛高草, 偶尔两格高(棕榈见下方跨区块循环)
+    if(bio===BIO_DESERT && h>WATER_Y && h<=WATER_Y+2 && b[col+h]!==AIR && hash2(gx*29-7, gz*31+5)<0.10
+       && Math.abs(riverField(gx,gz))<0.05){
+      put(gx,h+1,gz,TALLGRASS,false);
+      if(hash2(gx+3,gz*7)<0.4) put(gx,h+2,gz,TALLGRASS,false);
     }
     // ---- 新群系专属地表资源 ----
     if(b[col+h]!==AIR && h>0){
@@ -778,6 +775,14 @@ function genChunk(cx, cz){
         }
       }
     }
+  }
+  // ---- 绿洲棕榈: 只沿沙漠里的河岸零星生长; 放在跨区块循环里, 树冠不会在区块边界被切掉 ----
+  for(let tx=bx-5; tx<bx+CS+5; tx++) for(let tz=bz-5; tz<bz+CS+5; tz++){
+    if(hash2(tx*23+1, tz*23-3)>=0.05) continue;
+    const h=heightAt(tx,tz);
+    if(h<=WATER_Y || h>WATER_Y+3 || biomeAt(tx,tz)!==BIO_DESERT || Math.abs(riverField(tx,tz))>=0.06) continue;
+    const th=4+((hash2(tx,tz)*3)|0), lr=hash2(tx*5-1,tz*3+2);
+    drawPalm(put,tx,h,tz,th, lr<0.25?1:(lr<0.5?-1:0), lr>=0.5&&lr<0.75?1:(lr>=0.75?-1:0));   // 随机朝一侧歪
   }
   buildSkyIslands(bx,bz,put);
   buildStructures(bx,bz,put);
@@ -875,10 +880,12 @@ function structureAt(sx,sz){                 // 返回 {type,x,z,h} 或 null
   // 用户要求: 高楼(city)大幅减少、以平地为主, 沙漠专心做古埃及主题(不放现代城市)
   if(bio===BIO_DESERT||bio===BIO_MESA){
     // 沙漠 = 埃及本土 + 罗马远征军的前线: 金字塔与军团要塞/渡槽同框
-    const T=[["pyramid",0.20],["castrum",0.26],["aqueduct",0.31],["oasis",0.37],["bazaar",0.42],
+    // 绿洲升级为绿洲村落(village): 占用原绿洲的份额, 其余地标的格子不变; 选址不合适时退回普通绿洲
+    const T=[["pyramid",0.20],["castrum",0.26],["aqueduct",0.31],["village",0.37],["bazaar",0.42],
              ["crater",0.47],["airport",0.52],["rainbow",0.57],["wreck",0.60],["caravan",0.62],["ruin",0.66]];
     type="hut";
     for(const [t,thr] of T) if(r<thr){ type=t; break; }
+    if(type==="village" && !villageSiteOK(x,z,h)) type="oasis";   // 河道穿村/地势太陡 → 退回普通绿洲
   }
   else if(bio===BIO_SNOW) type = r<0.14 ? "tower" : (r<0.24 ? "factory" : (r<0.32 ? "rainbow" : (r<0.38 ? "crater" : "cabin")));
   else if(bio===BIO_FOREST) type = r<0.28 ? "grotto" : (r<0.46 ? "ruin" : (r<0.58 ? "crater" : "hut"));
@@ -900,7 +907,7 @@ function buildStructures(bx,bz,put){
     const s=structureAt(sx,sz);
     if(!s) continue;
     const RADII={city:34,pyramid:30,airport:32,racetrack:30,park:22,rainbow:22,crater:18,bazaar:17,factory:16,oasis:15,
-                 colosseum:20,forum:16,castrum:19,aqueduct:38,palace:20,wreck:16,caravan:12,grotto:14};
+                 colosseum:20,forum:16,castrum:19,aqueduct:38,palace:20,wreck:16,caravan:12,grotto:14,village:VIL_N+1};
     const rad = RADII[s.type]||12;
     if(s.x+rad<bx || s.x-rad>=bx+CS || s.z+rad<bz || s.z-rad>=bz+CS) continue;
     drawStructure(s,put);
@@ -954,9 +961,21 @@ function drawStructure(s,put){
     /* ===== 埃及金字塔建筑群: 大金字塔 + 墓室 + 方尖碑 + 狮身人面像 ===== */
     const R=13;
     clearAbove(x-R-2,z-R-2,x+R+2,z+R+2,h+1,h+R+3);
-    // 外壳: 逐层收缩, 每 4 层夹一条陶土装饰带
-    for(let k=0;k<=R;k++)
-      box(x-R+k, h+k, z-R+k, x+R-k, h+k, z+R-k, (k%4===3)?CLAY:SANDSTONE, false);
+    // 外壳: 逐层收缩; 顶部 5 层是白色石灰岩包壳(复用方解石), 底部 4 层风化、半埋进沙里
+    for(let k=0;k<=R;k++){
+      for(let X=x-R+k;X<=x+R-k;X++) for(let Z=z-R+k;Z<=z+R-k;Z++){
+        const r=hash2(X*7+k*13, Z*11-k*5);
+        let id = k>=R-4 ? (r<0.12?SANDSTONE:CAVECALC) : SANDSTONE;
+        if(k<=3 && r<0.25) id=SAND;
+        else if(k>R-4-3 && k<R-4 && r<0.30) id=CAVECALC;           // 包壳剥落的过渡带
+        put(X,h+k,Z,id,true);
+      }
+    }
+    // 迎风面(南/西)的积沙
+    for(let j=1;j<=2;j++) for(let off=R-j+1; off<=R+1-(j-1)*2; off++) for(let t=-R+j;t<=R-j;t++){
+      if(hash2(t*5+off, z*3-j*7)<0.6) put(x+t, h+j, z+off, SAND, false);
+      if(hash2(x*3+off*7, t*5-j)<0.6) put(x-off, h+j, z+t, SAND, false);
+    }
     // 顶端金冠
     put(x,h+R,z,GOLD_ORE,true);
 
@@ -1036,13 +1055,19 @@ function drawStructure(s,put){
       const ang=Math.atan2(dz,dx);
       const segPos=((ang+Math.PI*4)%angStep);
       const isArch = segPos < angStep*0.45;                       // 每层都留一圈拱门/窗洞
+      const a01=(ang+Math.PI*2)%(Math.PI*2);                        // 0..2π, 用来切出一道坍塌的豁口
       for(let tier=0; tier<3; tier++){
         const y0=h+1+tier*4, y1=y0+3;
         const r0=R-4-tier, r1=R-1-tier;                           // 逐层向内收进, 形成阶梯轮廓
         if(d<r0 || d>r1) continue;
+        if(tier===2 && a01>Math.PI*0.35 && a01<Math.PI*0.80) continue;   // 顶层残缺(斗兽场标志性的断檐剪影)
+        if(tier===1 && a01>Math.PI*0.45 && a01<Math.PI*0.70) continue;
         for(let y=y0;y<=y1;y++){
           if(isArch && (y-y0)<2) continue;
-          put(X,y,Z, tier===2?ROOFTILE:MARBLE, true);
+          // 石灰华(复用方解石)做主体, 顶层留大理石白檐; 底层墙根长苔
+          let id = tier===2 ? MARBLE : CAVECALC;
+          if(tier===0 && (y-y0)<2 && hash2(X*5+y,Z*7-y)<0.15) id=MOSSY;
+          put(X,y,Z, id, true);
         }
       }
     }
@@ -1053,7 +1078,8 @@ function drawStructure(s,put){
     /* ===== 罗马广场: 大理石列柱回廊 + 凯旋门 + 雕像基座 ===== */
     const W=9, D=12;
     clearAbove(x-W-2,z-D-2,x+W+2,z+D+2,h+1,h+10);
-    box(x-W,h,z-D,x+W,h,z+D,MARBLE,false);                        // 大理石广场地面
+    for(let X=x-W;X<=x+W;X++) for(let Z=z-D;Z<=z+D;Z++)            // 大理石与圆石铺成 3×3 棋盘格广场
+      put(X,h,Z, ((Math.floor((X-x+W)/3)+Math.floor((Z-z+D)/3))&1)?COBBLE:MARBLE, true);
     for(let X=x-W;X<=x+W;X+=4){                                   // 南北两排列柱
       for(let y=h+1;y<=h+5;y++){ put(X,y,z-D,MARBLE,true); put(X,y,z+D,MARBLE,true); }
       put(X,h+6,z-D,GOLD_ORE,true); put(X,h+6,z+D,GOLD_ORE,true);
@@ -1085,7 +1111,7 @@ function drawStructure(s,put){
     // 营墙(空心方框) + 顶部垛口
     for(let X=x-R;X<=x+R;X++) for(let Z=z-R;Z<=z+R;Z++){
       if(X>x-R&&X<x+R&&Z>z-R&&Z<z+R) continue;
-      for(let y=h+1;y<=h+5;y++) put(X,y,Z,MARBLE,true);
+      for(let y=h+1;y<=h+5;y++) put(X,y,Z,(y-h)%4===0?BRICK:MARBLE,true);   // 罗马混砌: 大理石夹一道红砖带
       if(((X+Z)&1)===0) put(X,h+6,Z,MARBLE,true);                // 垛口
     }
     // 南墙正门(双开)
@@ -1126,7 +1152,7 @@ function drawStructure(s,put){
         if(edge) put(X,TOP+1,Z,MARBLE,true);
         else if(X===x) put(X,TOP+1,Z,WATER,true);                // 中间真的在输水
         if(!inPier) continue;
-        for(let y=h+1;y<TOP;y++) if(edge||X===x) put(X,y,Z,MARBLE,true);
+        for(let y=h+1;y<TOP;y++) if(edge||X===x) put(X,y,Z,(y<=h+2&&hash2(X*3+y,Z*5)<0.3)?MOSSY:CAVECALC,true);   // 石灰华桥墩, 墙根带苔
       }
       // 拱洞上缘收成弧形, 让连拱有"罗马拱"的轮廓
       if(!inPier){
@@ -1411,6 +1437,7 @@ function drawStructure(s,put){
     box(x-8,h+1,z-3,x+8,h+4,z-3,METAL,false);
     put(x,h+5,z-3,NEON,true);
   }
+  else if(type==="village"){ drawVillage(s,put); }
   else if(type==="oasis"){
     /* ===== 绿洲: 沙漠中的一汪清水 + 仙人掌 + 岩石(沙漠里的地标与补给点) ===== */
     const R=12;
@@ -1601,6 +1628,423 @@ function drawStructure(s,put){
     // 草垛与灯
     box(x-1,h+1,z-1,x,h+2,z,HAY,false);
     put(x+R,h+2,z+R,LANTERN,true);
+  }
+}
+
+/* ---------- 绿洲村落(village): 水塘 + 棕榈 + 草地 + 4~7 栋泥砖屋/木筋屋 + 石板路 + 路灯 + 集市摊/水井 + 苔石矮墙与拱门 ----------
+   所有布局决策都在 villagePlan() 里只由中心坐标的 hash 算出(并缓存), drawVillage() 只负责照图施工;
+   每个相交区块都完整重画一遍, put() 裁掉区块外部分 → 跨区块拼接无缝、同种子完全确定。 */
+const VIL_RP=26, VIL_FADE=6, VIL_RING=9.5, VIL_WALL=24;   // 平台半径 / 过渡带 / 环路半径 / 苔石墙半径
+const VIL_N=VIL_RP+VIL_FADE;
+const _vilPlanCache=new Map();
+// 村落选址: 河道穿过会把水塘/房子切碎, 地势起伏过大会垫成高台/挖成深坑, 这两种格子退回普通绿洲
+function villageSiteOK(x,z,h){
+  if(riverInfluence(x,z)>0) return false;
+  let mn=h, mx=h;
+  for(let k=0;k<8;k++){
+    const a=k*Math.PI/4, X=Math.round(x+Math.cos(a)*28), Z=Math.round(z+Math.sin(a)*28);
+    if(riverInfluence(X,Z)>0) return false;
+    const hh=heightAt(Math.round(x+Math.cos(a)*20),Math.round(z+Math.sin(a)*20)); mn=Math.min(mn,hh); mx=Math.max(mx,hh);
+  }
+  return mx-mn<=10;
+}
+// 新世界出生在最近的绿洲村落城门外, 面朝村里(老存档自带 spawn, 不受影响); 找不到就走原来的出生点搜索
+function findVillageSpawn(){
+  let best=null, bd=1e9;
+  for(let sx=-8; sx<=8; sx++) for(let sz=-8; sz<=8; sz++){             // 约 ±770 格内找最近的村落
+    const s=structureAt(sx,sz); if(!s || s.type!=="village") continue;
+    const d=Math.hypot(s.x,s.z); if(d<bd){ bd=d; best=s; }
+  }
+  if(!best) return false;
+  const G=villagePlan(best).gates[0], ca=Math.cos(G.a), sa=Math.sin(G.a);
+  for(const r of [VIL_WALL+6, VIL_WALL+4, VIL_WALL+2]){
+    const gx=Math.round(best.x+ca*r), gz=Math.round(best.z+sa*r);
+    for(let dx=-1;dx<=1;dx++) for(let dz=-1;dz<=1;dz++) ensureData((gx>>4)+dx,(gz>>4)+dz);
+    const y=safeStandY(gx,gz);
+    if(y<=0 || !spawnRoomy(gx,y,gz)) continue;
+    player.x=gx+0.5; player.z=gz+0.5; player.y=y;
+    player.yaw=Math.atan2(best.x-gx, -(best.z-gz)); player.pitch=0.06;
+    return true;
+  }
+  return false;
+}
+// 棕榈: 原木树干在 60% 高处向 (lx,lz) 歪一格(带拐角块), 顶部 8 向下垂棕榈叶
+function drawPalm(put,px,base,pz,th,lx,lz){
+  let tx=px, tz=pz;
+  const bend=Math.ceil(th*0.6);
+  for(let k=1;k<=th;k++){
+    if(k===bend && (lx||lz)){ put(tx+lx,base+k-1,tz+lz,LOG,true); tx+=lx; tz+=lz; }
+    put(tx,base+k,tz,LOG,true);
+  }
+  const ty=base+th;
+  put(tx,ty+1,tz,LEAVES,true);
+  for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
+    put(tx+dx,ty+1,tz+dz,LEAVES,false); put(tx+dx*2,ty+1,tz+dz*2,LEAVES,false);
+    put(tx+dx*3,ty,tz+dz*3,LEAVES,false); put(tx+dx*4,ty-1,tz+dz*4,LEAVES,false);
+  }
+  for(const [dx,dz] of [[1,1],[-1,1],[1,-1],[-1,-1]]){
+    put(tx+dx,ty+1,tz+dz,LEAVES,false); put(tx+dx*2,ty,tz+dz*2,LEAVES,false);
+  }
+}
+// 石板路: 圆石为主, 夹杂石头/苔石/砂砾/砂岩碎块, 像被踩了很多年的老街
+function vilPathBlock(X,Z){
+  const r=hash2(X*7+3,Z*5-1);
+  return r<0.44?COBBLE:(r<0.62?STONE:(r<0.78?MOSSY:(r<0.9?GRAVEL:SANDSTONE)));
+}
+function villagePlan(s){
+  const ck=ckey(s.x,s.z), cached=_vilPlanCache.get(ck);
+  if(cached) return cached;
+  const {x,z}=s, TAU=Math.PI*2;
+  const rnd=(a,b)=>hash2(x*31+a*7, z*37-b*11);
+  const ph1=rnd(1,2)*TAU, ph2=rnd(3,4)*TAU;
+  const pondR=a=>5+0.9*Math.sin(2*a+ph1)+0.6*Math.sin(3*a+ph2);   // 不规则水塘轮廓(约 3.5~6.5)
+  const N=VIL_N, S=2*N+1, g=new Uint8Array(S*S);                   // 0沙 1草 2路 3水 4建筑/小景
+  const idx=(X,Z)=>{ const i=X-x+N, j=Z-z+N; return (i<0||j<0||i>=S||j>=S)?-1:i*S+j; };
+  const get=(X,Z)=>{ const i=idx(X,Z); return i<0?0:g[i]; };
+  const set=(X,Z,v)=>{ const i=idx(X,Z); if(i>=0) g[i]=v; };
+  const occ=new Set(), okey=(X,Z)=>X+","+Z;                        // 道具占位(路灯/棕榈/栈桥)
+  // 1) 地表: 水塘 / 岸边草甸 / 散布草斑 / 环形石板路
+  for(let X=x-N;X<=x+N;X++) for(let Z=z-N;Z<=z+N;Z++){
+    const dx=X-x, dz=Z-z, d=Math.hypot(dx,dz); if(d>N) continue;
+    const pr=pondR(Math.atan2(dz,dx));
+    let v=0;
+    if(d<pr) v=3;
+    else if(Math.abs(d-VIL_RING)<=1.0) v=2;
+    else if(d<pr+3+fbm2(X*0.21+7.7,Z*0.21-3.3,2)*3.5) v=1;
+    else if(d<=VIL_RP-1 && fbm2(X*0.11+17.3,Z*0.11-4.1,2)>0.50+0.12*(d/VIL_RP)) v=1;
+    g[idx(X,Z)]=v;
+  }
+  // 粗线段光栅化(路)
+  const seg=(x0,z0,x1,z1,w,v,keep)=>{
+    const lx=x1-x0, lz=z1-z0, L2=lx*lx+lz*lz||1;
+    for(let X=Math.floor(Math.min(x0,x1)-w-1);X<=Math.ceil(Math.max(x0,x1)+w+1);X++)
+      for(let Z=Math.floor(Math.min(z0,z1)-w-1);Z<=Math.ceil(Math.max(z0,z1)+w+1);Z++){
+        const t=clamp(((X-x0)*lx+(Z-z0)*lz)/L2,0,1);
+        if(Math.hypot(X-(x0+lx*t),Z-(z0+lz*t))<=w){ const c=get(X,Z); if(keep && keep.indexOf(c)>=0) continue; set(X,Z,v); }
+      }
+  };
+  // 2) 房屋: 沿环路外侧均匀分布, 正门朝向水塘(朝向吸附到四个正方向)
+  const n=4+Math.floor(rnd(5,6)*4);                  // 4~7 栋
+  const a0=rnd(7,8)*TAU, step=TAU/n, dist=Math.round(15+n*0.4);
+  const flip=rnd(9,9)<0.5?0:1;
+  const houses=[];
+  for(let i=0;i<n;i++){
+    const a=a0+i*step+(rnd(10+i,3)-0.5)*0.25;
+    const cx=Math.round(x+Math.cos(a)*dist), cz=Math.round(z+Math.sin(a)*dist);
+    const dx=x-cx, dz=z-cz;
+    let fx=0, fz=0;
+    if(Math.abs(dx)>=Math.abs(dz)) fx=dx>=0?1:-1; else fz=dz>=0?1:-1;
+    const kind=((i+flip)%2===0)?"adobe":"timber";
+    const D=kind==="adobe"?6:7, hw=3, half=(D-1)>>1;
+    houses.push({a,kind,fx,fz,D,hw,ox:cx+fx*half,oz:cz+fz*half,cx,cz,
+                 v1:rnd(20+i,5), v2:rnd(40+i,7), tall:rnd(30+i,6)<0.55});
+  }
+  const toW=(H,u,v)=>[H.ox-H.fz*u-v*H.fx, H.oz+H.fx*u-v*H.fz];   // 局部(u 横, v 进深; v=0 为朝水塘的正面) → 世界
+  // 3) 入户小路: 门前平台 → 径直连到环路
+  for(const H of houses){
+    const [p1x,p1z]=toW(H,0,-1), [p2x,p2z]=toW(H,0,-2);
+    const ddx=p2x-x, ddz=p2z-z, dl=Math.hypot(ddx,ddz)||1;
+    seg(p1x,p1z,p2x,p2z,1.0,2,[3]);
+    seg(p2x,p2z,x+ddx/dl*VIL_RING,z+ddz/dl*VIL_RING,0.9,2,[3]);
+  }
+  // 4) 房屋之间的空隙角: 两个城门(大致相对) / 集市摊 / 水井 / 其余做菜园小景
+  const gaps=[]; for(let i=0;i<n;i++) gaps.push(a0+(i+0.5)*step);
+  const gi2=n>>1, gateIdx=[0,gi2], marketIdx=1, wellIdx=(gi2+1)%n;
+  const gates=[];
+  for(const gi of gateIdx){
+    const a=gaps[gi], ca=Math.cos(a), sa=Math.sin(a);
+    seg(x+ca*VIL_RING,z+sa*VIL_RING,x+ca*(N-1),z+sa*(N-1),1.3,2,[3]);
+    const along=Math.abs(ca)>=Math.abs(sa);
+    gates.push({a,px:Math.round(x+ca*VIL_WALL),pz:Math.round(z+sa*VIL_WALL),
+                qx:along?0:1, qz:along?1:0});                        // q = 拱门横跨方向
+  }
+  const reserve=(X0,Z0,X1,Z1)=>{ for(let X=X0;X<=X1;X++) for(let Z=Z0;Z<=Z1;Z++) set(X,Z,4); };
+  for(const H of houses)
+    for(let u=-H.hw;u<=H.hw;u++) for(let v=0;v<H.D;v++){ const [X,Z]=toW(H,u,v); set(X,Z,4); }
+  const facing=(px,pz)=>{ const dx=x-px, dz=z-pz; return Math.abs(dx)>=Math.abs(dz)?[dx>=0?1:-1,0]:[0,dz>=0?1:-1]; };
+  const RF=n>=6?12:12.5;
+  let market, well; const gardens=[];
+  {
+    const a=gaps[marketIdx], mx=Math.round(x+Math.cos(a)*RF), mz=Math.round(z+Math.sin(a)*RF);
+    const [fx,fz]=facing(mx,mz);
+    market={ox:mx+fx,oz:mz+fz,fx,fz,D:3,hw:4};
+    for(let u=-4;u<=4;u++) for(let v=-1;v<=2;v++){ const [X,Z]=toW(market,u,v); set(X,Z,4); }
+  }
+  {
+    const a=gaps[wellIdx], wx=Math.round(x+Math.cos(a)*RF), wz=Math.round(z+Math.sin(a)*RF);
+    seg(wx,wz,x+Math.cos(a)*VIL_RING,z+Math.sin(a)*VIL_RING,0.8,2,[3,4]);   // 井边小路
+    well={x:wx,z:wz}; reserve(wx-2,wz-2,wx+2,wz+2);
+  }
+  for(let i=0;i<n;i++){
+    if(i===marketIdx||i===wellIdx||gateIdx.indexOf(i)>=0) continue;
+    const a=gaps[i];
+    gardens.push({x:Math.round(x+Math.cos(a)*(RF+1)),z:Math.round(z+Math.sin(a)*(RF+1)),kind:(i+flip)%2});
+  }
+  for(const G of gardens) reserve(G.x-2,G.z-2,G.x+2,G.z+2);
+  // 5) 栈桥: 从集市一侧的岸边伸进水塘
+  const dock=[];
+  {
+    const da=gaps[marketIdx], ca=Math.cos(da), sa=Math.sin(da), pr=pondR(da);
+    for(let r=pr+0.6;r>=Math.max(1.5,pr-3.2);r-=0.5){
+      for(const o of [-0.5,0.5]){
+        const X=Math.round(x+ca*r-sa*o), Z=Math.round(z+sa*r+ca*o);
+        if(!occ.has(okey(X,Z))){ dock.push([X,Z]); occ.add(okey(X,Z)); }
+      }
+    }
+  }
+  const dockEnd=dock.length?dock[dock.length-1]:null;
+  // 6) 道具位: 路灯 / 棕榈(先占位再放, 互不重叠)
+  const free=(X,Z,r,ok)=>{
+    for(let a=-r;a<=r;a++) for(let b=-r;b<=r;b++){ if(occ.has(okey(X+a,Z+b)) || ok.indexOf(get(X+a,Z+b))<0) return false; }
+    return true;
+  };
+  const lamps=[];
+  const addLamp=(X,Z)=>{ if(free(X,Z,0,[0,1])){ lamps.push([X,Z]); occ.add(okey(X,Z)); return true; } return false; };
+  for(const ga of gaps){                                               // 环路外沿, 每个空隙角一盏
+    for(const off of [0.22,-0.22,0.4,-0.4]){
+      if(addLamp(Math.round(x+Math.cos(ga+off)*(VIL_RING+1.8)),Math.round(z+Math.sin(ga+off)*(VIL_RING+1.8)))) break;
+    }
+  }
+  for(const H of houses){                                              // 每户门边一盏
+    const [X,Z]=toW(H,H.hw+1,-1);
+    if(!addLamp(X,Z)){ const [X2,Z2]=toW(H,-H.hw-1,-1); addLamp(X2,Z2); }
+  }
+  const palms=[];
+  const addPalm=(X,Z,th,ok,inward)=>{
+    if(Math.hypot(X-x,Z-z)>VIL_RP) return false;
+    const c=get(X,Z); if(c!==0 && c!==1) return false;
+    if(!free(X,Z,1,ok)) return false;
+    let dx=X-x, dz=Z-z; if(inward){ dx=-dx; dz=-dz; }                  // 水边的棕榈探向水面, 其余朝外歪
+    const lx=Math.abs(dx)>=Math.abs(dz)?(dx>=0?1:-1):0, lz=lx?0:(dz>=0?1:-1);
+    palms.push({x:X,z:Z,th,lx,lz});
+    for(let a=-1;a<=1;a++) for(let b=-1;b<=1;b++) occ.add(okey(X+a,Z+b));
+    return true;
+  };
+  const mp=2+Math.floor(rnd(50,1)*3), pa0=rnd(51,2)*TAU;
+  for(let j=0;j<mp;j++){                                               // 水塘一圈棕榈
+    const a=pa0+j*TAU/mp+(rnd(60+j,3)-0.5)*0.4, r=pondR(a)+1.6;
+    addPalm(Math.round(x+Math.cos(a)*r),Math.round(z+Math.sin(a)*r),5+Math.floor(rnd(70+j,4)*3),[0,1,3],true);
+  }
+  for(const G of gates){                                               // 城门外两侧迎客棕榈
+    const ca=Math.cos(G.a), sa=Math.sin(G.a);
+    for(const o of [-6,6]) addPalm(Math.round(x+ca*(VIL_WALL+0.9)-sa*o),Math.round(z+sa*(VIL_WALL+0.9)+ca*o),6,[0,1,2]);
+  }
+  for(let j=0;j<6;j++){                                                // 房前屋后零星几棵
+    const a=rnd(80+j,5)*TAU, r=VIL_RING+3+rnd(90+j,6)*(VIL_WALL-VIL_RING-5);
+    addPalm(Math.round(x+Math.cos(a)*r),Math.round(z+Math.sin(a)*r),4+Math.floor(rnd(95+j,7)*3),[0,1]);
+  }
+  const plan={x,z,pondR,N,S,g,get,houses,toW,gates,market,well,gardens,dock,dockEnd,lamps,palms};
+  if(_vilPlanCache.size>32) _vilPlanCache.clear();
+  _vilPlanCache.set(ck,plan);
+  return plan;
+}
+function drawVillage(s,put){
+  const {x,z,h}=s;
+  const P=villagePlan(s), N=P.N, get=P.get;
+  // ---- 1) 平整场地: 平台内压平到 h, 过渡带平滑接回原地形; 顺手清掉仙人掌/巨石 ----
+  for(let X=x-N;X<=x+N;X++) for(let Z=z-N;Z<=z+N;Z++){
+    const dx=X-x, dz=Z-z, d=Math.hypot(dx,dz); if(d>N) continue;
+    const th=heightAt(X,Z);
+    let t=h;
+    if(d>VIL_RP) t=Math.round(h+(th-h)*smoothstep(0,1,(d-VIL_RP)/VIL_FADE));
+    const top=Math.max(th,t)+(d<=VIL_RP?14:8);
+    for(let y=t+1;y<=top;y++) put(X,y,Z,AIR,true);
+    for(let y=Math.min(th,t-1)+1;y<t;y++) put(X,y,Z,(y<t-3?SANDSTONE:SAND),true);
+    const c=get(X,Z);
+    let id;
+    if(c===2 && (d<=VIL_WALL+1 || hash2(X*3+1,Z*3-2) > (d-VIL_WALL)/(N-VIL_WALL)*0.9)) id=vilPathBlock(X,Z);   // 城门外的路渐渐被沙埋
+    else if(d>VIL_RP) id=(th>=t? surfaceTop(biomeAt(X,Z),t,false) : SAND);
+    else if(c===1) id=GRASS;
+    else id=SAND;
+    put(X,t,Z,id,true);
+    if(id===GRASS) put(X,t-1,Z,DIRT,true);
+    if(c===3){                                                           // 水塘: 中心深 3 格, 岸边 1 格
+      const pr=P.pondR(Math.atan2(dz,dx));
+      const depth=1+Math.round(clamp(1-d/pr,0,1)*2.4);
+      for(let k=0;k<depth;k++) put(X,h-k,Z,WATER,true);
+      const rb=hash2(X*5+2,Z*3-7);
+      put(X,h-depth,Z, rb<0.55?SAND:(rb<0.8?CLAY:GRAVEL), true);
+      put(X,h-depth-1,Z,SAND,true);
+    }
+  }
+  // ---- 2) 苔石矮墙: 半残的一圈, 城门处留口 ----
+  for(let X=x-VIL_WALL-1;X<=x+VIL_WALL+1;X++) for(let Z=z-VIL_WALL-1;Z<=z+VIL_WALL+1;Z++){
+    const dx=X-x, dz=Z-z, d=Math.hypot(dx,dz);
+    if(Math.round(d)!==VIL_WALL) continue;
+    let nearGate=false;
+    for(const G of P.gates){ const ca=Math.cos(G.a), sa=Math.sin(G.a); if(dx*ca+dz*sa>0 && Math.abs(-dx*sa+dz*ca)<2.2) nearGate=true; }
+    if(nearGate) continue;
+    const r=hash2(X*11-5,Z*7+9);
+    if(r<0.10) continue;                                               // 坍塌缺口
+    const hh = r<0.28?1:(r>0.95?3:2);
+    for(let k=1;k<=hh;k++) put(X,h+k,Z, hash2(X+k*13,Z-k*7)<0.58?MOSSY:COBBLE, true);
+    if(hh===3) put(X,h+4,Z,LANTERN,true);                              // 残柱顶上点一盏灯
+    else if(hh===2 && hash2(X*3,Z*5)<0.25) put(X,h+3,Z,(hash2(X,Z*9)<0.5?TALLGRASS:DAISY),false);  // 墙头野草
+  }
+  // ---- 3) 栈桥 ----
+  for(const [X,Z] of P.dock) put(X,h,Z,PLANKS,true);
+  if(P.dockEnd){ const [X,Z]=P.dockEnd; for(let y=h-3;y<h;y++) put(X,y,Z,LOG,true); put(X,h+1,Z,LOG,true); put(X,h+2,Z,LANTERN,true); }
+  // ---- 4) 集市摊: 石板小广场 + 两个条纹篷顶小摊 ----
+  {
+    const M=P.market;
+    const MP=(u,v,y,id,f)=>{ const [X,Z]=P.toW(M,u,v); put(X,y,Z,id,f!==false); };
+    for(let u=-4;u<=4;u++) for(let v=-1;v<=2;v++){ const [X,Z]=P.toW(M,u,v); put(X,h,Z,vilPathBlock(X,Z),true); }
+    const stripes=[[WOOL,BRICK],[WOOL,HAY]];
+    for(let si=0;si<2;si++){
+      const c=si?2:-2, [cA,cB]=stripes[si];
+      for(const [pu,pv] of [[-1,0],[1,0],[-1,2],[1,2]]) for(let y=h+1;y<=h+3;y++) MP(c+pu,pv,y,LOG);
+      for(let u=-1;u<=1;u++){
+        const col=((u+si)&1)?cA:cB;
+        for(let v=0;v<=2;v++) MP(c+u,v,h+4,col);
+        MP(c+u,-1,h+3,col);                                            // 前檐垂边
+      }
+      MP(c-1,1,h+1,PLANKS); MP(c+1,1,h+1,PLANKS); MP(c,1,h+1,DARKPLANK);   // 柜台
+      MP(c-1,1,h+2,si?HAY:PUMPKIN); MP(c+1,1,h+2,si?PUMPKIN:GOLD_ORE);
+      MP(c,2,h+1,HAY); MP(c,1,h+3,LANTERN);
+    }
+  }
+  // ---- 5) 水井: 苔石井圈 + 两根木柱 + 陶瓦小顶 + 吊灯 ----
+  {
+    const {x:wx,z:wz}=P.well;
+    for(let a=-2;a<=2;a++) for(let b=-2;b<=2;b++) put(wx+a,h,wz+b,vilPathBlock(wx+a,wz+b),true);
+    for(let a=-1;a<=1;a++) for(let b=-1;b<=1;b++){
+      if(a===0&&b===0){ for(let y=h-3;y<=h;y++) put(wx,y,wz,WATER,true); put(wx,h-4,wz,COBBLE,true); continue; }
+      put(wx+a,h,wz+b,COBBLE,true);
+      put(wx+a,h+1,wz+b,hash2(wx+a*3,wz+b*5)<0.5?MOSSY:COBBLE,true);
+    }
+    for(const a of [-1,1]) for(let y=h+2;y<=h+3;y++) put(wx+a,y,wz,LOG,true);
+    for(let a=-1;a<=1;a++) for(let b=-1;b<=1;b++) put(wx+a,h+4,wz+b,ROOFTILE,true);
+    for(let a=-1;a<=1;a++) put(wx+a,h+5,wz,ROOFTILE,true);
+    put(wx,h+3,wz,LANTERN,true);
+  }
+  // ---- 6) 菜园小景: 瓜田 + 干草垛 / 挂果的果树 ----
+  for(const G of P.gardens){
+    if(G.kind===0){
+      for(let a=-2;a<=2;a++) for(let b=-1;b<=1;b++){
+        put(G.x+a,h,G.z+b,DIRT,true);
+        put(G.x+a,h+1,G.z+b,(b===0&&(a&1))?PUMPKIN:TALLGRASS,true);
+      }
+      put(G.x+2,h+1,G.z+2,HAY,true); put(G.x+2,h+2,G.z+2,HAY,true); put(G.x+1,h+1,G.z+2,HAY,true);
+    } else {
+      for(let a=-2;a<=2;a++) for(let b=-2;b<=2;b++){ put(G.x+a,h,G.z+b,GRASS,true); put(G.x+a,h-1,G.z+b,DIRT,true); }
+      for(let y=h+1;y<=h+3;y++) put(G.x,y,G.z,LOG,true);
+      for(let a=-2;a<=2;a++) for(let b=-2;b<=2;b++) for(let y=h+3;y<=h+5;y++){
+        const dd=a*a+b*b+(y-h-4)*(y-h-4)*1.6;
+        if(dd>5.2 || (a===0&&b===0&&y<=h+3)) continue;
+        put(G.x+a,y,G.z+b,LEAVES,false);
+        if(y===h+3 && dd>2 && hash2(G.x+a*7,G.z+b*3)<0.3) put(G.x+a,y,G.z+b,PUMPKIN,true);   // 挂果
+      }
+      put(G.x+1,h+1,G.z-1,ROSE,true); put(G.x-1,h+1,G.z+1,DAISY,true);
+    }
+  }
+  // ---- 7) 房屋 ----
+  for(const H of P.houses) drawVillageHouse(P,H,h,put);
+  // ---- 8) 城门拱: 苔石双柱 + 拱肩 + 门楣 + 灯 ----
+  for(const G of P.gates){
+    const A=(o,y,id)=>put(G.px+G.qx*o,y,G.pz+G.qz*o,id,true);
+    for(let o=-1;o<=1;o++) for(let y=h+1;y<=h+3;y++) A(o,y,AIR);
+    for(const o of [-2,2]){ for(let y=h+1;y<=h+4;y++) A(o,y,hash2(G.px+o*3,G.pz+y)<0.6?MOSSY:COBBLE); A(o,h+6,LANTERN); }
+    A(-1,h+4,MOSSY); A(1,h+4,MOSSY);
+    for(let o=-2;o<=2;o++) A(o,h+5,o===0?SANDSTONE:COBBLE);
+    A(0,h+4,LANTERN);
+  }
+  // ---- 9) 棕榈 ----
+  for(const T of P.palms) drawPalm(put,T.x,h,T.z,T.th,T.lx,T.lz);
+  // ---- 10) 路灯: 圆石底座 + 木杆 + 灯笼 + 深色灯帽 ----
+  for(const [X,Z] of P.lamps){
+    put(X,h+1,Z,COBBLE,true);
+    put(X,h+2,Z,LOG,true); put(X,h+3,Z,LOG,true);
+    put(X,h+4,Z,LANTERN,true); put(X,h+5,Z,DARKPLANK,true);
+  }
+  // ---- 11) 花草: 草甸上的高草/花/灌木, 水边芦苇, 睡莲 ----
+  for(let X=x-VIL_RP;X<=x+VIL_RP;X++) for(let Z=z-VIL_RP;Z<=z+VIL_RP;Z++){
+    const dx=X-x, dz=Z-z, d=Math.hypot(dx,dz); if(d>VIL_WALL-1) continue;
+    const c=get(X,Z), r=hash2(X*13+5,Z*11-3);
+    if(c===3){
+      if(d<P.pondR(Math.atan2(dz,dx))-1 && r<0.10) put(X,h+1,Z,LILY,false);
+      continue;
+    }
+    if(c!==1 && c!==0) continue;
+    const shore = get(X+1,Z)===3||get(X-1,Z)===3||get(X,Z+1)===3||get(X,Z-1)===3;
+    if(c===1){
+      if(shore && r<0.55){ put(X,h+1,Z,TALLGRASS,false); if(r<0.22) put(X,h+2,Z,TALLGRASS,false); }   // 芦苇(两格高)
+      else if(r<0.20) put(X,h+1,Z,TALLGRASS,false);
+      else if(r<0.245) put(X,h+1,Z,ROSE,false);
+      else if(r<0.29) put(X,h+1,Z,DAISY,false);
+      else if(r<0.305 && !shore) put(X,h+1,Z,LEAVES,false);            // 小灌木
+    } else if(r<0.035) put(X,h+1,Z,TALLGRASS,false);
+  }
+}
+// 村屋: adobe 泥砖平顶屋(女儿墙/木梁头/条纹遮阳篷, 可带退台二层) · timber 木筋灰泥两层坡顶屋(山墙朝街)
+// 局部坐标 u 横向, v 进深(v=0 为朝水塘的正门墙)
+function drawVillageHouse(P,H,h,put){
+  const Q=(u,v,y,id,f)=>{ const [X,Z]=P.toW(H,u,v); put(X,y,Z,id,f!==false); };
+  const hw=H.hw, D=H.D;
+  const shell=(y,id,u0,u1,v0,v1)=>{ for(let u=u0;u<=u1;u++) for(let v=v0;v<=v1;v++) if(u===u0||u===u1||v===v0||v===v1) Q(u,v,y,id); };
+  const slab=(y,id,u0,u1,v0,v1)=>{ for(let u=u0;u<=u1;u++) for(let v=v0;v<=v1;v++) Q(u,v,y,id); };
+  if(H.kind==="adobe"){
+    const white=H.v1>=0.6;                                              // 四成刷白灰, 其余是赭红泥砖
+    const wall=white?CAVECALC:CLAY, trim=white?CLAY:SANDSTONE;
+    for(let u=-hw;u<=hw;u++) for(let v=0;v<D;v++) for(let y=h+1;y<=h+5;y++) Q(u,v,y,AIR);
+    slab(h,trim,-hw,hw,0,D-1); slab(h,PLANKS,-hw+1,hw-1,1,D-2);
+    shell(h+1,trim,-hw,hw,0,D-1);
+    for(let y=h+2;y<=h+4;y++) shell(y,wall,-hw,hw,0,D-1);
+    slab(h+5,trim,-hw,hw,0,D-1);                                        // 平屋顶
+    for(let u=-hw;u<=hw;u++) for(let v=0;v<D;v++)                        // 女儿墙(垛口)
+      if((u===-hw||u===hw||v===0||v===D-1) && ((u+v)&1)===0) Q(u,v,h+6,trim);
+    Q(0,0,h+1,AIR); Q(0,0,h+2,AIR);                                     // 门洞
+    for(let u=-1;u<=1;u++) Q(u,0,h+3,DARKPLANK);                        // 门楣
+    Q(-2,0,h+3,GLASS); Q(2,0,h+3,GLASS);                                 // 窗
+    Q(-hw,3,h+3,GLASS); Q(hw,3,h+3,GLASS); Q(0,D-1,h+3,GLASS);
+    for(const v of [1,3,D-1]) Q(-hw-1,v,h+4,DARKPLANK);                 // 伸出墙外的木梁头
+    for(const u of [-2,0,2]) Q(u,D,h+4,DARKPLANK);
+    const [cA,cB]=H.v2<0.5?[WOOL,BRICK]:[WOOL,HAY];                    // 条纹遮阳篷
+    for(let u=-1;u<=1;u++){ Q(u,-1,h+4,(u&1)?cA:cB); Q(u,-2,h+3,(u&1)?cB:cA); }
+    Q(-2,-1,h+1,CLAY); Q(-2,-1,h+2,ROSE,false);                          // 门口陶盆花
+    Q(0,2,h+4,LANTERN);                                                  // 室内灯
+    if(H.tall){                                                          // 退台二层
+      for(let u=-2;u<=2;u++) for(let v=3;v<D;v++) for(let y=h+6;y<=h+8;y++) Q(u,v,y,AIR);
+      for(let y=h+6;y<=h+8;y++) shell(y,wall,-2,2,3,D-1);
+      slab(h+9,trim,-2,2,3,D-1);
+      for(const [u,v] of [[-2,3],[2,3],[-2,D-1],[2,D-1],[0,3]]) Q(u,v,h+10,trim);
+      Q(0,3,h+6,AIR); Q(0,3,h+7,AIR);                                    // 屋顶平台门
+      Q(-1,3,h+8,DARKPLANK); Q(0,3,h+8,DARKPLANK); Q(1,3,h+8,DARKPLANK);
+      Q(-2,4,h+7,GLASS); Q(2,4,h+7,GLASS);
+      Q(-2,1,h+6,LEAVES); Q(2,1,h+6,LANTERN); Q(-1,1,h+6,HAY);          // 平台上的盆栽/灯/干草
+    } else {
+      Q(-2,2,h+6,LEAVES); Q(2,D-2,h+6,LANTERN);
+      Q(0,D-2,h+6,H.v2<0.5?BRICK:HAY); Q(0,D-2,h+7,H.v2<0.5?BRICK:HAY);   // 屋顶小烟囱/草垛
+    }
+    for(let k=1;k<=4;k++) Q(hw+1,D-1-k,h+k,trim);                       // 侧墙外一列台阶通屋顶
+  } else {
+    const PL=[WOOL,WOOL,CAVECALC,HAY][Math.floor(H.v1*4)];             // 灰泥色: 白/白/米/赭黄
+    const ROOF=H.v2<0.7?ROOFTILE:DARKPLANK;
+    for(let u=-hw;u<=hw;u++) for(let v=0;v<D;v++) for(let y=h+1;y<=h+12;y++) Q(u,v,y,AIR);
+    slab(h,COBBLE,-hw,hw,0,D-1);
+    slab(h+1,PLANKS,-hw+1,hw-1,1,D-2);                                  // 抬高的木地板
+    for(let u=-hw;u<=hw;u++) for(let v=0;v<D;v++)                        // 石砌勒脚
+      if(u===-hw||u===hw||v===0||v===D-1){ const [X,Z]=P.toW(H,u,v); Q(u,v,h+1,hash2(X*3,Z*5)<0.35?MOSSY:COBBLE); }
+    for(let y=h+2;y<=h+6;y++) shell(y,PL,-hw,hw,0,D-1);                 // 灰泥墙
+    shell(h+4,DARKPLANK,-hw,hw,0,D-1); shell(h+7,DARKPLANK,-hw,hw,0,D-1); // 腰梁 / 檐梁
+    for(const u of [-hw,hw]) for(const v of [0,D-1]) for(let y=h+1;y<=h+7;y++) Q(u,v,y,LOG);   // 角柱
+    const mid=(D-1)>>1;
+    for(let y=h+2;y<=h+6;y++){ Q(-hw,mid,y,DARKPLANK); Q(hw,mid,y,DARKPLANK); }                 // 侧墙中柱
+    for(let y=h+5;y<=h+6;y++) Q(0,0,y,DARKPLANK);                                               // 正面二层中柱
+    Q(-2,D-1,h+5,DARKPLANK); Q(-1,D-1,h+6,DARKPLANK); Q(2,D-1,h+5,DARKPLANK); Q(1,D-1,h+6,DARKPLANK);   // 背面人字斜撑
+    Q(0,0,h+2,AIR); Q(0,0,h+3,AIR); Q(0,-1,h+1,COBBLE);                 // 门 + 台阶
+    for(const u of [-2,2]){ Q(u,0,h+3,GLASS); Q(u,D-1,h+3,GLASS); Q(u,0,h+5,GLASS); Q(u,0,h+6,GLASS); }   // 一层小窗 + 二层高窗
+    for(const v of [1,D-2]) for(const u of [-hw,hw]){ Q(u,v,h+3,GLASS); Q(u,v,h+5,GLASS); Q(u,v,h+6,GLASS); }
+    for(const u of [-2,2]){ Q(u,-1,h+2,LEAVES); Q(u,-1,h+3,(u<0)===(H.v1<0.5)?ROSE:DAISY,false); }   // 窗下花箱
+    // 山墙朝街的坡屋顶(屋脊沿进深方向), 前后各挑出一格
+    for(let k=0;k<=hw+1;k++){
+      const y=h+8+k, e=hw+1-k;
+      for(let v=-1;v<=D;v++){ Q(-e,v,y,ROOF); Q(e,v,y,ROOF); }
+      for(let u=-e+1;u<=e-1;u++){ Q(u,0,y,k===0?DARKPLANK:PL); Q(u,D-1,y,k===0?DARKPLANK:PL); }
+    }
+    Q(0,0,h+9,GLASS); Q(0,0,h+10,DARKPLANK);                            // 阁楼窗
+    for(let y=h+8;y<=h+12;y++) Q(2,D-2,y,BRICK);                        // 砖烟囱
+    Q(2,D-2,h+13,COBBLE);
+    Q(0,mid,h+6,LANTERN);                                                // 室内吊灯(夜里从窗里透光)
   }
 }
 
@@ -2950,7 +3394,7 @@ function maintainNPCs(dt){
   npcSpawnT=4;
   // 商人: 世界任意地点最多 1 个, 靠近集市/商队残骸更近
   if(countNPC("trader")===0){
-    const near=nearStructure(["bazaar","caravan","oasis"],40);
+    const near=nearStructure(["bazaar","caravan","oasis","village"],40);
     spawnNPC("trader", near?10:18, near?18:30);
   }
   // 祭司: 靠近金字塔/神庙/宫殿/斗兽场时出现
@@ -3024,7 +3468,7 @@ function closeNPCPanel(){
 const LANDMARKS={ pyramid:"🔺金字塔", colosseum:"🏛斗兽场", palace:"🏰宫殿", city:"🌆城市",
   oasis:"🌴绿洲", rainbow:"🌈彩虹桥", airport:"✈机场", racetrack:"🏁赛车场", crater:"☄陨石坑",
   park:"🎡游乐场", forum:"🏟广场", castrum:"🛡军团要塞", bazaar:"🏮集市",
-  wreck:"⛵沉船", caravan:"🐫商队残骸", grotto:"💎晶洞" };
+  wreck:"⛵沉船", caravan:"🐫商队残骸", grotto:"💎晶洞", village:"🏘绿洲村落" };
 let _compass={t:-1e9, land:null};
 function nearestLandmark(px,pz){
   // 以玩家所在格子为中心, 向外扫描 16 格(~1536 方块)找最近的地标; 每 0.6s 才重算一次
@@ -5023,7 +5467,7 @@ function nearVillage(){                   // 玩家附近(<44格)是否有可住
   for(let dx=-1;dx<=1;dx++) for(let dz=-1;dz<=1;dz++){
     const s=structureAt(sx+dx,sz+dz);
     if(!s) continue;
-    if(s.type!=="house"&&s.type!=="cabin"&&s.type!=="hut"&&s.type!=="farm") continue;
+    if(s.type!=="house"&&s.type!=="cabin"&&s.type!=="hut"&&s.type!=="farm"&&s.type!=="village") continue;
     if(Math.hypot(s.x-player.x, s.z-player.z)<44) return true;
   }
   return false;
@@ -7013,6 +7457,7 @@ function spawnRoomy(x,y,z){
   return open>=8;                                       // 9 格里至少 8 格是空的
 }
 function findSpawn(){
+  if(findVillageSpawn()) return;
   let fallback=null;
   for(let r=0;r<60;r++){
     for(let a=0;a<8;a++){
@@ -8067,6 +8512,43 @@ function selftest(){
       }
     }catch(e){ builtErr=e.message; }
     ok("军团要塞能实际砌出大理石方块", !builtErr && builtBlocks>200, builtErr||("大理石="+builtBlocks));
+
+    // 1c. 绿洲村落: 登记为地标 / 能在沙漠生成 / 房屋+水塘+路灯+石板路真的砌进区块
+    {
+      ok("绿洲村落已登记为指南针地标", !!LANDMARKS.village, LANDMARKS.village);
+      let vs=null, vErr=null;
+      for(let sx=-70; sx<=70 && !vs; sx++) for(let sz=-70; sz<=70 && !vs; sz++){
+        const st=structureAt(sx,sz);
+        if(st && st.type==="village") vs=st;
+      }
+      ok("绿洲村落能在世界里生成", !!vs, vs?("@"+vs.x+","+vs.z+" h="+vs.h):"none");
+      if(vs){
+        const P=villagePlan(vs);
+        const kinds=new Set(P.houses.map(H=>H.kind));
+        ok("村落有 4~7 栋房屋且泥砖屋/木筋屋混搭", P.houses.length>=4 && P.houses.length<=7 && kinds.has("adobe") && kinds.has("timber"),
+           "houses="+P.houses.length+" kinds="+[...kinds].join("/"));
+        ok("村落选址避开河道且在沙漠/台地", villageSiteOK(vs.x,vs.z,vs.h) && (vs.bio===BIO_DESERT||vs.bio===BIO_MESA), "bio="+vs.bio);
+        const cnt={}; let sig=0;
+        try{
+          drawStructure(vs,(X,Y,Z,id)=>{ cnt[id]=(cnt[id]||0)+1; sig=(sig*31+X*7+Y*13+Z*17+id)|0; });
+        }catch(e){ vErr=e.message; }
+        const c=id=>cnt[id]||0;
+        ok("村落生成无异常, 有水塘/睡莲/芦苇", !vErr && c(WATER)>=40 && c(LILY)>0 && c(TALLGRASS)>=20, vErr||("水="+c(WATER)+" 睡莲="+c(LILY)+" 高草="+c(TALLGRASS)));
+        ok("村落有路灯(≥8 盏灯笼)与石板路", c(LANTERN)>=8 && c(COBBLE)>=60 && P.lamps.length>=4, "灯笼="+c(LANTERN)+" 圆石="+c(COBBLE)+" 路灯="+P.lamps.length);
+        ok("村屋有窗/灰泥或泥砖墙/陶瓦或木屋顶", c(GLASS)>=P.houses.length*4 && (c(CLAY)+c(CAVECALC)+c(WOOL))>=100 && (c(ROOFTILE)+c(DARKPLANK))>=40,
+           "玻璃="+c(GLASS)+" 墙="+(c(CLAY)+c(CAVECALC)+c(WOOL))+" 顶="+(c(ROOFTILE)+c(DARKPLANK)));
+        ok("村落有棕榈/集市摊/水井/苔石墙拱门", P.palms.length>=3 && !!P.market && !!P.well && P.gates.length===2 && c(MOSSY)>=30 && c(LOG)>=20,
+           "棕榈="+P.palms.length+" 苔石="+c(MOSSY)+" 原木="+c(LOG));
+        let sig2=0; drawStructure(vs,(X,Y,Z,id)=>{ sig2=(sig2*31+X*7+Y*13+Z*17+id)|0; });
+        ok("村落生成确定(两次施工完全一致)", sig===sig2, sig+" vs "+sig2);
+        // 真实区块: 水塘中心是水; 第一栋房子的门楣/腰梁出现在它所在的区块里(跨区块拼接)
+        const at=(X,Y,Z)=>{ const cx=Math.floor(X/CS), cz=Math.floor(Z/CS), arr=genChunk(cx,cz); return arr[((X-cx*CS)*CS+(Z-cz*CS))*H+Y]; };
+        ok("区块里水塘中心是水", at(vs.x,vs.h,vs.z)===WATER, "id="+at(vs.x,vs.h,vs.z));
+        const H0=P.houses[0], [lx,lz]=P.toW(H0,0,0);
+        const wantY=vs.h+(H0.kind==="adobe"?3:4);
+        ok("区块里第一栋房子的门楣横梁到位", at(lx,wantY,lz)===DARKPLANK, H0.kind+" id="+at(lx,wantY,lz)+" @"+lx+","+wantY+","+lz);
+      }
+    }
 
     // 2. 出生点合法: 不在方块内、不在虚空
     const sgy=groundY(Math.floor(spawnPt.x),Math.floor(spawnPt.z));
