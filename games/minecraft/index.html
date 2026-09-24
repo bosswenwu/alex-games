@@ -11299,6 +11299,8 @@ function selftest(){
       ok("未拼合神灯时擦灯被拒", rubLamp()===false, "");
       for(let i=0;i<MYTHIC_NEED;i++) addFragment("arabia");
       ok("拼合不灭神灯后冷却加倍快", mythicDone("arabia") && mythicDjinnCdMul()===2, "done="+mythicState.done.join(","));
+      // 固定前置状态: 随机世界里此前的测试/游戏循环可能让玩家已"死亡"或面板还开着 → 擦灯被拒/被 toggle 关掉(偶发失败的根因)
+      const deadR=dead; dead=false; closeLampPanel();
       djinnState.cd=0;
       const opened=rubLamp();
       const lp=document.getElementById("lamp-panel");
@@ -11320,6 +11322,7 @@ function selftest(){
       document.dispatchEvent(new KeyboardEvent("keydown",{code:"KeyL",bubbles:true}));
       ok("死亡画面按 L 只关面板、不发奖", !document.getElementById("lamp-panel").classList.contains("on") && djinnState.cd===0, "on="+document.getElementById("lamp-panel").classList.contains("on"));
       dead=deadSnap; closeLampPanel();
+      dead=deadR;
       mythicState.frags.persia=0; if(mythicDone("persia")) mythicState.done=mythicState.done.filter(c=>c!=="persia");
       faction.rome=0;
       const ware=BAZAAR_WARES[0];
