@@ -346,7 +346,7 @@
     <b>W A S D</b> 移动　<b>空格</b> 跳跃(双击飞行)　<b>Shift</b> 潜行/下降　<b>E</b> 上车/骑乘<br>
     <b>左键</b> 挖掘/攻击　<b>右键</b> 放置/使用道具　<b>1–9 / 滚轮</b> 切换物品栏<br>
     <b>探索</b>：右上角<b>指南针</b>指向最近地标——朝它走，寻访金字塔·绿洲·奇观群系<br>
-    <span style="opacity:.7">走进不同群系会有天色与怪物变化，进游戏后随时会有提示 · <b>H</b> 查看完整帮助 · <b>O</b> 切换画质 · <b>V</b> 药水 · <b>X</b> 钓鱼</span>
+    <span style="opacity:.7">走进不同群系会有天色与怪物变化，进游戏后随时会有提示 · <b>H</b> 查看完整帮助 · <b>O</b> 切换画质 · <b>V</b> 药水 · <b>X</b> 钓鱼 · 喂仙人掌驯服骆驼(E)</span>
   </div>
   <div id="legal">
     《沙海奇境 Sandsea》是一个独立的开源体素游戏，向 Minecraft 致敬。<br>
@@ -5253,6 +5253,33 @@ let locked=false, softLock=false, lastSpace=0, lastW=0;
 let mouseHeld=-1, actTimer=0, dragLook=false, dragMoved=0;
 /* ---------- 骑乘: 骑上悬浮摩托后直接接管飞行控制 ---------- */
 let riding=null;
+/* 🐫 骆驼驯服 + 冲刺跳跃(第五轮·云端): 野生骆驼旁按 E 喂仙人掌(每口 34%, 第 4 口必成) → 驯服后按 E 骑乘;
+   骑乘时按空格向前冲刺跳跃(冷却 2.75 秒), 能蹦上 1 格台阶、越过小沟; 驯服的骆驼不会因走远被清理 */
+const CAMEL_DASH_CD=2.75, CAMEL_DASH_DUR=0.55;
+const camelState={dashT:0, cd:0, tamed:0};
+function camelMountDef(){
+  if(!MOB_DEFS.camelTamed) MOB_DEFS.camelTamed=Object.assign({},MOB_DEFS.camel,{name:"骆驼(按E骑乘·空格冲刺)", mount:true, groundMount:true, camelMount:true, speed:5.8});
+  return MOB_DEFS.camelTamed;
+}
+function feedCamel(m){
+  if(!m || m.type!=="camel" || m.tamed) return false;
+  if(bagCount(CACTUS)<1){ showName("🐫 骆驼想吃仙人掌 — 带上仙人掌再按 E 喂它"); return false; }
+  bagTake(CACTUS,1); m.tameFed=(m.tameFed|0)+1;
+  const ok=m.tameFed>=4 || Math.random()<0.34;
+  for(let i=0;i<(ok?10:4);i++) particles.push({x:m.x+(Math.random()-.5)*.8,y:m.y+1.4+Math.random()*.5,z:m.z+(Math.random()-.5)*.8,vx:0,vy:1+Math.random(),vz:0,life:.7,size:.07,u:(BLOCKS[ROSE].s%16)*TS+TS*0.4,v:Math.floor(BLOCKS[ROSE].s/16)*TV+TV*0.3,l:1.3});
+  if(ok){ m.tamed=true; m.def=camelMountDef(); m.pause=false; camelState.tamed++; addXP(12); showName("🐫 驯服了骆驼！按 E 骑乘，骑行时按空格冲刺跳跃"); sfxLevel && sfxLevel(); }
+  else showName("🐫 骆驼嚼着仙人掌…再喂一口试试（已喂 "+m.tameFed+" 口）");
+  return true;
+}
+function camelDash(){
+  if(!riding || !riding.def.camelMount || camelState.cd>0 || camelState.dashT>0) return false;
+  camelState.dashT=CAMEL_DASH_DUR; camelState.cd=CAMEL_DASH_CD;
+  for(let i=0;i<10;i++) particles.push({x:player.x+(Math.random()-.5),y:player.y+0.1,z:player.z+(Math.random()-.5),vx:(Math.random()-.5)*2,vy:0.8+Math.random(),vz:(Math.random()-.5)*2,life:.5,size:.08,u:(BLOCKS[SAND].s%16)*TS+TS*0.3,v:Math.floor(BLOCKS[SAND].s/16)*TV+TV*0.3,l:1.1});
+  return true;
+}
+function tickCamel(dt){ camelState.cd=Math.max(0,camelState.cd-dt); camelState.dashT=Math.max(0,camelState.dashT-dt); }
+const camelDashHop=()=>camelState.dashT>0 ? Math.sin(Math.PI*(1-camelState.dashT/CAMEL_DASH_DUR))*1.6 : 0;
+const camelDashMul=()=>camelState.dashT>0 ? 2.3 : 1;
 function toggleRide(){
   if(riding){
     const wasGround=riding.def.car||riding.def.groundMount;
@@ -5276,9 +5303,16 @@ function toggleRide(){
       player.flying=false;
       player.x=best.x; player.y=best.y; player.z=best.z;
       showName(best.def.car ? "🚗 驾驶中 — W/S 油门/倒车 · A/D 转向 · E 下车"
+             : best.def.camelMount ? "🐫 骑骆驼 — W/S 前进/后退 · A/D 转向 · 空格冲刺跳跃 · E 下来"
                              : "🐴 骑乘中 — W/S 前进/后退 · A/D 转向 · E 下马");
     }
-  } else showName("附近没有可骑乘的载具/坐骑");
+  } else {
+    // 第五轮·云端: 附近有野生骆驼 → 喂仙人掌驯服
+    let wc=null, wd=4;
+    for(const m of mobs){ if(m && m.type==="camel" && !m.tamed){ const d=Math.hypot(m.x-player.x,m.y-player.y,m.z-player.z); if(d<wd){ wd=d; wc=m; } } }
+    if(wc) feedCamel(wc);
+    else showName("附近没有可骑乘的载具/坐骑");
+  }
 }
 // 每帧把载具贴在玩家脚下, 跟随视角/车头
 function updateRidden(dt){
@@ -5546,7 +5580,8 @@ document.addEventListener("keydown",e=>{
   if(!e.repeat){
     const now=performance.now();
     if(e.code==="Space"){
-      if(now-lastSpace<260 && !riding){ player.flying=!player.flying; player.vy=0; showName(player.flying?"飞行模式":"行走模式"); }
+      if(riding && riding.def.camelMount){ camelDash(); }                       // 第五轮·云端: 骆驼冲刺跳跃
+      else if(now-lastSpace<260 && !riding){ player.flying=!player.flying; player.vy=0; showName(player.flying?"飞行模式":"行走模式"); }
       lastSpace=now;
     }
     if(e.code==="KeyW"){ if(now-lastW<260) player.sprint=true; lastW=now; }
@@ -6916,7 +6951,7 @@ function updateMobs(dt){
   for(let i=mobs.length-1;i>=0;i--){
     const m=mobs[i], D=m.def;
     const dx=player.x-m.x, dz=player.z-m.z, dist=Math.hypot(dx,dz)||1e-6;
-    if(dist>72 || m.y<-20){ mobs.splice(i,1); continue; }
+    if((dist>72 && !m.tamed) || m.y<-20){ mobs.splice(i,1); continue; }   // 驯服的骆驼不因走远被清理
     m.hurtT=Math.max(0,m.hurtT-dt);
     m.atkCd=Math.max(0,m.atkCd-dt);
     m.swingT=Math.max(0,m.swingT-dt);
@@ -9904,18 +9939,19 @@ function frame(now){
       player.z+=player.vz*dt; collideAxis(2);
     } else if(driving){
       /* 汽车驾驶: W/S 油门(前进/倒车), A/D 转向(左右打方向盘), 车身贴地行驶, 不能飞 */
-      const carSpd=riding.def.speed*(keys.KeyS&&!keys.KeyW?-0.5:1);
+      const carSpd=riding.def.speed*(keys.KeyS&&!keys.KeyW?-0.5:1)*(riding.def.camelMount?camelDashMul():1);   // 骆驼冲刺(第五轮·云端)
       const steer=2.0*dt*(keys.KeyD?1:0)*(keys.KeyW||keys.KeyS?1:0.6)
                 - 2.0*dt*(keys.KeyA?1:0)*(keys.KeyW||keys.KeyS?1:0.6);
       if(keys.KeyW||keys.KeyS) player.yaw += (keys.KeyS&&!keys.KeyW?-1:1)*steer;
-      const thr=(keys.KeyW?1:0)-(keys.KeyS?1:0);
+      const thr=(riding.def.camelMount&&camelState.dashT>0) ? 1 : (keys.KeyW?1:0)-(keys.KeyS?1:0);   // 冲刺时自动向前
       player.vx=Math.sin(player.yaw)*carSpd*Math.abs(thr)+player.kbx;
       player.vz=-Math.cos(player.yaw)*carSpd*Math.abs(thr)+player.kbz;
       const kbd0=Math.pow(0.01,dt); player.kbx*=kbd0; player.kbz*=kbd0;
       player.x+=player.vx*dt; player.z+=player.vz*dt;
       // 贴地: 车轮始终吸附地面高度, 而不是走跳跃/重力物理
       const gy2=groundY(Math.floor(player.x),Math.floor(player.z));
-      if(gy2>0){ player.y += (gy2-player.y)*Math.min(1,dt*10); player.vy=0; player.onGround=true; }
+      const hop=riding.def.camelMount?camelDashHop():0;   // 骆驼冲刺跳跃: 贴地高度上叠一段弧线
+      if(gy2>0){ player.y += (gy2+hop-player.y)*Math.min(1,dt*(hop>0?16:10)); player.vy=0; player.onGround=hop<=0; }
       else { player.vy-=28*dt; player.y+=player.vy*dt; }
       collideAxis(0); collideAxis(2);
       fallStart=null;
@@ -10070,6 +10106,7 @@ function frame(now){
     tickUndeadNight(dt);
     tickPotions(dt);                              // 第五轮·云端
     tickFishing(dt);                              // 第五轮·云端
+    tickCamel(dt);                                // 第五轮·云端
     tickTitle();
     arrowCd=Math.max(0,arrowCd-dt);
     gunCd=Math.max(0,gunCd-dt);
@@ -11400,6 +11437,7 @@ window.__game = {
   get potions(){ return { stock:Object.assign({},potions), fx:Object.assign({},potionFx) }; },   // 第五轮·云端
   drinkPotion:(k)=>drinkPotion(k), brewPotion:(k)=>brewPotion(k),
   get fishing(){ return Object.assign({},fishState); }, fishKey:()=>fishKey(),
+  get camel(){ return Object.assign({},camelState); }, feedCamel:(m)=>feedCamel(m), camelDash:()=>camelDash(),
   grantTrophy:(t)=>grantTrophy(t),
   claimLandmark(type,sx,sz){ const key=type+":"+(sx|0)+":"+(sz|0); landSeen.add(key); return [...landSeen]; },
   getBlock, setBlock, groundY, heightAt, biomeAt,
@@ -12577,6 +12615,23 @@ function selftest(){
         Object.assign(fishState,fS); hp=hpF; eatCd=eatF; npcState.relics=relF; bag.clear(); for(const [k,v] of bagF) bag.set(k,v); updateHearts();
         ok("绿洲钓鱼: 掉落表(鱼为主/杂物/宝物, 富饶水域宝物更多), 早收空竿, 咬钩窗口内收竿有收获, 过窗鱼溜走, 吃鱼 +5, 进存档",
            lootOk && early && bit && caughtOk && escaped && ate && saved, "loot="+JSON.stringify(cats)+" rich="+richTr+" bit="+bit+" got="+got+" esc="+escaped+" ate="+ate);
+      }
+      // 骆驼驯服(第五轮·云端): 没仙人掌拒绝 / 喂到第 4 口必驯服 / 驯服后变坐骑 / 骑乘冲刺: 冷却、加速、弧线高度 / 驯服骆驼不被远距清理
+      {
+        const bagC=new Map(bag), rideC=riding, cS=Object.assign({},camelState), n0=mobs.length;
+        const cm={type:"camel", def:MOB_DEFS.camel, x:player.x+2, y:player.y, z:player.z, vx:0,vy:0,vz:0,kbx:0,kbz:0,yaw:0,tgtYaw:0,hp:18,hurtT:0,animT:0,t:0,atkCd:0,burnT:0,swingT:0,groanT:0,fleeT:0,onGround:true,pause:false,burning:false,held:null};
+        mobs.push(cm);
+        bag.delete(CACTUS); const noFood=feedCamel(cm)===false && !cm.tamed;
+        bag.set(CACTUS,10); for(let i=0;i<4 && !cm.tamed;i++) feedCamel(cm);
+        const tamed=cm.tamed && cm.def.mount && cm.def.groundMount && cm.def.camelMount && cm.tameFed<=4 && bagCount(CACTUS)>=6;
+        riding=cm; camelState.cd=0; camelState.dashT=0;
+        const d1=camelDash(), mul=camelDashMul(), d2=camelDash();
+        tickCamel(CAMEL_DASH_DUR/2); const hopMid=camelDashHop();
+        tickCamel(CAMEL_DASH_DUR); const hopEnd=camelDashHop();
+        const dashOk=d1 && !d2 && mul>2 && hopMid>1.4 && hopEnd===0 && camelState.cd>0;
+        riding=rideC; mobs.length=n0; Object.assign(camelState,cS); bag.clear(); for(const [k,v] of bagC) bag.set(k,v); particles.length=0;
+        ok("骆驼驯服: 没仙人掌拒绝, 喂食最多 4 口必驯服并变坐骑, 骑乘空格冲刺(加速+弧线跳跃+冷却)",
+           noFood && tamed && dashOk && MOB_DEFS.camel.mount!==true, "noFood="+noFood+" tamed="+tamed+" dash="+d1+"/"+d2+" hop="+hopMid.toFixed(2));
       }
       ok("材质: 逐块旋转——松沙陷坑与沙子同模式(伪装不露馅), 沙纹只转180°, 草地四向", UV_ROT[LOOSESAND*2]===UV_ROT[SAND*2] && UV_ROT[LOOSESAND*2+1]===UV_ROT[SAND*2+1] && UV_ROT[SAND*2]===1 && UV_ROT[GRASS*2]===2,
          "sand="+UV_ROT[SAND*2]+" loose="+UV_ROT[LOOSESAND*2]);
