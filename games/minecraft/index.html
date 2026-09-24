@@ -2272,6 +2272,17 @@ function makeShader(vsrc, fsrc, binds){
   }
   return p;
 }
+/* WebGL2: 把 GLSL 100 源码转成 GLSL 300 es, 并给指定 varying 加 centroid 插值。
+   目的: 离屏 MSAA 下, 只被部分覆盖的像素按"采样点所在位置"插值 UV, 不再外推到三角形之外去采图集相邻格子
+   (否则远处亚像素小方块会满屏彩色噪点)。WebGL1 仍用原 GLSL 100 源码, 行为不变。 */
+function glsl3(vs, fs, centroid){
+  const cen=v=>new RegExp("\\bvarying\\s+(\\w+)\\s+("+v+")\\b","g");
+  let v=vs, f=fs;
+  for(const n of centroid||[]){ v=v.replace(cen(n),"centroid varying $1 $2"); f=f.replace(cen(n),"centroid varying $1 $2"); }
+  v="#version 300 es\n"+v.replace(/\battribute\b/g,"in").replace(/\bvarying\b/g,"out");
+  f="#version 300 es\nout highp vec4 fragColor;\n"+f.replace(/\bvarying\b/g,"in").replace(/\btexture2D\s*\(/g,"texture(").replace(/\bgl_FragColor\b/g,"fragColor");
+  return [v,f];
+}
 // 主着色器(方块/粒子/生物)
 /* 光影管线(第 1 步):
    - aF 编码 "面朝向 + 天光": aF = face + 8*sky。face 0..5 = 方块六面, 6 = 十字植物, 7 = 旧式(生物/粒子, 明暗已烘进 aL);
@@ -2414,7 +2425,7 @@ const FS_PREC=`
 // 方块光颜色(线性空间, 暖橙烛光)与强度: 夜里强、黄昏中等、正午只剩一点(白天日光本身就亮)
 const BL_COL_GLSL="vec3(1.0, 0.72, 0.40)";
 const blockLightK=sunH=>2.4-2.05*smoothstep(-0.05,0.35,sunH);
-const mainProg = makeShader(`
+const _mainSrc = [`
   attribute vec3 aPos; attribute vec2 aUV; attribute float aL; attribute float aF;
   uniform mat4 uPV, uLightPV; uniform vec3 uOffset; uniform vec2 uUVOff; uniform vec3 uEye;
   uniform float uShadowBias, uWTime; uniform vec3 uWind, uWOrig;
@@ -2534,7 +2545,8 @@ const mainProg = makeShader(`
     float d = length(vRel);
     col = mix(col, fogColor(vRel/max(d, 0.001)), fogAmount(vRel, d, vSky));
     gl_FragColor = vec4(col, c.a);
-  }`, CHUNK_ATTRS);
+  }`];
+const mainProg = makeShader(...(IS_GL2 ? glsl3(_mainSrc[0], _mainSrc[1], ["vUV"]) : _mainSrc), CHUNK_ATTRS);   // WebGL2: GLSL 300 + centroid UV(配合离屏 MSAA)
 // 水面着色器: 只画区块的水层。aL = 该顶点处水深(格, 岸边角点更浅); aF 高位 cls = 沼泽(1) + 2*角点旁的岸格数(0..4)
 const waterProg = makeShader(`
   attribute vec3 aPos; attribute vec2 aUV; attribute float aL; attribute float aF;
@@ -8176,13 +8188,13 @@ function chunkInFrustum(cx,cz){
 const GFX_NAMES=["低","中","高","极致"];
 const GFX_PRESETS=[
   // post: 后处理(仅 WebGL2)  bloom: 泛光  fxaa: 抗锯齿  heat: 正午热浪  dof: 远景柔化
-  // msaa: 离屏多重采样数。管线已支持(多重采样渲染缓冲 + blit 解析), 但默认关: mainProg 还是 GLSL 100, 没有 centroid 插值,
-  //       MSAA 下远处亚像素小方块面会在像素中心外推 UV, 采到图集相邻格子 → 沙地满是彩色噪点。改用 FXAA; 待主着色器换 GLSL 300 + centroid 再开。
+  // msaa: 离屏多重采样数(多重采样渲染缓冲 + blit 解析)。WebGL2 下 mainProg 已转 GLSL 300 且 UV 用 centroid 插值,
+  //       部分覆盖像素不再外推 UV 采到图集相邻格子, 所以高/极致开 4×(FXAA 同时降到 0.35 只补残余锯齿)。
   // clouds = 云噪声层数(3..5), cshadow = 地面云影开关
   {shadow:false, post:false, clouds:3, cshadow:0},                                                          // 低: 无阴影贴图、无后处理(直出画布)
   {shadow:true, size:1024, range:40, pcf:0, post:true, bloom:true, fxaa:true, clouds:4, cshadow:1},         // 中: + 泛光/调色/暗角/FXAA
-  {shadow:true, size:2048, range:56, pcf:1, post:true, bloom:true, fxaa:true, msaa:0, heat:true, clouds:5, cshadow:1, rays:12},   // 高(电脑默认): + 正午热浪 + 光束
-  {shadow:true, size:4096, range:80, pcf:1, post:true, bloom:true, fxaa:true, msaa:0, heat:true, dof:true, clouds:5, cshadow:1, rays:20}, // 极致: + 远景柔化
+  {shadow:true, size:2048, range:56, pcf:1, post:true, bloom:true, fxaa:true, msaa:4, heat:true, clouds:5, cshadow:1, rays:12},   // 高(电脑默认): + 正午热浪 + 光束
+  {shadow:true, size:4096, range:80, pcf:1, post:true, bloom:true, fxaa:true, msaa:4, heat:true, dof:true, clouds:5, cshadow:1, rays:20}, // 极致: + 远景柔化
 ];
 let gfxLevel=2;
 try{ const v=parseInt(localStorage.getItem("sandsea_gfx"),10); if(v>=0 && v<GFX_PRESETS.length) gfxLevel=v; }catch(e){}
@@ -11679,6 +11691,9 @@ function selftest(){
          "gl2="+IS_GL2+" depthTex="+HAS_DEPTH_TEX+" ok="+shadow.ok+" size="+shadow.size);
       const g0=gfxLevel; setGfx(0); const offOk=!shadow.ok; setGfx(g0);
       const mainSrc=gl.getAttachedShaders(mainProg).map(sh=>gl.getShaderSource(sh)||"").join("\n");
+      ok("主着色器: WebGL2 用 GLSL 300 + centroid UV, 高/极致开 4× MSAA; WebGL1 保持 GLSL 100",
+         IS_GL2 ? (/^#version 300 es/.test(mainSrc.trim()) && /centroid in vec2 vUV/.test(mainSrc) && /centroid out vec2 vUV/.test(mainSrc) && GFX_PRESETS[2].msaa===4 && GFX_PRESETS[3].msaa===4 && !GFX_PRESETS[1].msaa)
+                : !/#version 300/.test(mainSrc), "gl2="+IS_GL2);
       ok("沙面高光: 主着色器有沙粒闪光且按画质开关", U.uSandFx!==null && mainSrc.indexOf("sandK")>=0, "loc="+(U.uSandFx!==null));
       // 地标珍藏: 覆盖全部地标 / 同一地标只领一次 / 进存档 / 常驻效果
       {
