@@ -12,6 +12,9 @@
   #gl { display:block; width:100%; height:100%; }
   /* ---------- HUD ---------- */
   #hud { position:fixed; inset:0; pointer-events:none; display:none; }
+  #brushRing { display:none; position:absolute; left:50%; top:50%; width:46px; height:46px; transform:translate(-50%,-50%); border-radius:50%; pointer-events:none;
+    background:conic-gradient(#f3d27a calc(var(--p,0)*1%), rgba(255,255,255,.2) 0);
+    -webkit-mask:radial-gradient(circle, transparent 18px, #000 19px); mask:radial-gradient(circle, transparent 18px, #000 19px); }
   #cross { position:absolute; left:50%; top:50%; width:22px; height:22px; transform:translate(-50%,-50%); mix-blend-mode:difference; }
   #cross::before, #cross::after { content:""; position:absolute; background:#ddd; }
   #cross::before { left:50%; top:0; width:2px; height:100%; transform:translateX(-50%); }
@@ -239,6 +242,7 @@
   <div id="hurttint"></div>
   <div id="poisontint"></div>
   <div id="cross"></div>
+  <div id="brushRing"></div>
   <div id="itemname"></div>
   <div id="toast"></div>
   <div id="xpbar"><div class="xf"></div><div class="xl">Lv 1</div></div>
@@ -293,7 +297,7 @@
     <b>物品栏</b>：1烟花 2钩爪 3可乐 4铁剑 5机关枪 6火箭筒 7弓 8=TNT(右键放·左键点燃) 9弹跳板<br>
     <b>2 钩爪</b>甩向准星把你拉过去；<b>3 可乐</b>回血+加速；<b>9 弹跳板</b>踩上去高高弹飞不摔伤<br>
     击杀获得<b>经验</b>升级(提升生命与伤害)。白天长、夜晚短而亮，敌人只是点缀<br>
-    <b>🏛 古文明玩法</b>(按 <b style="color:#ffd23f">T</b> 看编年史)：<b>考古</b>用镐刨可疑沙砾出文物/神灯/陶片　按 <b>P</b> 翻陶片图鉴　<b>斗兽场</b>站场地按 <b>G</b> 打五波夺宝　<b>金字塔石棺</b>唤法老王(诅咒缠身，斩杀解咒)<br>
+    <b>🏛 古文明玩法</b>(按 <b style="color:#ffd23f">T</b> 看编年史)：<b>考古</b>对准可疑沙砾<b>按住左键</b>用刷子刷出文物/神灯/陶片(金字塔墓室侧龛出土更丰)　按 <b>P</b> 翻陶片图鉴　<b>斗兽场</b>站场地按 <b>G</b> 打五波夺宝　<b>金字塔石棺</b>唤法老王(诅咒缠身，斩杀解咒)<br>
     　<b>斯芬克斯</b>守在金字塔外：靠近按 <b>R</b> 回答谜题，答对有赏；答错或动手则开战<br>
     　<b>阵营声望</b>：助罗马/敬埃及各有回报，袭击军团会被<b>通缉</b>　<b>🔮天象</b>（希腊+罗马/埃及/波斯/阿拉伯/地中海）·<b>🐫波斯集市·🌊金羊毛远征·🌑亡者之夜</b>会不时自行降临，左下状态栏会挂着倒计时<br>
     　<b>宝库钥匙</b>：通关斗兽场或斩杀法老获得，站在金字塔/宫殿/斗兽场按 <b>U</b> 开启封印宝库（钥匙会真正被花掉）<br>
@@ -377,6 +381,8 @@ const TRAPPLATE=61;                           // 机关压力板: 刻纹砂岩(�
 const LOOSESAND=62;                           // 松沙陷坑: 外观与沙子完全相同(复用贴图 4), 踩塌落坑
 // 村落建材(round2 B1, 图集第二页 256+): 三色灰泥 · 木框窗 · 棕榈干/叶 · 芦苇 · 鎏金饰面; 63-70 此前从未用过, 旧存档不冲突
 const PLASTER=63, PLASTER_ROSE=64, PLASTER_WHITE=65, WINDOW_WOOD=66, PALM_LOG=67, PALM_LEAF=68, REEDS=69, GILDED=70;
+// 金字塔墓室(第四轮, 图集 275/276): 象形文字砖(侧面彩绘经文, 可左右镜像——古埃及文字本就可左右书写) · 星空墓顶(底面青金石蓝 + 金色五角星)
+const HIERO=71, STARCEIL=72;
 // t=顶面贴图 b=底面 s=侧面 (图集编号)
 const BLOCKS = {
   [GRASS]:  {name:"草方块",   t:0,  b:2,  s:1},
@@ -449,6 +455,8 @@ const BLOCKS = {
   [PALM_LEAF]:{name:"棕榈叶",   t:262,b:262,s:262},   // 同树叶: 半透明镂空, 不挡天光
   [REEDS]:  {name:"芦苇",       t:263,b:263,s:263},   // 十字植物
   [GILDED]: {name:"鎏金饰面",   t:269,b:269,s:269},   // 装饰金(替代建筑外立面上的金矿石); 挖下得金矿石
+  [HIERO]:  {name:"象形文字砖", t:71, b:71, s:275},   // 墓室/走廊墙面: 侧面刻彩绘经文, 顶底仍是砂岩
+  [STARCEIL]:{name:"星空墓顶",  t:71, b:276,s:71},    // 只有底面(抬头看见的那面)是星空, 从外面挖开仍像砂岩
 };
 // 植物可以直接走过去; 冰/玻璃/树叶不完全遮挡; 岩浆会陷进去
 const SOLID   = id => id!==AIR && id!==WATER && id!==LAVA && !PLANT(id);   // 碰撞
@@ -1035,6 +1043,24 @@ function drawStructure(s,put){
     for(const [cx2,cz2] of [[-4,-2],[4,-2],[-4,4],[4,4]]){
       for(let y=h+1;y<=h+4;y++) put(x+cx2,y,z+cz2,CLAY,true);
       put(x+cx2,h+5,z+cz2,LANTERN,true);
+    }
+    // --- 墓室内部(第四轮): 四壁象形文字砖 + 星空墓顶; 走廊两壁经文 + 星空顶 ---
+    for(let Y=h+1;Y<=h+5;Y++){
+      for(let Z=z-4;Z<=z+5;Z++){ put(x-5,Y,Z,HIERO,true); put(x+5,Y,Z,HIERO,true); }
+      for(let X=x-4;X<=x+4;X++){ put(X,Y,z-4,HIERO,true); put(X,Y,z+5,HIERO,true); }
+    }
+    box(x-4,h+6,z-3,x+4,h+6,z+4,STARCEIL,false);
+    for(let dz=R-3; dz>=5; dz--){                         // 走廊外段只剩 1~2 层外壳, 不贴
+      for(let Y=h+1;Y<=h+3;Y++){ put(x-2,Y,z-dz,HIERO,true); put(x+2,Y,z-dz,HIERO,true); }
+      if(dz<=R-4) box(x-1,h+4,z-dz,x+1,h+4,z-dz,STARCEIL,false);
+    }
+    // 墓门: 墓室北墙在走廊之后才砌, 一直把走廊尽头封死(只能挖进来) → 开 3×3 门洞, 鎏金门楣
+    box(x-1,h+1,z-4,x+1,h+3,z-4,AIR,false);
+    box(x-1,h+4,z-4,x+1,h+4,z-4,GILDED,false);
+    // 侧龛: 墙上掏一格高 2 的龛, 龛底是可疑沙砾(按住刷出墓葬文物), 上方鎏金楣
+    for(const [ox,oz,bx2,bz2] of pyramidNiches(s)){
+      put(ox,h+1,oz,AIR,true); put(ox,h+2,oz,AIR,true); put(ox,h+3,oz,GILDED,true);
+      put(bx2,h+1,bz2,SUSGRAVEL,true); put(bx2,h+2,bz2,HIERO,true);
     }
     // --- 上层藏宝室(需要挖进去) ---
     box(x-2,h+9,z-2,x+2,h+11,z+2,AIR,false);
@@ -3641,6 +3667,45 @@ txPut(270,(x,y)=>{                                                        // 遮
   const c=red?[200,69,46]:[239,230,210];
   return txMul(c,fold*(0.97+(txFbm(x,y,2,6,2,2702)-0.5)*0.06)*(y<2?0.88:1));
 },true);
+{ // 象形文字砖(275): 砂岩底 + 上下 2px 彩绘饰带 + 两栏竖行经文(1px 刻线分栏), 每栏上下两个凹刻字符, 字内填赭红/青金/松石绿/墨黑颜料(局部剥落)
+  const G={
+    ankh:["...####...","..#....#..","..#....#..","..#....#..","...#..#...","##########","....##....","....##....","....##....","....##....","....##....","....##...."],
+    eye: ["..........","..######..",".#......#.","#...##...#",".#..##..#.","..######..","....#.....","....#.#...","....#..#..","...#....#.","..#.....#.",".........."],
+    bird:["....###...","...#####..","...#######","....####..","...#####..","..######..",".#######..","########..","..#####...","...#..#...","...#..#...","..##..##.."],
+    scarab:["....##....","...####...","#.#.##.#.#",".###..###.","..##..##..","#.#.##.#.#",".##.##.##.","..#.##.#..","...####...","..#....#..",".#......#.",".........."],
+  };
+  const CELLS=["ankh","bird","eye","scarab"];                            // 下标 = 栏*2+行: 一块砖上 4 个字各不相同
+  const INK=txPal("#3c9484 #a4432a #2f5f9e #7a3320");                 // 松石绿 · 赭红 · 青金 · 深赭(不用纯黑, 远看不成黑洞)
+  const BAND=txPal("#a4432a #e0b24c #2f5f9e #e0b24c #3c9484 #e0b24c");
+  const at=(x,y)=>{                                                       // 0 底面 1 刻字 2 分栏刻线 3 饰带
+    if(y<=1||y>=28) return 3;
+    if(y===2||y===27||x===0||x===15) return 2;
+    const col=x<15?0:1, gx=x-(col?18:3), row=y<15?0:1, gy=y-(row?15:3);
+    if(gx<0||gx>9||gy<0||gy>11) return 0;
+    return G[CELLS[col*2+row]][gy][gx]==="#" ? 1 : 0;
+  };
+  txLit(275,(x,y)=>{ const a=at(x,y); return (a===1?0.25:a===2?0.4:a===3?0.85:0.8)+txFbm(x,y,5,5,2,2751)*0.15; },
+  (x,y,h,s)=>{
+    const a=at(x,y), grit=(txH(x,y,2752)-0.5)*0.08;
+    let c=txRamp(P_SST,0.3+h*0.55+s*1.6+grit);
+    if(a===3){ const k=Math.floor(x/5)%BAND.length; c=txMix(c,BAND[k],x%5===4?0.15:0.72); }
+    else if(a===1){ const col=x<15?0:1, row=y<15?0:1, ink=INK[col*2+row];
+      const flake=txFbm(x,y,4,4,2,2753)>0.66;                            // 局部颜料剥落, 露出刻底
+      c=flake?txMul(c,0.78):txMix(txMul(c,0.8),ink,0.78); }
+    else if(a===2) c=txMul(c,0.72);
+    return c;
+  },1.0,false,0.05);
+}
+txPut(276,(x,y)=>{                                                        // 星空墓顶(276): 青金石蓝底(微云纹) + 错行排列的金色五角星(古埃及墓顶"夜空女神努特")
+  const base=txLerp(txPal("#16255a #1d2f70 #243a82 #2c4592"),0.35+txFbm(x,y,3,3,3,2761)*0.5+(txH(x,y,2762)-0.5)*0.08);
+  for(const [cx,cy] of [[4.5,4.5],[19.5,4.5],[12,12],[27,12],[4.5,19.5],[19.5,19.5],[12,27],[27,27]]){
+    let dx=x-cx, dy=y-cy; if(dx>15)dx-=30; if(dx<-15)dx+=30; if(dy>15)dy-=30; if(dy<-15)dy+=30;
+    const r=Math.hypot(dx,dy), a=Math.atan2(dy,dx)+Math.PI/2;
+    const lim=3.4*(0.42+0.58*Math.pow(0.5+0.5*Math.cos(5*a),2.2));
+    if(r<lim) return txMix([232,190,86],[250,226,150],r<1.2?0.8:(txH(x,y,2763)*0.4));
+  }
+  return base;
+});
 let ATLAS_MIPS=0;                                                         // 手工 mip 级数(自测用: 512×1024 → 1×1 共 10 级)
 const atlasTex = gl.createTexture();
 gl.bindTexture(gl.TEXTURE_2D, atlasTex);
@@ -3876,7 +3941,7 @@ const shadow={fbo:null, tex:null, size:0, range:0, pcf:0, ok:false, dirty:true,
 const UV_ROT=new Uint8Array(256*2);
 for(const [id,tb,sd] of [[GRASS,2,1],[DIRT,2,1],[STONE,2,1],[SNOW,2,1],[GRAVEL,2,1],[SUSGRAVEL,2,1],
     [COBBLE,2,1],[MOSSY,2,1],[LEAVES,2,1],[PINE_LEAF,2,1],[BLACKSAND,2,1],[SALTCRUST,2,1],[BASALT,2,0],
-    [SAND,1,0],[LOOSESAND,1,0],[OBSIDIAN,2,1],[PALM_LEAF,2,1],[PLASTER,2,1],[PLASTER_ROSE,2,1],[PLASTER_WHITE,2,1],[PALM_LOG,2,1],[GILDED,0,1],[WINDROCK,2,0]]){   // 砂岩/陶土(及风蚀岩侧面)是成层条纹, 一转就成棋盘格; 风蚀岩顶(265)无层理, 可四向旋转
+    [SAND,1,0],[LOOSESAND,1,0],[OBSIDIAN,2,1],[PALM_LEAF,2,1],[PLASTER,2,1],[PLASTER_ROSE,2,1],[PLASTER_WHITE,2,1],[PALM_LOG,2,1],[GILDED,0,1],[WINDROCK,2,0],[HIERO,0,1]]){   // 砂岩/陶土(及风蚀岩侧面)是成层条纹, 一转就成棋盘格; 风蚀岩顶(265)无层理, 可四向旋转
   UV_ROT[id*2]=tb; UV_ROT[id*2+1]=sd;
 }
 const _uvA=[0,0,0,0], _uvB=[0,0,0,0];
@@ -5415,11 +5480,11 @@ function doBreak(){
   const hit=raycast(5.5, dir);
   if(!hit || hit.id===BEDROCK) return;
   if(hit.id===TNT){ igniteTNT(hit.x,hit.y,hit.z); showName("嘶嘶嘶……快跑！"); return; }
+  if(hit.id===SUSGRAVEL){ brushPoke(hit); return; }   // 考古刷点: 按住慢慢刷(见 updateBrush), 不再一镐刨开
   const brokeId=hit.id;
   spawnParticles(hit.x,hit.y,hit.z,hit.id);
   setBlock(hit.x,hit.y,hit.z,AIR);
   sfxBreak();
-  if(brokeId===SUSGRAVEL){ archaeologyDig(hit.x,hit.y,hit.z); questAdd("mine",1); return; }  // 考古刷点: 出土文物, 不进背包
   if(brokeId===TRAPPLATE){ trapFired.add(tkey(hit.x,hit.y,hit.z)); showName("🔧 拆除了机关压力板 — 机关已失效"); return; } // 谨慎的玩家可挖掉压力板来拆解机关
   if(brokeId===LOOSESAND){ trapFired.add(tkey(hit.x,hit.y,hit.z)); bagAdd(SAND,1); return; }  // 松沙挖开只是普通沙子
   bagAdd(brokeId===GILDED?GOLD_ORE:brokeId,1);        // 挖到的方块进背包, 供合成消耗(鎏金饰面 → 金矿石, 与旧装饰金掉落一致)
@@ -5548,6 +5613,17 @@ function sfxBreak(){
   const src=actx2.createBufferSource(); src.buffer=buf;
   const f=actx2.createBiquadFilter(); f.type="bandpass"; f.frequency.value=500+Math.random()*500; f.Q.value=1.2;
   const g=actx2.createGain(); g.gain.value=0.35;
+  src.connect(f).connect(g).connect(actx2.destination); src.start(t);
+}
+function sfxBrush(){   // 刷子: 短促高频沙沙声
+  if(!actx2) return;
+  const t=actx2.currentTime, len=0.12;
+  const buf=actx2.createBuffer(1,actx2.sampleRate*len,actx2.sampleRate);
+  const d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.sin(Math.PI*i/d.length);
+  const src=actx2.createBufferSource(); src.buffer=buf;
+  const f=actx2.createBiquadFilter(); f.type="highpass"; f.frequency.value=2600+Math.random()*900;
+  const g=actx2.createGain(); g.gain.value=0.09;
   src.connect(f).connect(g).connect(actx2.destination); src.start(t);
 }
 function sfxPlace(){
@@ -9883,10 +9959,13 @@ function tickDigSparkle(dt){
   }
 }
 /* 挖开可疑沙砾: 加权出土, 陶片/文物/图纸残页 + 发掘特效 */
-function archaeologyDig(x,y,z){
-  archState.digs++; addFaction('egypt',2);
+function archaeologyDig(x,y,z,opt){
+  const tomb=!!(opt&&opt.tomb);                        // 金字塔侧龛: 更丰(常带金砂、更多经验与遗物碎片)
+  const say=m=>showName((tomb?"⚱ 墓室侧龛 · ":"")+m);
+  archState.digs++; addFaction('egypt',tomb?4:2);
+  if(tomb){ archState.tombDigs=(archState.tombDigs|0)+1; addXP(12); if(Math.random()<0.5) giveBlock(GOLD_ORE,1); }
   if(Math.random()<0.05){ showName("🪔 沙中掘出一盏古神灯！"); summonDjinn(); }   // 5% 掘出神灯 → 精灵随机恩惠(冷却内则仅提示)
-  if(Math.random()<0.08){ addFragment(randomCiv()); }   // 8% 出土一枚神话遗物碎片(随机文明)
+  if(Math.random()<(tomb?0.22:0.08)){ addFragment(randomCiv()); }   // 出土一枚神话遗物碎片(随机文明); 侧龛 22%
   for(let i=0;i<20;i++) particles.push({x:x+0.5+(Math.random()-.5)*0.9, y:y+0.3+Math.random()*0.7, z:z+0.5+(Math.random()-.5)*0.9,
     vx:(Math.random()-.5)*2.6, vy:1+Math.random()*2.4, vz:(Math.random()-.5)*2.6, life:.5+Math.random()*.4, size:.09, u:15*TS, v:0, l:1.8});
   const r=Math.random();
@@ -9894,19 +9973,86 @@ function archaeologyDig(x,y,z){
     archState.pages++; addXP(10);
     if(archState.pages>0 && archState.pages%5===0){    // 集齐 5 页 → 复原一张完整图纸
       giveBlock(GEM_ORE,1); addXP(45);
-      showName("📜 图纸残页集齐 5 张 · 复原一张沙海图纸！(钻石 x1，+45 经验)");
+      say("📜 图纸残页集齐 5 张 · 复原一张沙海图纸！(钻石 x1，+45 经验)");
     } else {
-      showName("📜 出土 图纸残页（"+archState.pages%5+"/5，+10 经验）— 集满 5 张可复原");
+      say("📜 出土 图纸残页（"+archState.pages%5+"/5，+10 经验）— 集满 5 张可复原");
     }
   } else if(r<0.45){                                    // 文物碎片(供 NPC 交易)
     npcState.relics++; addXP(8); if(omenActive('hermes')){ npcState.relics++; }   // 连锁: 赫尔墨斯天象 → 考古掘宝翻倍
-    showName("🏺 出土 文物碎片！(文物 x"+npcState.relics+"，+8 经验) — 交给商队商人或神谕祭司");
+    say("🏺 出土 文物碎片！(文物 x"+npcState.relics+"，+8 经验) — 交给商队商人或神谕祭司");
   } else {                                              // 陶片(收藏图鉴: 鉴定器型, 可按 P 翻看)
     grantPotteryShard();
   }
   sfxLevel && sfxLevel();
 }
-function updateArch(dt){ maintainDigSites(dt); tickDigSparkle(dt); }
+function updateArch(dt){ maintainDigSites(dt); maintainTombNiches(dt); tickDigSparkle(dt); updateBrush(dt); }
+
+/* ---- 🖌 按住刷考古 + 金字塔侧龛 (第四轮) ----
+   可疑沙砾不再一镐刨开: 对准按住左键(触屏按住挖掘键)用刷子慢慢刷, 约 1.4 秒刷净出土, 原地留下一块沙(不再挖出坑);
+   中途松手或移开准星超过 0.8 秒, 进度缓慢回落; 点按(降级鼠标模式/触屏轻点)每下刷掉两成。
+   金字塔墓室与走廊墙上各有侧龛, 龛底一块可疑沙砾, 出土走 archaeologyDig 的 tomb 分支。 */
+const BRUSH_TIME=1.4;
+const brush={on:false, x:0, y:0, z:0, p:0, idle:0, dustT:0, sfxT:0};
+const tombNiches=new Set();                            // 已登记的侧龛龛底坐标 "x,y,z"
+let tombNicheT=0;
+function pyramidNiches(s){                             // [开口x, 开口z, 龛底x, 龛底z], 地面层 y=s.h+1; 结构生成与运行时共用
+  const x=s.x, z=s.z;
+  return [[x-5,z+1,x-6,z+1],[x+5,z+1,x+6,z+1],        // 墓室东西两壁
+          [x-3,z+5,x-3,z+6],[x+3,z+5,x+3,z+6],        // 墓室后壁
+          [x-2,z-8,x-3,z-8],[x+2,z-8,x+3,z-8]];       // 走廊两壁(两块压力板之间)
+}
+function maintainTombNiches(dt){                       // 走近金字塔: 侧龛登记为刷点(冒金光), 刷完判定为墓葬出土
+  tombNicheT-=dt; if(tombNicheT>0) return; tombNicheT=1;
+  const s=nearStructure(["pyramid"],30); if(!s) return;
+  for(const n of pyramidNiches(s)){
+    const x=n[2], y=s.h+1, z=n[3];
+    tombNiches.add(x+","+y+","+z);
+    if(getBlock(x,y,z)===SUSGRAVEL && !digSites.some(d=>d.x===x&&d.y===y&&d.z===z)) digSites.push({x,y,z});
+  }
+}
+function brushHeld(){ return (locked&&mouseHeld===0) || touchState.breaking; }
+function brushPoke(hit){                               // doBreak 瞄到可疑沙砾时调用: 换目标则从零开始
+  if(!brush.on || brush.x!==hit.x || brush.y!==hit.y || brush.z!==hit.z) Object.assign(brush,{on:true, x:hit.x, y:hit.y, z:hit.z, p:0});
+  brush.idle=0;
+  if(!brushHeld()) brush.p+=0.2;
+  if(brush.p>=1) brushFinish();
+}
+function brushFinish(){
+  const x=brush.x, y=brush.y, z=brush.z;
+  brush.on=false; brush.p=0;
+  spawnParticles(x,y,z,SUSGRAVEL);
+  setBlock(x,y,z,SAND);
+  sfxBreak();
+  archaeologyDig(x,y,z, tombNiches.has(x+","+y+","+z)?{tomb:true}:undefined);
+  questAdd("mine",1);
+}
+function updateBrush(dt,forceHeld){                    // forceHeld: 自测用, 跳过鼠标/准星判定
+  const el=document.getElementById("brushRing");
+  if(brush.on && getBlock(brush.x,brush.y,brush.z)!==SUSGRAVEL) brush.on=false;
+  if(brush.on){
+    let held=forceHeld;
+    if(held===undefined){ held=false; if(brushHeld()){ const h=raycast(5.5,currentAim()); held=!!h && h.x===brush.x && h.y===brush.y && h.z===brush.z; } }
+    if(held){
+      brush.idle=0;
+      brush.p+=dt/BRUSH_TIME;
+      brush.dustT-=dt;
+      if(brush.dustT<=0){                               // 扬尘: 从方块朝玩家一侧飘出细沙
+        brush.dustT=0.05;
+        const cx=brush.x+0.5, cy=brush.y+0.5, cz=brush.z+0.5;
+        let dx=player.x-cx, dy=(player.y+1.5)-cy, dz=player.z-cz; const dl=Math.hypot(dx,dy,dz)||1; dx/=dl; dy/=dl; dz/=dl;
+        for(let i=0;i<2;i++) particles.push({x:cx+dx*0.55+(Math.random()-.5)*0.6, y:cy+dy*0.55+(Math.random()-.5)*0.6, z:cz+dz*0.55+(Math.random()-.5)*0.6,
+          vx:dx*1.2+(Math.random()-.5)*1.4, vy:1.2+Math.random()*1.2, vz:dz*1.2+(Math.random()-.5)*1.4, life:.35+Math.random()*.25, size:.045,
+          u:(4%16)*TS+Math.random()*TS*0.7, v:Math.floor(4/16)*TV+Math.random()*TV*0.7, l:1.1});
+      }
+      brush.sfxT-=dt; if(brush.sfxT<=0){ brush.sfxT=0.2; sfxBrush(); }
+      if(brush.p>=1) brushFinish();
+    } else if((brush.idle+=dt)>0.8){                   // 停手 0.8 秒后才回落: 点按刷时两下之间不倒退
+      brush.p-=dt*0.5;
+      if(brush.p<=0){ brush.p=0; brush.on=false; }
+    }
+  }
+  if(el){ el.style.display=brush.on?"block":"none"; if(brush.on) el.style.setProperty("--p",(brush.p*100).toFixed(1)); }
+}
 
 /* ---- 陶片图鉴: 出土不再只是一个数字, 按 P 可翻已鉴定的器型; 老存档缺 shards → 空图鉴 ---- */
 const POTTERY_TYPES=[
@@ -11724,6 +11870,63 @@ function selftest(){
         if(g0h<1) setGfx(g0h);
         ok("远景剪影: 分帧建出 2×360 段山脊卡片, 高度不低于水位, 金字塔顶出尖", horizon.done===d0+1 && horizon.n===2*HZ_N*6 && okTop && (!pyr || bump>=20),
            "n="+horizon.n+" pyr="+(pyr?bump:"none"));
+      }
+      // ---- 第四轮: 金字塔内部(象形文字墙/星空墓顶/墓门/侧龛) + 按住刷考古 ----
+      {
+        const ax=atlasCv.getContext("2d"), px=(t)=>ax.getImageData((t%16)*32+1,Math.floor(t/16)*32+1,30,30).data;
+        const hi=px(275), st=px(276); let opq=true, hiC=new Set(), gold=0;
+        for(let i=0;i<hi.length;i+=4){ if(hi[i+3]<255||st[i+3]<255) opq=false; hiC.add((hi[i]>>4)+","+(hi[i+1]>>4)+","+(hi[i+2]>>4)); if(st[i]>200&&st[i+1]>160&&st[i+2]<170) gold++; }
+        ok("墓室方块: 象形文字砖(71, 侧面 275, 只左右镜像)/星空墓顶(72, 底面 276)已注册, 贴图不透明、经文多色、星空有金星",
+           HIERO===71 && STARCEIL===72 && BLOCKS[HIERO].s===275 && BLOCKS[STARCEIL].b===276 && SOLID(HIERO) && OPAQUE(STARCEIL) && !EMISSIVE(HIERO)
+           && UV_ROT[HIERO*2]===0 && UV_ROT[HIERO*2+1]===1 && opq && hiC.size>=12 && gold>=30 && gold<300,
+           "opq="+opq+" 经文色="+hiC.size+" 金星px="+gold);
+      }
+      {
+        let pyr=null; for(let sx=-40;sx<=40&&!pyr;sx++) for(let sz=-40;sz<=40&&!pyr;sz++){ const s2=structureAt(sx,sz); if(s2&&s2.type==="pyramid") pyr=s2; }
+        if(!pyr) ok("金字塔内部: 附近 81×81 格子内找到金字塔", false, "none");
+        else {
+          const cache=new Map(), at=(X,Y,Z)=>{ const cx=Math.floor(X/CS), cz=Math.floor(Z/CS), k=cx+","+cz;
+            if(!cache.has(k)) cache.set(k,genChunk(cx,cz)); return cache.get(k)[((X-cx*CS)*CS+(Z-cz*CS))*H+Y]; };
+          const {x,z,h}=pyr, R=13;
+          let path=true; for(let dz=R+1;dz>=3;dz--) if(at(x,h+1,z-dz)!==AIR || at(x,h+2,z-dz)!==AIR) path=false;
+          ok("金字塔内部: 走廊直通墓室(墓门打通), 鎏金门楣, 墓室四壁象形文字、星空墓顶, 走廊两壁经文+星空顶",
+             path && at(x,h+4,z-4)===GILDED && at(x-5,h+3,z)===HIERO && at(x+5,h+3,z)===HIERO && at(x,h+3,z+5)===HIERO
+             && at(x,h+6,z)===STARCEIL && at(x-2,h+2,z-6)===HIERO && at(x,h+4,z-6)===STARCEIL && at(x,h+1,z+2)===SARCO,
+             "path="+path+" 门楣="+at(x,h+4,z-4)+" 顶="+at(x,h+6,z)+" 壁="+at(x-5,h+3,z));
+          const bad=pyramidNiches(pyr).filter(([ox,oz,bx2,bz2])=>!(at(ox,h+1,oz)===AIR && at(ox,h+2,oz)===AIR && at(ox,h+3,oz)===GILDED && at(bx2,h+1,bz2)===SUSGRAVEL && at(bx2,h+2,bz2)===HIERO));
+          ok("金字塔内部: 6 处侧龛都是 高2空龛 + 龛底可疑沙砾 + 鎏金楣", pyramidNiches(pyr).length===6 && !bad.length, "坏="+JSON.stringify(bad));
+        }
+      }
+      {
+        const bagS=new Map(bag), archS=JSON.stringify(archState), relS=npcState.relics, brS=Object.assign({},brush);
+        const bx=Math.floor(player.x)+2, bz=Math.floor(player.z)+2; let by=H-4; while(by>0 && getBlock(bx,by,bz)!==AIR) by--;
+        setBlock(bx,by,bz,SUSGRAVEL); brush.on=false;
+        const d0=archState.digs;
+        brushPoke({x:bx,y:by,z:bz});                               // 点按: 刷掉两成
+        const tap=brush.on && Math.abs(brush.p-0.2)<1e-6;
+        updateBrush(0.7,true); const mid=getBlock(bx,by,bz)===SUSGRAVEL && brush.p>0.65 && brush.p<0.75;
+        updateBrush(0.5,false); const grace=Math.abs(brush.p-0.7)<1e-6;
+        updateBrush(0.6,false); const decay=grace && brush.on && brush.p>0.35 && brush.p<0.45;
+        updateBrush(1.0,true); const done=!brush.on && getBlock(bx,by,bz)===SAND && archState.digs===d0+1;
+        // 墓葬侧龛: 登记后刷完走 tomb 分支
+        setBlock(bx,by,bz,SUSGRAVEL); tombNiches.add(bx+","+by+","+bz);
+        const t0=archState.tombDigs|0; brushPoke({x:bx,y:by,z:bz}); updateBrush(2,true);
+        const tomb=(archState.tombDigs|0)===t0+1 && getBlock(bx,by,bz)===SAND;
+        tombNiches.delete(bx+","+by+","+bz);
+        const g0=bag.get(GOLD_ORE)||0; for(let i=0;i<40;i++) archaeologyDig(0,80,0,{tomb:true}); const goldHits=(bag.get(GOLD_ORE)||0)-g0;
+        // 真实 doBreak: 准星对准可疑沙砾 → 只刷不碎
+        const pS=player.pitch, slotS=selSlot; player.pitch=1.5; selSlot=HOTBAR_ITEMS.indexOf(JUMPPAD);
+        const hit=raycast(5.5,currentAim()); let viaBreak=false;
+        if(hit){ const o=hit.id; setBlock(hit.x,hit.y,hit.z,SUSGRAVEL); brush.on=false; doBreak();
+          viaBreak=getBlock(hit.x,hit.y,hit.z)===SUSGRAVEL && brush.on && brush.x===hit.x && brush.y===hit.y && brush.z===hit.z;
+          setBlock(hit.x,hit.y,hit.z,o); }
+        player.pitch=pS; selSlot=slotS;
+        setBlock(bx,by,bz,AIR);
+        bag.clear(); for(const [k,v] of bagS) bag.set(k,v);
+        const A=JSON.parse(archS); for(const k in archState) if(!(k in A)) delete archState[k]; Object.assign(archState,A);
+        npcState.relics=relS; Object.assign(brush,brS);
+        ok("按住刷考古: 点按刷两成, 按住 1.4 秒刷净, 停手 0.8 秒后回落, 刷完原地留沙并出土; 侧龛走墓葬分支且常带金砂; 左键对准只刷不碎",
+           tap && mid && decay && done && tomb && goldHits>=8 && (viaBreak || !hit), "tap="+tap+" mid="+mid+" decay="+decay+" done="+done+" tomb="+tomb+" 金="+goldHits+"/40 doBreak="+(hit?viaBreak:"无准星目标"));
       }
       ok("材质: 逐块旋转——松沙陷坑与沙子同模式(伪装不露馅), 沙纹只转180°, 草地四向", UV_ROT[LOOSESAND*2]===UV_ROT[SAND*2] && UV_ROT[LOOSESAND*2+1]===UV_ROT[SAND*2+1] && UV_ROT[SAND*2]===1 && UV_ROT[GRASS*2]===2,
          "sand="+UV_ROT[SAND*2]+" loose="+UV_ROT[LOOSESAND*2]);
