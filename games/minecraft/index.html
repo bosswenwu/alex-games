@@ -1799,77 +1799,100 @@ for(const n of ["uPV","uOffset","uColor"]) UC[n]=gl.getUniformLocation(colProg,n
 const A_POS=gl.getAttribLocation(mainProg,"aPos"), A_UV=gl.getAttribLocation(mainProg,"aUV"), A_L=gl.getAttribLocation(mainProg,"aL");
 const AC_POS=gl.getAttribLocation(colProg,"aPos");
 
-/* ---------- 程序化贴图图集 ---------- */
+/* ---------- 程序化贴图图集 · 32px 高清版 ----------
+ * 图集 512×512 = 16×16 格, 每格 32px (tile = 行*16+列, UV 格宽仍是 TS=1/16)。
+ * 网格/实体/掉落物的 UV 统一内缩 EP=1/512 = 1 texel, 所以每格真正显示的是中间 30×30
+ * (格内坐标 1..30); 最外 1px 是"护边": 可平铺材质按回绕复制对边, 图案类按钳制复制,
+ * 这样 mipmap 缩小和相邻方块拼接都不会串色/出缝。
+ * 随机只走 txRnd()/txH(): 与世界种子无关的确定性序列, 每格按编号重新播种 → 任何存档外观一致。 */
+const TX_PX=32, TX_V=30;
 const atlasCv = document.createElement("canvas");
-atlasCv.width=atlasCv.height=256;
+atlasCv.width=atlasCv.height=TX_PX*16;
 const actx = atlasCv.getContext("2d");
+let _txS=1;
+function txRnd(){ _txS=(_txS+0x6D2B79F5)|0; let t=Math.imul(_txS^(_txS>>>15),1|_txS); t=(t+Math.imul(t^(t>>>7),61|t))^t; return ((t^(t>>>14))>>>0)/4294967296; }
+function txSeed(s){ _txS=Math.imul(s+17,2654435761)|0; }
+function txH(x,y,s){ let n=(Math.imul(x|0,374761393)+Math.imul(y|0,668265263)+Math.imul(s|0,1442695041))|0; n=Math.imul(n^(n>>>13),1274126177); return ((n^(n>>>16))>>>0)/4294967296; }
+const txW=(v,p)=>((v%p)+p)%p;
+// 周期值噪声: 晶格 px×py, 在晶格边界无缝回绕
+function txVN(x,y,px,py,s){
+  const xi=Math.floor(x), yi=Math.floor(y), xf=x-xi, yf=y-yi;
+  const u=xf*xf*(3-2*xf), v=yf*yf*(3-2*yf);
+  const x0=txW(xi,px), x1=txW(xi+1,px), y0=txW(yi,py), y1=txW(yi+1,py);
+  const a=txH(x0,y0,s), b=txH(x1,y0,s), c=txH(x0,y1,s), d=txH(x1,y1,s);
+  return a+(b-a)*u+(c-a)*v+(a-b-c+d)*u*v;
+}
+// 可平铺 fbm: x,y 为可见像素坐标(0..30); px/py = 基础晶格数, 两者不等即可拉出木纹/岩层的方向感
+function txFbm(x,y,px,py,oct,s){
+  let v=0,a=0.5,sum=0;
+  for(let i=0;i<oct;i++){ const fx=px<<i, fy=py<<i; v+=a*txVN(x/TX_V*fx,y/TX_V*fy,fx,fy,s+i*131); sum+=a; a*=0.5; }
+  return v/sum;
+}
+// 可平铺 Worley(沃罗诺伊): nx×ny 抖动格点 → 最近距离 d1、到胞界距离 e(=d2-d1)、胞格 id、特征点 fx/fy
+function txWorley(x,y,nx,ny,s,jit){
+  const cw=TX_V/nx, ch=TX_V/ny, gx=Math.floor(x/cw), gy=Math.floor(y/ch);
+  let d1=1e9,d2=1e9,id=0,fx=0,fy=0;
+  for(let j=-2;j<=2;j++) for(let i=-2;i<=2;i++){
+    const cx=gx+i, cy=gy+j, wx=txW(cx,nx), wy=txW(cy,ny);
+    const px=(cx+0.5+(txH(wx,wy,s)-0.5)*jit)*cw, py=(cy+0.5+(txH(wx,wy,s+9)-0.5)*jit)*ch;
+    const d=Math.hypot(x-px,y-py);
+    if(d<d1){ d2=d1; d1=d; id=wy*nx+wx; fx=px; fy=py; } else if(d<d2) d2=d;
+  }
+  return {d1,d2,e:d2-d1,id,fx,fy};
+}
+const txHex=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
+const txPal=s=>s.split(" ").map(txHex);
+const txRamp=(pal,t)=>pal[clamp(Math.floor(t*pal.length),0,pal.length-1)];   // 分级取色: 保留像素画的色阶感
+function txLerp(pal,t){ t=clamp(t,0,1)*(pal.length-1); const i=Math.min(Math.floor(t),pal.length-2), f=t-i, a=pal[i], b=pal[i+1];
+  return [a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f,a[2]+(b[2]-a[2])*f]; }
+const txMix=(a,b,t)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];
+const txMul=(c,k)=>[c[0]*k,c[1]*k,c[2]*k];
+const txSteps=(hexes,n)=>{ const p=txPal(hexes); return Array.from({length:n},(_,i)=>txLerp(p,i/(n-1))); };  // 少量关键色 → n 级色阶
+// 贴花层: 在 30×30 上按回绕盖章(叶片/草叶/针叶), 最后在 txPut 里读取
+function txDecal(){ const c=new Array(TX_V*TX_V).fill(null);
+  c.set=(x,y,v)=>{ c[txW(Math.round(y),TX_V)*TX_V+txW(Math.round(x),TX_V)]=v; };
+  c.at=(x,y)=>c[txW(y,TX_V)*TX_V+txW(x,TX_V)]; return c; }
+const _txBuf=new Float32Array(TX_V*TX_V*4);
+function txFlush(ti,clampEdge){
+  const img=actx.createImageData(TX_PX,TX_PX), d=img.data;
+  for(let y=0;y<TX_PX;y++) for(let x=0;x<TX_PX;x++){
+    const sx=clampEdge?clamp(x-1,0,TX_V-1):txW(x-1,TX_V), sy=clampEdge?clamp(y-1,0,TX_V-1):txW(y-1,TX_V);
+    const s=(sy*TX_V+sx)*4, o=(y*TX_PX+x)*4;
+    d[o]=_txBuf[s]; d[o+1]=_txBuf[s+1]; d[o+2]=_txBuf[s+2]; d[o+3]=_txBuf[s+3];
+  }
+  actx.putImageData(img,(ti%16)*TX_PX,Math.floor(ti/16)*TX_PX);
+}
+// 高清方块贴图: fn(x,y) 以可见区坐标 0..29 作画, 返回 [r,g,b(,a)]
+// edge>0: 方块最外 1px 压暗(0.05~0.08), 远看也能分清一块块方块
+function txPut(ti,fn,clampEdge,edge){
+  txSeed(ti);
+  for(let y=0;y<TX_V;y++) for(let x=0;x<TX_V;x++){
+    const c=fn(x,y), i=(y*TX_V+x)*4, k=(edge&&(x===0||y===0||x===TX_V-1||y===TX_V-1))?1-edge:1;
+    _txBuf[i]=c[0]*k; _txBuf[i+1]=c[1]*k; _txBuf[i+2]=c[2]*k; _txBuf[i+3]=(c.length>3?c[3]:255);
+  }
+  txFlush(ti,clampEdge);
+}
+// 浮雕着色: 先算高度场, 再按左上方来光求坡度 s(朝光为正), 交给 cfn(x,y,h,s) 决定颜色 → 石缝/砖缝/树皮有立体感
+function txLit(ti,hfn,cfn,bump,clampEdge,edge){
+  txSeed(ti);
+  const H=new Float32Array(TX_V*TX_V);
+  for(let y=0;y<TX_V;y++) for(let x=0;x<TX_V;x++) H[y*TX_V+x]=hfn(x,y);
+  const hh=clampEdge?(x,y)=>H[clamp(y,0,TX_V-1)*TX_V+clamp(x,0,TX_V-1)]:(x,y)=>H[txW(y,TX_V)*TX_V+txW(x,TX_V)];
+  txPut(ti,(x,y)=>cfn(x,y,hh(x,y),((hh(x+1,y)-hh(x-1,y))+(hh(x,y+1)-hh(x,y-1)))*0.5*bump),clampEdge,edge);
+}
+// 旧式 16px 画法(生物皮肤/道具等): fn 仍收 0..15 坐标, 以 2×2 结构放大, 但每个 texel 单独取随机 → 颗粒更细
 function drawTile(ti, fn){
-  const img=actx.createImageData(16,16), d=img.data;
-  for(let y=0;y<16;y++) for(let x=0;x<16;x++){
-    const c=fn(x,y), i=(y*16+x)*4;
+  txSeed(ti);
+  const img=actx.createImageData(TX_PX,TX_PX), d=img.data;
+  for(let y=0;y<TX_PX;y++) for(let x=0;x<TX_PX;x++){
+    const c=fn(x>>1,y>>1), i=(y*TX_PX+x)*4;
     d[i]=c[0]; d[i+1]=c[1]; d[i+2]=c[2]; d[i+3]=(c.length>3?c[3]:255);
   }
-  actx.putImageData(img,(ti%16)*16,Math.floor(ti/16)*16);
+  actx.putImageData(img,(ti%16)*TX_PX,Math.floor(ti/16)*TX_PX);
 }
-const vary=(r,g,b,amt)=>{ const n=(Math.random()-0.5)*2*amt; return [clamp(r+n,0,255),clamp(g+n,0,255),clamp(b+n,0,255)]; };
-drawTile(0,(x,y)=>{                                                          // 草顶(成簇明暗)
-  const clump=Math.sin(x*0.9+y*1.3)*Math.cos(x*1.1-y*0.7);
-  const g=176+clump*15;
-  if(Math.random()<0.07) return vary(96,150,58,8);                            // 深色草籽
-  return vary(112+clump*8, g, 70+clump*6, 11); });
-drawTile(2,(x,y)=> Math.random()<0.06 ? vary(104,74,52,8) : vary(134,96,67,12)); // 泥土
-drawTile(1,(x,y)=>{                                                          // 草侧
-  if(y<3) return vary(112,174,70,14);
-  if(y===3 && Math.random()<0.5) return vary(112,174,70,14);
-  return Math.random()<0.06 ? vary(104,74,52,8) : vary(134,96,67,12);
-});
-drawTile(3,(x,y)=>{                                                             // 石头(斑驳+细裂纹)
-  const blot=Math.sin(x*0.55+y*0.9)*Math.cos(x*0.8-y*0.4);
-  let v=120+blot*11+((x*7+y*13)%3)*5+(Math.random()-0.5)*12;
-  const crack=((x*3+y*7)%23===0)||((x*11-y*5)%29===0);
-  if(crack) v-=26;
-  return [v,v,v+3]; });
-drawTile(4,(x,y)=>{                                                           // 沙子(风成沙纹+细颗粒)
-  const ripple=Math.sin((x*0.9+y*0.35))*1.6 + Math.sin((x*0.31-y*0.77))*1.1;
-  const base=214+ripple*3.2;
-  if(Math.random()<0.04) return vary(base+16,base+11,base-6,4);                // 亮晶
-  return vary(base+5,base-7,base-52,7); });
-drawTile(5,(x,y)=> vary(52,110,225,10));                                      // 水
-drawTile(6,(x,y)=>{                                                           // 原木侧
-  const s=(x%4===0)||(x%4===3&&Math.random()<0.3);
-  return s ? vary(84,62,38,8) : vary(107,82,50,10);
-});
-drawTile(7,(x,y)=>{                                                           // 原木顶
-  const d=Math.max(Math.abs(x-7.5),Math.abs(y-7.5))|0;
-  return d%2===0 ? vary(152,122,72,8) : vary(110,86,52,8);
-});
-drawTile(8,(x,y)=>{                                                           // 树叶
-  if(Math.random()<0.18) return [0,0,0,0];
-  return Math.random()<0.3 ? vary(44,106,34,12) : vary(60,138,46,16);
-});
-drawTile(9,(x,y)=>{                                                           // 木板
-  if(y%4===3) return vary(94,72,42,6);
-  if((y<4&&x===11)||(y>=4&&y<8&&x===3)||(y>=8&&y<12&&x===13)||(y>=12&&x===6)) return vary(94,72,42,6);
-  return vary(162,131,79,9);
-});
-drawTile(10,(x,y)=>{                                                          // 圆石
-  const cellV=90+hash2(Math.floor(x/4)+90,Math.floor(y/4)+7)*55;
-  if(x%4===0||y%4===0) return vary(80,80,82,8);
-  return vary(cellV,cellV,cellV+3,9);
-});
-drawTile(11,(x,y)=>{                                                          // 玻璃
-  if(x===0||y===0||x===15||y===15) return [208,232,240];
-  if((x+y===9||x+y===10)&&x<9) return [255,255,255,180];
-  return [0,0,0,0];
-});
-drawTile(12,()=>{ const v=45+Math.random()*55; return [v,v,v]; });            // 基岩
-drawTile(13,()=> vary(246,250,252,6));                                        // 雪顶
-drawTile(14,(x,y)=>{                                                          // 雪侧
-  if(y<4) return vary(246,250,252,6);
-  return Math.random()<0.06 ? vary(104,74,52,8) : vary(134,96,67,12);
-});
+const vary=(r,g,b,amt)=>{ const n=(txRnd()-0.5)*2*amt; return [clamp(r+n,0,255),clamp(g+n,0,255),clamp(b+n,0,255)]; };
 drawTile(15,()=>{                                                             // 火焰粒子
-  const r=Math.random();
+  const r=txRnd();
   if(r<0.22) return [0,0,0,0];
   if(r<0.5)  return [255,200,64];
   if(r<0.85) return [255,120,16];
@@ -1916,17 +1939,17 @@ mobTile(38,["rrrrrrrr","rrrrrrrr","rrrrrrrr","rrrrrrrr","rrrrrrrr","rrrrrrrr","r
 const PAL_CR={k:[88,168,72], B:[18,48,18]};
 mobTile(39,["kkkkkkkk","kBBkkBBk","kBBkkBBk","kkkBBkkk","kkBBBBkk","kkBBBBkk","kkBkkBkk","kkkkkkkk"],PAL_CR); // 苦力怕脸
 drawTile(40,()=>{                                                             // 苦力怕皮肤
-  const r=Math.random();
+  const r=txRnd();
   return r<0.5 ? vary(88,168,72,10) : (r<0.8 ? vary(66,138,54,10) : vary(118,190,88,10));
 });
-drawTile(41,()=> Math.random()<0.25 ? vary(120,58,34,10) : vary(176,96,58,14)); // 熟肉
-drawTile(42,()=> Math.random()<0.18 ? vary(96,124,52,10) : vary(150,70,52,12)); // 腐肉
+drawTile(41,()=> txRnd()<0.25 ? vary(120,58,34,10) : vary(176,96,58,14)); // 熟肉
+drawTile(42,()=> txRnd()<0.18 ? vary(96,124,52,10) : vary(150,70,52,12)); // 腐肉
 const PAL_SP={d:[46,40,38], B:[16,14,13], r:[224,44,32], g:[92,20,16]};
-drawTile(43,()=> Math.random()<0.3 ? vary(30,26,24,5) : vary(52,44,40,7));       // 蜘蛛身
+drawTile(43,()=> txRnd()<0.3 ? vary(30,26,24,5) : vary(52,44,40,7));       // 蜘蛛身
 mobTile(44,["dddddddd","dddddddd","drdddrdd","drdddrdd","dddgdgdd","dddddddd","dddddddd","dddddddd"],PAL_SP); // 蜘蛛脸(红眼)
 drawTile(45,()=> vary(34,30,28,5));                                              // 蜘蛛腿
 drawTile(46,()=>{                                                                // 金苹果
-  const r=Math.random();
+  const r=txRnd();
   return r<0.2 ? [0,0,0,0] : (r<0.6 ? vary(252,214,88,14) : vary(230,178,52,14));
 });
 const PAL_KING={z:[70,120,52], B:[16,20,12], t:[120,40,120], T:[92,28,92], p:[42,40,80], d:[52,86,40], G:[248,214,72]};
@@ -1936,59 +1959,21 @@ mobTile(49,["tttttttt","tttttttt","ttTttTtt","tttttttt","tTttttTt","tttttttt","T
 mobTile(50,["tttttttt","zzzzzzzz","zzzzzzzz","zzzzzzzz","zzzdzzzz","zzzzzzzz","zdzzzzzz","zzzzzzzz"],PAL_KING); // 王手臂
 mobTile(51,["pppppppp","pppppppp","pppppppp","pppppppp","pppppppp","pppppppp","zzzzzzzz","zzzzzzzz"],PAL_KING); // 王腿
 const PAL_CHK={w:[236,236,232], W:[210,210,204], B:[24,24,26], r:[214,54,40], o:[236,158,44]};
-drawTile(52,()=> Math.random()<0.25 ? vary(210,210,204,6) : vary(236,236,232,5));     // 鸡身(羽毛)
+drawTile(52,()=> txRnd()<0.25 ? vary(210,210,204,6) : vary(236,236,232,5));     // 鸡身(羽毛)
 mobTile(53,["rrwwwwww","rwwwwwww","wwwwwwww","wBwwwwBw","wwwwwwww","ooowwooo","woooooow","wwwwwwww"],PAL_CHK); // 鸡脸(红冠橙喙)
 drawTile(54,()=> vary(236,158,44,8));                                                 // 鸡腿(橙)
 /* ---- 飞龙 Boss 皮肤 (tiles 55-58) ---- */
 const PAL_WYV={d:[44,78,54], D:[26,50,34], b:[96,126,78], e:[255,72,44], w:[236,236,226], m:[122,44,58], M:[160,74,90], k:[16,26,18]};
-drawTile(55,()=> Math.random()<0.32 ? vary(26,50,34,8) : vary(44,78,54,11)); // 龙身鳞
+drawTile(55,()=> txRnd()<0.32 ? vary(26,50,34,8) : vary(44,78,54,11)); // 龙身鳞
 mobTile(56,["ddDDDDdd","dDddddDd","DdeddedD","dDddddDd","dDwDDwDd","ddwwwwdd","dDdwwdDd","dDDddDDd"],PAL_WYV); // 龙头(红眼獠牙)
 mobTile(57,["MmMmMmMm","mMmmmMmM","MmMmmMmM","mMmMmMmm","MmMmmMmM","mMmMmMmm","MmmMmMmM","mMmMmMmM"],PAL_WYV); // 翼膜
-drawTile(58,()=> Math.random()<0.3 ? vary(22,42,28,6) : vary(38,64,44,8));   // 龙腿/尾
-/* ---- 扩展方块材质 (tiles 71-98) ---- */
-drawTile(71,(x,y)=>{                                                             // 砂岩(沉积分层)
-  const band=(y%8===0)||(y%8===1&&((x*5)%7<2));
-  const grain=Math.sin(x*0.8+y*0.2)*4;
-  if(band) return vary(196+grain,184+grain,138,5);
-  return vary(220+grain,210+grain,160,7); });
-drawTile(72,(x,y)=>{ const rib=(x%4===0); return rib? vary(52,104,44,6) : vary(72,132,56,9); }); // 仙人掌侧
-drawTile(73,()=> vary(86,146,66,8));                                             // 仙人掌顶
-drawTile(74,(x,y)=>{ const g=(x*5+((y*3)%7))%9; return g<2? vary(52,36,24,6) : vary(76,54,34,8); }); // 松木侧
-drawTile(75,(x,y)=>{ const d=Math.hypot(x-7.5,y-7.5); return d<2? vary(112,84,52,8) : vary(74,52,32,7); }); // 松木顶
-drawTile(76,()=>{ const r=Math.random(); return r<0.16?[0,0,0,0]:(r<0.6? vary(26,72,44,10) : vary(38,96,56,12)); }); // 松针
-drawTile(77,(x,y)=>{ const row=(y>>2)&1, bx=(x+(row?2:0))%8; return (y%4===3||bx===0)? vary(196,190,184,6) : vary(158,74,58,10); }); // 红砖
-drawTile(78,()=> vary(214,214,208,7));                                           // 羊毛(白)
-drawTile(79,(x,y)=> (y%5===0)? vary(140,110,42,6) : vary(196,164,64,10));        // 干草侧
-drawTile(80,()=> Math.random()<0.3 ? vary(150,120,48,8) : vary(186,156,60,10));  // 干草顶
-drawTile(81,()=> vary(178,110,80,10));                                           // 陶土
-drawTile(82,(x,y)=>{ const c=((x+y)%6<1)? 226:196; return vary(c-30,c-6,255,10); }); // 冰
-drawTile(83,()=>{ const r=Math.random(); return r<0.33? vary(96,92,88,10) : (r<0.7? vary(132,128,124,12) : vary(160,156,150,10)); }); // 砂砾
-const oreTile=(ti,col)=>drawTile(ti,(x,y)=>{
-  const d=Math.min(Math.hypot(x-4.5,y-5.5), Math.hypot(x-11,y-10.5), Math.hypot(x-10,y-3.5));
-  if(d<2.1) return vary(col[0],col[1],col[2],14);
-  const v=118+((x*7+y*13)%3)*6+(Math.random()-0.5)*14; return [v,v,v];
-});
-oreTile(84,[38,38,42]);    // 煤
-oreTile(85,[206,166,122]); // 铁
-oreTile(86,[250,208,72]);  // 金
-oreTile(87,[92,232,226]);  // 钻石
-mobTile(88,["........","...rr...","..rrrr..","..rRrr..","...rr...","...gg...","..g.g...","...g...."],{r:[214,52,48],R:[248,120,110],g:[62,132,48]});   // 玫瑰
-mobTile(89,["........","...y....","..ywy...","..wYw...","...yw...","...gg...","..g.g...","...g...."],{y:[248,222,84],Y:[255,246,180],w:[248,248,240],g:[62,132,48]}); // 雏菊
-mobTile(90,["........","..g...g.","..g.g.g.","g.g.g.g.","g.ggg.g.",".gggggg.","..gggg..","...gg..."],{g:[92,158,66]}); // 高草
-mobTile(91,["........","..rrrr..",".rRrrRr.",".rrrrrr.","..wwww..","...ww...","...ww...","..wwww.."],{r:[188,54,44],R:[236,224,214],w:[224,214,196]}); // 蘑菇
-mobTile(97,["........","...b..b.","..b.bb..","..bb.b..",".b.bb.b.","..bbb...","...b.b..","..b...b."],{b:[136,106,58]}); // 枯木丛
-mobTile(98,["........",".gggggg.","gggggggg","ggg..ggg","gg....gg","gggggggg",".gggggg.","........"],{g:[52,124,54]}); // 睡莲
-drawTile(92,(x,y)=>{ const rib=(x%5===0); return rib? vary(178,102,20,7) : vary(216,132,30,10); }); // 南瓜侧
-drawTile(93,()=> vary(160,96,24,9));                                             // 南瓜顶
-drawTile(94,(x,y)=>{ const d=Math.hypot(x-7.5,y-7.5); return d<4? vary(255,232,150,18) : vary(120,96,50,10); }); // 灯笼
-drawTile(95,(x,y)=>{ const g=(y%5===0)?1:0; return g? vary(60,42,28,5) : vary(92,66,42,8); }); // 深色木板
-drawTile(96,()=>{ const r=Math.random(); return r<0.28? vary(74,116,62,10) : vary(122,122,118,12); }); // 苔石
+drawTile(58,()=> txRnd()<0.3 ? vary(22,42,28,6) : vary(38,64,44,8));   // 龙腿/尾
 /* ---- 史莱姆 / 机甲 材质 (tiles 64-70) ---- */
 const PAL_SLIME={g:[124,214,104], G:[92,178,78], B:[42,86,36], e:[36,64,30]};
-drawTile(64,()=>{ const r=Math.random(); return r<0.25?[0,0,0,0]:(r<0.7?vary(124,214,104,14):vary(92,178,78,14)); }); // 史莱姆胶体
+drawTile(64,()=>{ const r=txRnd(); return r<0.25?[0,0,0,0]:(r<0.7?vary(124,214,104,14):vary(92,178,78,14)); }); // 史莱姆胶体
 mobTile(65,["gggggggg","gggggggg","geeggeeg","geeggeeg","gggggggg","gggeeggg","ggeggegg","gggggggg"],PAL_SLIME);      // 史莱姆脸
 const PAL_MECH={s:[152,158,170], d:[92,98,112], k:[38,42,52], e:[255,86,40], y:[250,206,72]};
-drawTile(66,()=> Math.random()<0.3 ? vary(92,98,112,8) : vary(152,158,170,10)); // 机甲装甲
+drawTile(66,()=> txRnd()<0.3 ? vary(92,98,112,8) : vary(152,158,170,10)); // 机甲装甲
 mobTile(67,["kksssskk",
             "kssssssk",
             "kseeeesk",
@@ -1997,7 +1982,7 @@ mobTile(67,["kksssskk",
             "kskkkksk",
             "kssssssk",
             "kksssskk"],PAL_MECH); // 机甲面板(护目镜)
-drawTile(68,()=> Math.random()<0.4 ? vary(38,42,52,6) : vary(70,76,88,8));      // 机甲关节
+drawTile(68,()=> txRnd()<0.4 ? vary(38,42,52,6) : vary(70,76,88,8));      // 机甲关节
 drawTile(69,()=> vary(255,120,40,26));                                          // 机甲能量核心(发光橙)
 drawTile(70,()=> vary(250,206,72,18));                                          // 警示黄
 /* ---- 沙漠敌人 / 机械敌人 材质 (tiles 134-145) ---- */
@@ -2005,80 +1990,80 @@ const PAL_MUM={w:[214,204,176],W:[176,164,136],B:[26,22,20],g:[196,166,70],r:[19
 drawTile(134,(x,y)=> (y%3===0)? vary(176,164,136,8) : vary(214,204,176,9));            // 木乃伊绷带
 mobTile(135,["wwWwwWww","WwwwwwwW","wBWwwWBw","wwwwwwww","WwwwwwwW","wwWwwWww","WwwwwwwW","wwwwwwww"],PAL_MUM); // 木乃伊脸
 const PAL_ANU={k:[30,28,34],g:[226,182,64],G:[176,134,36],r:[220,60,40],w:[240,236,224]};
-drawTile(136,()=> Math.random()<0.3? vary(176,134,36,10) : vary(30,28,34,8));           // 阿努比斯身(黑金)
+drawTile(136,()=> txRnd()<0.3? vary(176,134,36,10) : vary(30,28,34,8));           // 阿努比斯身(黑金)
 mobTile(137,["kkggggkk","kgggggGk","kgrggrgk","kgggggGk","kkgggkkk","kkwwwwkk","kkgggggk","kkkggkkk"],PAL_ANU); // 阿努比斯头(胡狼)
 drawTile(138,()=> vary(226,182,64,14));                                                 // 黄金饰
 const PAL_SCA={b:[46,58,40],B:[24,32,22],g:[120,190,70],e:[240,180,40]};
-drawTile(139,()=> Math.random()<0.35? vary(24,32,22,6) : vary(64,86,52,9));              // 圣甲虫壳
+drawTile(139,()=> txRnd()<0.35? vary(24,32,22,6) : vary(64,86,52,9));              // 圣甲虫壳
 mobTile(140,["..bbbb..",".bbbbbb.","bbeebbee","bbbbbbbb","bgbbbbgb","bbbbbbbb",".bbbbbb.","..bbbb.."],PAL_SCA); // 圣甲虫背
 const PAL_DRN={m:[150,156,168],d:[74,80,92],e:[255,70,50],y:[250,206,72]};
-drawTile(141,()=> Math.random()<0.3? vary(74,80,92,8) : vary(150,156,168,10));           // 无人机外壳
+drawTile(141,()=> txRnd()<0.3? vary(74,80,92,8) : vary(150,156,168,10));           // 无人机外壳
 mobTile(142,["ddmmmmdd","dmmmmmmd","dmeeeemd","dmeeeemd","dmmmmmmd","ddmmmmdd","dyyyyyyd","ddmmmmdd"],PAL_DRN); // 无人机镜头
-drawTile(143,()=>{ const r=Math.random(); return r<0.5?[0,0,0,0]: vary(200,210,225,12); }); // 旋翼(半透)
-drawTile(144,()=> Math.random()<0.25? vary(180,60,40,10) : vary(96,102,112,10));         // 炮塔底座
+drawTile(143,()=>{ const r=txRnd(); return r<0.5?[0,0,0,0]: vary(200,210,225,12); }); // 旋翼(半透)
+drawTile(144,()=> txRnd()<0.25? vary(180,60,40,10) : vary(96,102,112,10));         // 炮塔底座
 drawTile(145,()=> vary(255,90,50,20));                                                  // 炮口红光
 /* ---- 村民 / 鱼 / 凤凰 材质 (tiles 126-133) ---- */
 const PAL_VIL={s:[196,150,116],S:[164,120,90],r:[126,84,54],B:[40,32,28],c:[96,116,164],n:[176,124,92]};
 mobTile(126,["rrrrrrrr","rssssssr","ssssssss","sBssssBs","ssssnsss","ssssssss","ssSSSSss","ssssssss"],PAL_VIL); // 村民脸(大鼻子)
 drawTile(127,()=> vary(190,144,110,9));                                              // 村民皮肤
-drawTile(128,()=> Math.random()<0.25? vary(78,96,140,8) : vary(96,116,164,10));       // 村民长袍
+drawTile(128,()=> txRnd()<0.25? vary(78,96,140,8) : vary(96,116,164,10));       // 村民长袍
 const PAL_FISH={o:[236,140,58],w:[250,240,220],B:[30,28,30],f:[240,176,90]};
 mobTile(129,["..oooo..",".oooooo.","oooooooo","oBoooooo","oooooooo",".oooooo.","..oooo..","........"],PAL_FISH); // 鱼身
 drawTile(130,()=> vary(240,176,90,12));                                              // 鱼鳍
 const PAL_PHX={f:[255,128,24],F:[255,196,60],w:[255,240,170],B:[60,20,10]};
-drawTile(131,()=>{ const r=Math.random(); return r<0.35? vary(255,196,60,22) : (r<0.75? vary(255,128,24,20) : vary(255,240,170,24)); }); // 凤凰身(炽焰)
+drawTile(131,()=>{ const r=txRnd(); return r<0.35? vary(255,196,60,22) : (r<0.75? vary(255,128,24,20) : vary(255,240,170,24)); }); // 凤凰身(炽焰)
 mobTile(132,["ffFFFFff","fFffffFf","FfBffBfF","fFffffFf","fFwwwwFf","ffwwwwff","fFwwwwFf","ffFFFFff"],PAL_PHX); // 凤凰头
-drawTile(133,()=>{ const r=Math.random(); return r<0.18?[0,0,0,0]:(r<0.6? vary(255,150,30,24) : vary(255,224,120,26)); }); // 凤凰翼
+drawTile(133,()=>{ const r=txRnd(); return r<0.18?[0,0,0,0]:(r<0.6? vary(255,150,30,24) : vary(255,224,120,26)); }); // 凤凰翼
 /* ---- 载具材质 (tiles 151-158) ---- */
-drawTile(151,()=> Math.random()<0.2? vary(150,30,26,8) : vary(206,48,40,10));   // 车身(红)
-drawTile(152,()=> Math.random()<0.2? vary(28,60,140,8) : vary(44,92,196,10));   // 车身(蓝)
+drawTile(151,()=> txRnd()<0.2? vary(150,30,26,8) : vary(206,48,40,10));   // 车身(红)
+drawTile(152,()=> txRnd()<0.2? vary(28,60,140,8) : vary(44,92,196,10));   // 车身(蓝)
 drawTile(153,(x,y)=>{ const f=(x<2||x>13||y<2||y>13); return f? vary(40,42,48,6) : vary(120,180,220,14); }); // 车窗
-drawTile(154,()=>{ const r=Math.random(); return r<0.3? vary(24,24,26,4) : vary(40,40,44,6); }); // 轮胎
+drawTile(154,()=>{ const r=txRnd(); return r<0.3? vary(24,24,26,4) : vary(40,40,44,6); }); // 轮胎
 drawTile(155,()=> vary(226,230,238,10));                                        // 机身白
-drawTile(156,()=> Math.random()<0.25? vary(150,158,170,8) : vary(196,204,216,9)); // 机翼
+drawTile(156,()=> txRnd()<0.25? vary(150,158,170,8) : vary(196,204,216,9)); // 机翼
 drawTile(157,()=> vary(255,196,60,20));                                         // 航行灯/引擎光
-drawTile(158,()=>{ const r=Math.random(); return r<0.3? vary(60,66,80,7) : vary(110,120,140,9); }); // 悬浮摩托机壳
+drawTile(158,()=>{ const r=txRnd(); return r<0.3? vary(60,66,80,7) : vary(110,120,140,9); }); // 悬浮摩托机壳
 /* ---- 沙漠/草原动物材质 (tiles 160-189): 骆驼/马/鳄鱼/大象/狮子/老虎 ---- */
 const PAL_CAM={t:[214,182,132],T:[184,150,102],B:[36,30,24],w:[236,220,182]};
-drawTile(160,()=> Math.random()<0.3? vary(184,150,102,8) : vary(214,182,132,10));      // 骆驼身(沙黄)
+drawTile(160,()=> txRnd()<0.3? vary(184,150,102,8) : vary(214,182,132,10));      // 骆驼身(沙黄)
 mobTile(161,["tttttttt","ttTTTTtt","tTBttBTt","tTTttTTt","tTwwwwTt","ttwwwwtt","ttTTTTtt","tttttttt"],PAL_CAM); // 骆驼脸
 drawTile(162,()=> vary(184,150,102,9));                                                // 骆驼腿
 const PAL_HOR={h:[132,78,42],H:[96,56,30],B:[24,20,18],w:[224,214,196]};
-drawTile(163,()=> Math.random()<0.3? vary(96,56,30,8) : vary(132,78,42,10));           // 马身(栗色)
+drawTile(163,()=> txRnd()<0.3? vary(96,56,30,8) : vary(132,78,42,10));           // 马身(栗色)
 mobTile(164,["HHhhhhHH","HhhhhhhH","hBhhhhBh","hhhhhhhh","hhwwwwhh","hhhhhhhh","HHhhhhHH","HHHHHHHH"],PAL_HOR); // 马脸(白鼻梁)
-drawTile(165,()=> Math.random()<0.35? vary(30,26,22,6) : vary(96,56,30,9));            // 马腿(黑袜)
+drawTile(165,()=> txRnd()<0.35? vary(30,26,22,6) : vary(96,56,30,9));            // 马腿(黑袜)
 const PAL_CRO={g:[70,96,54],G:[46,66,36],y:[230,210,60],B:[20,18,16]};
 drawTile(166,(x,y)=>{ const scale=((x+y)%3===0); return scale? vary(46,66,36,8) : vary(70,96,54,10); }); // 鳄鱼鳞片身
 mobTile(167,["gggggggg","gyBggByg","gggggggg","gggggggg","GGGGGGGG","GGGGGGGG","gggggggg","gggggggg"],PAL_CRO); // 鳄鱼头(黄眼+长吻下颚露牙)
 drawTile(168,()=> vary(56,78,44,8));                                                   // 鳄鱼腿/尾
 const PAL_ELE={g:[142,142,140],G:[112,112,110],w:[240,236,224],B:[26,26,26]};
-drawTile(169,()=> Math.random()<0.3? vary(112,112,110,8) : vary(142,142,140,10));      // 大象身(灰)
+drawTile(169,()=> txRnd()<0.3? vary(112,112,110,8) : vary(142,142,140,10));      // 大象身(灰)
 mobTile(170,["gggggggg","gBggggBg","gggggggg","gwg..gwg","gwg..gwg","gwg..gwg","gg....gg","gg....gg"],PAL_ELE); // 大象脸(象牙+鼻)
 drawTile(171,()=> vary(112,112,110,9));                                                // 大象腿
 const PAL_LIO={t:[196,146,74],T:[110,70,40],B:[24,20,16],w:[240,222,180]};
-drawTile(172,()=> Math.random()<0.3? vary(110,70,40,10) : vary(196,146,74,10));        // 狮子身
+drawTile(172,()=> txRnd()<0.3? vary(110,70,40,10) : vary(196,146,74,10));        // 狮子身
 mobTile(173,["TTTTTTTT","TttttttT","TtBttBtT","TttttttT","TtwwwwtT","TTwwwwTT","TTTTTTTT","TTTTTTTT"],PAL_LIO); // 狮子脸(鬃毛环绕)
 drawTile(174,()=> vary(196,146,74,9));                                                 // 狮子腿
 const PAL_TIG={o:[224,120,42],O:[24,22,20],w:[248,240,220],B:[20,18,16]};
 drawTile(175,(x,y)=>{ const stripe=((x*3+y*5)%7<2); return stripe? vary(24,22,20,6) : vary(224,120,42,10); }); // 老虎身(条纹)
 mobTile(176,["oOoOoOoo",".oooooo.","oOBooBOo","oooooooo","owwwwwwo","oOwwwwOo","o.OOOO.o","........"],PAL_TIG); // 老虎脸
-drawTile(177,()=> Math.random()<0.3? vary(24,22,20,6) : vary(224,120,42,10));          // 老虎腿
+drawTile(177,()=> txRnd()<0.3? vary(24,22,20,6) : vary(224,120,42,10));          // 老虎腿
 const PAL_PAN={w:[240,240,236],B:[26,26,28],p:[210,210,206]};
 drawTile(178,()=> vary(238,238,234,7));                                                // 熊猫身(白)
 mobTile(179,["wwwwwwww","wBwwwwBw","wBBwwBBw","wwwwwwww","wwppppww","wBppppBw","wwppppww","wwwwwwww"],PAL_PAN); // 熊猫脸(黑眼圈)
-drawTile(180,()=> Math.random()<0.3? vary(26,26,28,6) : vary(238,238,234,8));          // 熊猫腿(黑白)
+drawTile(180,()=> txRnd()<0.3? vary(26,26,28,6) : vary(238,238,234,8));          // 熊猫腿(黑白)
 const PAL_PUP={t:[224,178,120],T:[176,130,80],B:[24,20,18],w:[248,240,224]};
-drawTile(181,()=> Math.random()<0.3? vary(176,130,80,8) : vary(224,178,120,10));       // 小狗身(棕黄)
+drawTile(181,()=> txRnd()<0.3? vary(176,130,80,8) : vary(224,178,120,10));       // 小狗身(棕黄)
 mobTile(182,["TTTTTTTT","TttttttT","TtBttBtT","TttttttT","TtwwwwtT","ttwwwwtt","TTTTTTTT","TT....TT"],PAL_PUP); // 小狗脸(垂耳)
 drawTile(183,()=> vary(224,178,120,9));                                                // 小狗腿
 drawTile(184,()=> vary(198,32,32,10));                                                 // 可乐罐(手持道具用)
 /* ---- 地下洞穴生物 (tiles 186-193): 老鼠/蝎子/甲虫 ---- */
 const PAL_RAT={g:[96,90,80], G:[64,60,54], B:[16,14,12], p:[214,164,164]};
-drawTile(186,()=> Math.random()<0.3? vary(64,60,54,7) : vary(96,90,80,8));             // 老鼠身(灰褐)
+drawTile(186,()=> txRnd()<0.3? vary(64,60,54,7) : vary(96,90,80,8));             // 老鼠身(灰褐)
 mobTile(187,["gggggggg","gGggggGg","gBgggBgg","gggppggg","gggggggg","gggggggg","........","........"],PAL_RAT); // 老鼠脸(粉鼻)
 drawTile(188,()=> vary(214,180,180,10));                                               // 老鼠尾/腿(粉)
 const PAL_SCO={k:[44,26,20], K:[26,14,10], r:[196,50,36]};
-drawTile(189,()=> Math.random()<0.3? vary(26,14,10,6) : vary(44,26,20,8));             // 蝎子身(深褐带甲)
+drawTile(189,()=> txRnd()<0.3? vary(26,14,10,6) : vary(44,26,20,8));             // 蝎子身(深褐带甲)
 mobTile(190,["kkkkkkkk","kKrkkrKk","kkkkkkkk","kkkkkkkk","kkkkkkkk","kkkkkkkk","kkkkkkkk","kkkkkkkk"],PAL_SCO); // 蝎子头(红眼)
 drawTile(191,()=> vary(30,18,14,7));                                                   // 蝎子腿/尾刺
 const PAL_BUG={b:[52,74,40], B:[30,44,22], e:[210,60,44]};
@@ -2090,7 +2075,7 @@ mobTile(194,["GgggggggG".slice(0,8),"gGGGGGGg","gGbbbbGg","gGbggbGg","gGbggbGg",
 mobTile(195,["gggggggg","gGGGGGGg","gGbbbbGg","gGbkkbGg","gGbkkbGg","gGbbbbGg","gGGGGGGg","gggggggg"],PAL_SAR); // 石棺顶(法老面具)
 const PAL_PHA={g:[240,200,80], G:[188,146,44], b:[46,62,140], B:[20,18,16], s:[214,178,132]};
 mobTile(196,["gggggggg","gbbbbbbg","gbggggbg","gbgBBgbg","gbgggggb".slice(0,8),"gbssssbg","gbbbbbbg","gggggggg"],PAL_PHA); // 法老脸(金面具+条纹头巾)
-drawTile(197,()=> Math.random()<0.3? vary(188,146,44,10) : vary(240,200,80,12));      // 法老黄金躯干/四肢
+drawTile(197,()=> txRnd()<0.3? vary(188,146,44,10) : vary(240,200,80,12));      // 法老黄金躯干/四肢
 /* ---- 烟花色板 (tiles 198-203): 供烟花爆开时的彩色火星使用 ---- */
 drawTile(198,()=> vary(255,70,90,26));                                                // 烟花·红
 drawTile(199,()=> vary(90,255,120,26));                                               // 烟花·绿
@@ -2140,68 +2125,11 @@ mobTile(229,["llgllgll","gggggggg","ssssssss","ssssssss","ssssssss","ssssssss","
 mobTile(230,["wwwwwwww","wggggggw","pppppppp","pPppppPp","gggggggg","pppppppp","pPppppPp","pppppppp"],PAL_CAES); // 凯撒躯干(白托加+紫袍+金饰)
 mobTile(231,["wwwwwwww","gggggggg","ssssssss","ssssssss","ssssssss","wwwwwwww","wwwwwwww","wwwwwwww"],PAL_CAES); // 凯撒手臂
 mobTile(232,["pppppppp","pppppppp","wwwwwwww","wwwwwwww","wwwwwwww","wwwwwwww","gggggggg","gggggggg"],PAL_CAES); // 凯撒腿(金凉鞋)
-drawTile(233,(x,y)=>{                                                     // 罗马大理石(带灰色纹理)
-  const vein=((x*3+y*5)%11===0)||((x+y*2)%13===0);
-  return vein? vary(198,196,190,6) : vary(236,234,228,7); });
-drawTile(234,(x,y)=>{                                                     // 陶瓦屋顶(半圆瓦楞)
-  const w=x%4; const ridge=(w===0);
-  return ridge? vary(126,54,34,6) : vary(176,80,50,9); });
-drawTile(235,(x,y)=>{                                                     // 方解石: 乳白层理
-  const band=Math.floor(y/3)%2;
-  return band? vary(232,226,214,8) : vary(214,208,196,7); });
-drawTile(236,(x,y)=>{                                                     // 紫晶簇: 晶面高光
-  const d=Math.max(Math.abs(x-7.5),Math.abs(y-7.5));
-  if(d<2.2) return vary(230,210,255,16);
-  return Math.random()<0.18? vary(210,160,255,18) : vary(92,48,148,12); });
-drawTile(237,(x,y)=>{                                                     // 沉船朽木: 深褐+盐白裂纹
-  const crack=((x+y*2)%7===0);
-  return crack? vary(168,156,132,8) : vary(86,58,36,9); });
-/* ---- 新群系材质 (free tiles 250-255 / 99 / 159) ---- */
-drawTile(250,(x,y)=>{                                                     // 盐壳顶: 龟裂多边形盐盘
-  // 用一组伪随机胞格中心画出多边形裂纹网(枯盐湖典型花纹)
-  const cx=Math.floor(x/4)*4+2, cy=Math.floor(y/4)*4+2;
-  const edge = (x%4===0)||(y%4===0)||((x+y)%7===0);
-  if(edge) return vary(150,150,158,6);                                    // 裂缝(灰盐)
-  const glint=Math.random()<0.05;
-  return glint? [244,246,250] : vary(226,224,214,7); });                  // 盐白+偶尔亮晶
-drawTile(251,(x,y)=>{                                                     // 盐壳侧: 沉积层理
-  const band=Math.floor(y/2)%2;
-  if(y>12) return vary(150,142,120,8);                                    // 底部含泥
-  return band? vary(220,216,204,7) : vary(232,230,222,6); });
-drawTile(252,(x,y)=>{                                                     // 盐晶: 半透微光晶体
-  const d=Math.abs(x-8)+Math.abs(y-8);
-  const facet=((x*2+y)%5===0)||((x-y*2)%5===0);
-  if(d<3) return [250,240,246];                                          // 高光核
-  if(facet) return vary(214,196,214,10);                                 // 晶棱(淡粉)
-  return vary(236,224,236,9); });
-drawTile(253,(x,y)=>{                                                     // 黑沙: 火山细砂+风纹
-  const ripple=Math.sin(x*0.8+y*0.3)*1.2;
-  if(Math.random()<0.05) return vary(90,70,66,6);                        // 铁锈斑点
-  const v=34+ripple*4; return vary(v,v-4,v-2,7); });
-drawTile(254,(x,y)=>{                                                     // 玄武岩顶: 六棱柱截面
-  const cx=(Math.floor(x/5))*5+2, cz=(Math.floor(y/5))*5+2;
-  const seam=(x%5===0)||(y%5===0)||((x+y)%9===0);
-  if(seam) return vary(26,26,30,5);                                       // 柱缝
-  return vary(58,58,66,8); });
-drawTile(255,(x,y)=>{                                                     // 玄武岩侧: 竖直柱身
-  const col=x%5;
-  if(col===0) return vary(24,24,28,4);                                    // 柱与柱之间的暗缝
-  const shade=col===1?-6:(col===4?6:0);
-  return vary(56+shade,56+shade,64+shade,7); });
-drawTile(99,(x,y)=>{                                                      // 风蚀岩: 水平层理砂岩(峡谷)
-  const band=Math.floor(y/2)%4;
-  const pal=[[196,120,74],[214,150,96],[176,98,60],[206,134,84]][band];
-  const grit=Math.random()<0.08? -14 : 0;
-  return vary(pal[0]+grit,pal[1]+grit,pal[2]+grit,7); });
-drawTile(159,(x,y)=>{                                                     // 发光矿脉: 暗岩+青蓝荧光脉络
-  const vein=((x*3+y*2)%9<2)||((x-y*2)%11===0)||(Math.abs(x-y)<2);
-  if(vein){ const p=Math.random(); return p<0.5? [90,240,220] : (p<0.8?[150,255,240]:[60,200,255]); }
-  return vary(40,42,50,7); });
-/* ---- 古生物材质 (tiles 235-249): 埃及与罗马神话里的野兽 ---- */
+/* ---- 古生物材质 (tiles 238-249 + 185): 埃及与罗马神话里的野兽 ----
+   斯芬克斯: 狮身复用狮鹫狮身 238, 法老头巾复用石棺侧面 194(黄金+青金石), 人面放在空槽 185;
+   235-237 归还给方解石/紫晶簇/沉船朽木(原先被斯芬克斯皮肤覆盖, 方块显示成了狮身/人脸) */
 const PAL_SPX={s:[224,190,128],S:[188,152,96],b:[46,60,132],g:[236,198,84],B:[24,20,16]};
-mobTile(235,["ssssssss","sSssssSs","ssssssss","ssssssss","sSssssSs","ssssssss","ssssssss","sSssssSs"],PAL_SPX); // 斯芬克斯狮身
-mobTile(236,["bbbbbbbb","bggggggb","gssssssg","ssssssss","sBssssBs","ssssssss","ssBBBBss","gssssssg"],PAL_SPX); // 斯芬克斯人面
-mobTile(237,["bbbbbbbb","bgbgbgbb","bbbbbbbb","bgbgbgbb","bbbbbbbb","bgbgbgbb","bbbbbbbb","bbbbbbbb"],PAL_SPX); // 法老头巾(条纹)
+mobTile(185,["bbbbbbbb","bggggggb","gssssssg","ssssssss","sBssssBs","ssssssss","ssBBBBss","gssssssg"],PAL_SPX); // 斯芬克斯人面
 const PAL_GRIF={f:[214,176,96],F:[176,140,66],b:[92,74,52],y:[240,206,70],B:[20,18,14],w:[236,222,190]};
 mobTile(238,["ffffffff","fFffffFf","ffffffff","fFffffFf","ffffffff","fFffffFf","ffffffff","fFffffFf"],PAL_GRIF); // 狮鹫躯干(狮)
 mobTile(239,["wwwwwwww","wwwwwwww","wBwwwwBw","wwwwwwww","wwyyyyww","wwyyyyww","wwwwwwww","wwwwwwww"],PAL_GRIF); // 狮鹫鹰头(金喙)
@@ -2219,57 +2147,540 @@ mobTile(247,["gggggggg","gggggggg","gyggggyg","gggggggg","gBggggBg","gggggggg","
 const PAL_WORM={s:[206,168,110],S:[164,128,78],r:[186,68,60],B:[26,20,16]};
 mobTile(248,["ssssssss","SSSSSSSS","ssssssss","ssssssss","SSSSSSSS","ssssssss","ssssssss","SSSSSSSS"],PAL_WORM); // 沙虫体节
 mobTile(249,["ssssssss","srrrrrrs","rrBBBBrr","rBrrrrBr","rBrrrrBr","rrBBBBrr","srrrrrrs","ssssssss"],PAL_WORM); // 沙虫口器
-/* ---- 城市材质 (tiles 146-150) ---- */
-drawTile(146,(x,y)=>{ const g=(x%8===0||y%8===0)?1:0; return g? vary(150,150,152,6) : vary(186,186,188,8); }); // 混凝土
-drawTile(147,(x,y)=>{ const line=(y===7||y===8)&&((x>>1)%3!==2); return line? vary(226,214,90,10) : (Math.random()<0.25? vary(44,44,48,5) : vary(58,58,62,7)); }); // 沥青(带黄色道路标线)
-drawTile(148,(x,y)=>{ const rivet=((x%5===2)&&(y%5===2)); return rivet? vary(96,102,112,8) : vary(148,156,168,9); }); // 钢板
-drawTile(149,()=>{ const r=Math.random(); return r<0.45? vary(255,60,160,26) : (r<0.8? vary(90,220,255,26) : vary(255,240,120,26)); }); // 霓虹
-drawTile(150,(x,y)=>{ const f=(x<1||x>14||y<1||y>14); return f? vary(60,66,78,6) : vary(120,190,230,16); }); // 幕墙玻璃(发微光)
-/* ---- 地下 / 岩浆材质 (tiles 122-125) ---- */
-drawTile(122,()=>{ const r=Math.random(); return r<0.4? vary(255,150,30,22) : (r<0.78? vary(238,88,18,20) : vary(255,224,110,24)); }); // 岩浆
-drawTile(123,(x,y)=>{ const r=Math.random(); return r<0.15? vary(64,44,88,10) : vary(26,20,36,8); });   // 黑曜石
-drawTile(124,(x,y)=>{ const d=Math.min(Math.hypot(x-5,y-5),Math.hypot(x-11,y-11));
-  return d<3 ? vary(150,240,255,26) : vary(60,120,160,14); });                                          // 荧光水晶
-drawTile(125,()=>{ const r=Math.random(); return r<0.28? vary(240,110,30,20) : vary(58,40,36,10); });    // 岩浆岩
 /* ---- 新动物材质 (tiles 100-121) ---- */
 const PAL_COW={w:[236,236,232],k:[42,36,32],B:[24,24,26],n:[236,180,180],h:[176,150,120]};
 drawTile(100,(x,y)=>{ const p=(Math.floor(x/4)+Math.floor(y/5))%2; return p? vary(38,32,28,7): vary(232,232,228,7); }); // 奶牛身(黑白斑)
 mobTile(101,["kkwwwwkk","kwwwwwwk","wwBwwBww","wwwwwwww","wwnnnnww","wwnnnnww","wwwwwwww","wwwwwwww"],PAL_COW); // 奶牛脸
 drawTile(102,()=> vary(60,52,46,8));                                                  // 奶牛腿
 const PAL_WOLF={g:[190,190,186],G:[142,142,138],B:[26,26,28],r:[214,74,60],w:[248,248,244]};
-drawTile(103,()=> Math.random()<0.3? vary(150,150,146,8) : vary(196,196,192,9));       // 狼身
+drawTile(103,()=> txRnd()<0.3? vary(150,150,146,8) : vary(196,196,192,9));       // 狼身
 mobTile(104,["GGgggGGG","GggggggG","gBggggBg","gggggggg","ggwwwwgg","gwrrrrwg","ggwwwwgg","gggggggg"],PAL_WOLF); // 狼脸
 drawTile(105,()=> vary(168,168,164,8));                                               // 狼腿
 const PAL_RAB={t:[212,180,150],T:[178,146,118],B:[40,32,28],p:[240,190,190]};
 drawTile(106,()=> vary(206,174,144,9));                                               // 兔身
 mobTile(107,["TtttttT.","ttttttt.","tBtttBt.","ttttttt.","ttpptt..","tttttt..","........","........"],PAL_RAB); // 兔脸
 const PAL_FOX={o:[226,132,52],O:[190,100,36],w:[248,244,236],B:[36,30,26]};
-drawTile(108,()=> Math.random()<0.28? vary(190,100,36,9) : vary(226,132,52,10));       // 狐狸身
+drawTile(108,()=> txRnd()<0.28? vary(190,100,36,9) : vary(226,132,52,10));       // 狐狸身
 mobTile(109,["oOoooooO","OooooooO","oBooooBo","oooooooo","owwwwwwo","owwBBwwo","oowwwwoo","oooooooo"],PAL_FOX); // 狐狸脸
 const PAL_DEER={d:[168,116,66],D:[132,88,50],w:[240,232,216],B:[34,28,24],a:[122,96,56]};
-drawTile(110,()=> Math.random()<0.12? vary(240,232,216,8) : vary(168,116,66,10));      // 鹿身(带白斑)
+drawTile(110,()=> txRnd()<0.12? vary(240,232,216,8) : vary(168,116,66,10));      // 鹿身(带白斑)
 mobTile(111,["aDddddDa","DddddddD","dBddddBd","dddddddd","ddwwwwdd","dwwBBwwd","ddwwwwdd","dddddddd"],PAL_DEER); // 鹿脸
 drawTile(112,()=> vary(120,94,54,8));                                                 // 鹿角/腿
 const PAL_BIRD={b:[64,120,220],B:[40,86,176],y:[248,196,64],k:[28,28,32],w:[236,240,248]};
-drawTile(113,()=> Math.random()<0.3? vary(40,86,176,9) : vary(64,120,220,10));         // 鸟身
+drawTile(113,()=> txRnd()<0.3? vary(40,86,176,9) : vary(64,120,220,10));         // 鸟身
 mobTile(114,["bbbbbbbb","bBbbbbBb","bbbbbbbb","bbyybbbb","bbyyyybb","bbyybbbb","bbbbbbbb","bbbbbbbb"],PAL_BIRD); // 鸟头(黄喙)
 drawTile(115,()=> vary(52,102,198,10));                                               // 鸟翼
-drawTile(116,()=> Math.random()<0.35? vary(44,38,34,6) : vary(72,60,52,8));            // 蝙蝠身
+drawTile(116,()=> txRnd()<0.35? vary(44,38,34,6) : vary(72,60,52,8));            // 蝙蝠身
 drawTile(117,()=> vary(58,48,44,8));                                                  // 蝙蝠翼
-drawTile(118,()=>{ const r=Math.random(); return r<0.2?[0,0,0,0]:(r<0.6? vary(248,140,60,16) : vary(252,206,90,16)); }); // 蝴蝶翼
+drawTile(118,()=>{ const r=txRnd(); return r<0.2?[0,0,0,0]:(r<0.6? vary(248,140,60,16) : vary(252,206,90,16)); }); // 蝴蝶翼
 drawTile(119,(x,y)=> (Math.floor(y/3)%2)? vary(28,26,24,6) : vary(248,206,68,10));     // 蜜蜂身(黄黑条)
-drawTile(120,()=>{ const r=Math.random(); return r<0.45?[0,0,0,0]: vary(228,238,248,10); }); // 蜜蜂/蝴蝶透明翼
+drawTile(120,()=>{ const r=txRnd(); return r<0.45?[0,0,0,0]: vary(228,238,248,10); }); // 蜜蜂/蝴蝶透明翼
 drawTile(121,()=> vary(240,232,210,8));                                               // 通用浅色(角/喙)
 /* ---- 手持武器材质 (tiles 59-63) ---- */
 drawTile(59,()=> vary(206,212,224,10));                                     // 铁刃
 drawTile(60,()=> vary(120,84,46,10));                                       // 木柄/弓臂
-drawTile(61,()=> Math.random()<0.3 ? vary(30,32,38,6) : vary(58,62,72,8));  // 枪身金属
-drawTile(62,()=> Math.random()<0.35? vary(52,74,48,6) : vary(78,104,68,8)); // 火箭筒军绿
+drawTile(61,()=> txRnd()<0.3 ? vary(30,32,38,6) : vary(58,62,72,8));  // 枪身金属
+drawTile(62,()=> txRnd()<0.35? vary(52,74,48,6) : vary(78,104,68,8)); // 火箭筒军绿
 drawTile(63,()=> vary(212,60,44,12));                                       // 弹头红
+/* ---- 高清方块材质 (32px, 可见 30×30): 高度场 + 左上来光浮雕 + 分级调色板 ---- */
+// 色板取自美术规范(creative-spec §2.3): 地面类亮度控制在基色 ±18% 内, 远看不花; 特殊像素(颗粒/亮晶)≤3~4%
+const P_DIRT =txSteps("#4a3322 #5a3e28 #6b4a30 #7e5a3a #93704c",7);
+const P_PEB  =txSteps("#6a5a4a #83735f #9a8670 #b09d86",4);
+const P_GRASS=txSteps("#34561f #3f6425 #557f30 #6e9a3c #8db44e #b5cc72",8);
+const P_STONE=txSteps("#55534f #5f5d5a #78756f #8e8a83 #a3a098 #b8b5ae",8);
+const P_SAND =txSteps("#a9824f #c49c68 #d8b681 #e6cb9c #f3e0ba",8);
+function dirtAt(x,y){                                                     // 泥土: 团粒 + 浮雕小石子 + 暗色土缝 + 草根
+  const n=txFbm(x,y,3,3,3,11), f=txFbm(x,y,8,8,2,12);
+  const w=txWorley(x+.5,y+.5,6,6,13,0.9);
+  if(txH(w.id,0,15)<0.16 && w.d1<1.35){                                   // 嵌着的小石子, 左上亮右下暗
+    const k=(x+.5-w.fx)+(y+.5-w.fy);
+    return txRamp(P_PEB, 0.5-k*0.3+(txH(x,y,17)-0.5)*0.2);
+  }
+  if(txH(x,y,18)<0.012) return [74,53,34];                                // 草根纤维
+  let t=0.2+n*0.6+(f-0.5)*0.34+(txH(x,y,14)-0.5)*0.14;
+  if(w.e<0.9 && txH(w.id,1,16)<0.5) t-=0.2;
+  return txRamp(P_DIRT,t);
+}
+// 草顶: 成簇明暗 + 约 70 根 1px 草叶(朝右上 ±30°, 叶尖亮/叶根暗); 大块明暗压低, 避免远看每格重复成网格
+const GRASS_DECAL=(()=>{ const d=txDecal(); txSeed(9001);
+  for(let i=0;i<70;i++){
+    const x0=txRnd()*30, y0=txRnd()*30, len=3+Math.floor(txRnd()*3), a=(15+txRnd()*60)*Math.PI/180;
+    for(let k=0;k<len;k++) d.set(x0+Math.sin(a)*k, y0-Math.cos(a)*k, k===len-1?2:k===0?-2:1);
+  }
+  return d; })();
+function grassAt(x,y){
+  const big=txFbm(x,y,3,3,2,21), mid=txFbm(x,y,6,6,2,22);
+  let t=0.26+big*0.32+(mid-0.5)*0.35+(txH(x,y,25)-0.5)*0.08;
+  const b=GRASS_DECAL.at(x,y);
+  if(b!==null) t+=b*0.075+0.04;
+  return txRamp(P_GRASS,t);
+}
+txPut(2,dirtAt);                                                          // 泥土
+txPut(0,grassAt);                                                         // 草顶
+txPut(1,(x,y)=>{                                                          // 草侧: 参差的草皮垂边 + 接触阴影
+  const edge=4+Math.round(txVN(x/TX_V*6,0.5,6,1,31)*3)+(txH(x,0,32)<0.2?2:0);
+  if(y<edge){ const c=grassAt(x,y); return txMul(c,1.02-0.025*y); }
+  if(y===edge) return [59,43,28];
+  if(y===edge+1) return txMul(dirtAt(x,y),0.82);
+  return dirtAt(x,y);
+});
+// 石头: 横向拉长的斑驳 + 沃罗诺伊细裂纹(浮雕自动给出暗唇/亮边) + 零星地衣
+const stoneH=(x,y)=>{ const w=txWorley(x+.5,y+.5,4,4,43,0.9); const crack=w.e<0.55 && txH(w.id,0,91)<0.6;
+  return txFbm(x,y,3,5,4,41)*0.75+txFbm(x,y,8,8,2,42)*0.2-(crack?0.3:0); };
+const stoneC=(x,y,h,s)=>{
+  if(txH(x,y,93)<0.008) return [140,148,104];                             // 地衣斑点
+  return txRamp(P_STONE,h*0.95-0.02+s*2.4+(txH(x,y,44)-0.5)*0.08);
+};
+txLit(3,stoneH,stoneC,1,false,0.06);
+txLit(4,(x,y)=>{                                                          // 沙子: 5~7px 风成沙纹 + 细颗粒 + 零星亮晶
+  const warp=txFbm(x,y,3,3,2,51)*6;
+  return 0.55*txFbm(x,y,4,4,3,52)+0.08*Math.sin((x+y*2+warp)*Math.PI*2/10);   // 沿对角的沙纹, 30 = 3×10 可平铺
+},(x,y,h,s)=>{
+  const g=txH(x,y,54);
+  if(g<0.008) return [142,107,69];                                        // 深色矿物砂粒
+  if(g>0.992) return [255,244,218];                                       // 石英亮晶
+  return txRamp(P_SAND,0.1+h*0.95+s*1.6+(txH(x,y,53)-0.5)*0.12);
+},1.1);
+txPut(5,(x,y)=>{                                                          // 水: 深蓝底 + 焦散亮纹
+  const w=txWorley(x+.5,y+.5,4,4,56,1);
+  const n=txFbm(x,y,3,3,2,57);
+  const c=txLerp(txPal("#2a5cc2 #3269d0 #3b75da #4884e4"),n);
+  const k=w.e<1.2?(1.2-w.e)/1.2:0;
+  return txMix(c,[128,180,246],k*0.5);
+});
+const P_BARK=txSteps("#2e2014 #3f2c1b #57402a #6e5033 #82623f",7);
+txLit(6,(x,y)=>{                                                          // 橡木树皮: 竖向深沟(随高度蜿蜒) + 片状树皮
+  const xx=x+2*txVN(0.5,y/TX_V*4,1,4,60);
+  const r=txFbm(xx,y,5,1,3,61), fiss=Math.abs(r-0.5)*2;                   // 0 = 裂缝中心
+  return Math.min(1,fiss*2.4)*0.8+txFbm(x,y,10,3,2,62)*0.3;
+},(x,y,h,s)=>txRamp(P_BARK,0.05+h*0.8+s*2.2+(txH(x,y,63)-0.5)*0.1),1.4,false,0.05);
+const ringsTile=(ti,pal,bark,sd)=>txPut(ti,(x,y)=>{                        // 原木截面: 年轮 + 3px 树皮外圈 + 一道径向裂
+  const dx=x-14.5, dy=y-14.5, dm=Math.max(Math.abs(dx),Math.abs(dy));
+  const r=Math.hypot(dx,dy)*0.7+dm*0.3+(txFbm(x,y,4,4,2,sd)-0.5)*1.5;
+  if(dm>=12) return txRamp(bark,(dm>=14?0.25:0.5)+(txH(x,y,sd+1)-0.5)*0.4);
+  if(dy<-1 && Math.abs(dx-(dy+1)*0.25)<0.6 && dm<10.5) return txRamp(pal,0);   // 径向干裂
+  const ring=(r/2.5)%1;
+  return txRamp(pal,(ring<0.4?0.3:0.7)+(txH(x,y,sd+2)-0.5)*0.12+(r<1.6?0.2:0));
+},true);
+ringsTile(7,txSteps("#7e5d38 #9a7548 #b08a5a #c29d6b",5),P_BARK,64);
+// 木板: 4 块横板(8/7/8/7px), 每块色差 ±6%, 顺纹 + 木节 + 板缝阴影/高光 + 错位接缝与钉眼
+function plankTile(ti,pal,seam,sd){
+  const rows=[0,8,15,23,30];
+  txPut(ti,(x,y)=>{
+    let b=0; while(y>=rows[b+1]) b++;
+    const y0=rows[b], y1=rows[b+1]-1, jx=[9,24,4,17][b];
+    const xx=txW(x-jx,TX_V);
+    if(y===y1||xx===0) return seam;                                      // 板缝 / 接缝
+    if((xx===2||xx===TX_V-2)&&y===y0+2) return txMul(seam,0.8);          // 钉眼
+    const kx=[20,0,11,0][b], kd=Math.hypot((x-kx)/1.6,y-(y0+3.5));          // 每两块板一个木节
+    if(kx && kd<2.2) return txRamp(pal,kd<1?0.05:0.22);
+    const grain=txFbm(xx+b*7,y,1,6,3,sd+b)+(kx&&kd<4?Math.sin(kd*2.4)*0.15:0);
+    let t=0.2+grain*0.6+(txH(x,y,sd+9)-0.5)*0.08+[0.06,-0.05,0.02,-0.03][b];
+    if(y===y0) t+=0.2; if(y===y1-1) t-=0.14;
+    if(xx===1) t+=0.12; if(xx===TX_V-1) t-=0.14;
+    return txRamp(pal,t);
+  });
+}
+plankTile(9,txSteps("#7a5936 #8e6840 #a67c4c #bc915c #cda46e",7),[74,52,32],91);
+plankTile(95,txSteps("#33231a #3f2b1b #4e3521 #5e4028 #6f4c30",7),[34,23,15],95);
+// 树叶: 从透明开始盖约 42 片随机朝向的椭圆叶(可平铺回绕), 左上半亮、右下沿暗, 先盖的更暗 → 有纵深; 约 25% 成簇透空
+function leafTile(ti,cols,hi,rim,count,ra,rb,sd){
+  const d=txDecal(); txSeed(sd);
+  for(let i=0;i<count;i++){
+    const cx=txRnd()*30, cy=txRnd()*30, a=txRnd()*Math.PI, ca=Math.cos(a), sa=Math.sin(a);
+    const base=cols[Math.floor(txRnd()*cols.length)], depth=0.78+0.22*i/count;
+    for(let oy=-5;oy<=5;oy++) for(let ox=-5;ox<=5;ox++){
+      const u=(ox*ca+oy*sa)/ra, v=(-ox*sa+oy*ca)/rb, r=u*u+v*v;
+      if(r>1) continue;
+      let c=base;
+      if(ox+oy<-1.5 && r<0.75) c=hi; else if(ox+oy>1.5 && r>0.45) c=rim;
+      else if(Math.abs(v)<0.18 && Math.abs(u)<0.8) c=txMix(base,hi,0.35);    // 叶脉
+      d.set(cx+ox,cy+oy,txMul(c,depth));
+    }
+  }
+  txPut(ti,(x,y)=>d.at(x,y)||[0,0,0,0]);
+}
+leafTile(8,txPal("#2f5e22 #3f7a2c #5a9a3a"),[134,188,85],[34,70,26],54,3.8,2.4,81);
+function needleTile(ti,sd){                                               // 松针: 暗色枝簇打底(成簇透空) + 1×4px 针叶笔触
+  const d=txDecal(); txSeed(sd); const pal=txSteps("#163a22 #1f4a2e #2c5e3b #3d7a4e",4);
+  for(let y=0;y<TX_V;y++) for(let x=0;x<TX_V;x++) if(txFbm(x,y,3,3,2,sd+1)>0.4) d.set(x,y,txMul(pal[0],0.8+txH(x,y,sd+2)*0.2));
+  for(let i=0;i<240;i++){
+    const x0=txRnd()*30, y0=txRnd()*30, a=(txRnd()<0.5?-1:1)*(0.35+txRnd()*0.5), c=pal[Math.floor(txRnd()*4)], dep=0.75+0.25*i/240;
+    for(let k=0;k<4;k++) d.set(x0+Math.sin(a)*k, y0+Math.cos(a)*k, txMul(k===0?txMix(c,[90,140,100],0.25):c,dep));
+  }
+  txPut(ti,(x,y)=>d.at(x,y)||[0,0,0,0]);
+}
+needleTile(76,76);
+// 圆石: 沃罗诺伊卵石(每块一个暖灰色) + 凹陷灰浆缝(下半偶见苔) + 强浮雕
+function cobbleH(x,y,sd){ const w=txWorley(x+.5,y+.5,4,4,sd,0.9); return w.e<0.7?0:0.35+0.65*Math.sqrt(Math.min(1,w.e/3.2))+txFbm(x,y,6,6,2,sd+1)*0.12; }
+const P_COBS=txPal("#7d7a75 #8e8a83 #9c968c #726e69 #a39e93 #9a8b78");
+function cobbleC(x,y,h,s,sd){
+  const w=txWorley(x+.5,y+.5,4,4,sd,0.9);
+  if(w.e<0.7) return (y>18 && txH(x,y,sd+2)<0.3)?[94,122,58]:txMul([75,71,65],0.9+txH(x,y,sd+3)*0.2);   // 灰浆(+低处苔)
+  const k=clamp(0.8+(h-0.5)*0.35+s*1.4+(txFbm(x,y,4,4,2,sd+4)-0.5)*0.18,0.55,1.3);
+  return txMul(P_COBS[Math.floor(txH(w.id,3,sd)*6)],k);
+}
+txLit(10,(x,y)=>cobbleH(x,y,101),(x,y,h,s)=>cobbleC(x,y,h,s,101),1.6);
+txLit(96,(x,y)=>cobbleH(x,y,961),(x,y,h,s)=>{                            // 苔石: 圆石 + 苔藓(越往上越多, 先长在缝里)
+  const m=txFbm(x,y,3,3,3,962)+(h<0.1?0.12:0);
+  if(m>0.58-0.25*(1-y/30)){ const t=(m-0.4)*1.6+s*1.4+(txH(x,y,963)-0.5)*0.3;
+    return txRamp(txSteps("#3c5723 #4f6e2e #6b8f3a #8dae52",5),t); }
+  return cobbleC(x,y,h,s,961);
+},1.6);
+txPut(11,(x,y)=>{                                                         // 玻璃: 双线窗框 + 斜向反光
+  const e=Math.min(x,y,TX_V-1-x,TX_V-1-y);
+  if(e===0) return [150,178,190];
+  if(e===1) return [214,236,244];
+  if(e===2 && (x===2||y===2)) return [236,248,252,200];
+  const d=x+y;
+  if((d>=11&&d<=12&&x<14)||(d===15&&x<10)||(d>=38&&d<=39&&x>18)) return [250,254,255,196];
+  return [0,0,0,0];
+},true);
+txLit(12,(x,y)=>txWorley(x+.5,y+.5,6,6,121,1).e/3+txFbm(x,y,5,5,2,122)*0.5,(x,y,h,s)=> // 基岩: 高反差碎岩
+  txRamp(txPal("#1b1b1d #29292c #37373b #47474b #58585c #6b6b6f #7e7e82"),h*0.9-0.05+s*2.4+(txH(x,y,123)-0.5)*0.2),1.5);
+const P_SNOW=txPal("#c9d3de #d5dde7 #dfe6ee #e8eef5 #f1f5fa #f9fbfd");
+const snowAt=(x,y)=>{ const t=0.35+(txFbm(x,y,3,3,3,131)-0.5)*0.7+(txH(x,y,132)-0.5)*0.12; return txH(x,y,133)>0.985?[255,255,255]:txRamp(P_SNOW,t); };
+txPut(13,snowAt);                                                         // 雪顶
+txPut(14,(x,y)=>{                                                         // 雪侧: 积雪垂边
+  const edge=5+Math.floor(txVN(x/TX_V*5,0.5,5,1,141)*3)+(txH(x,0,142)<0.18?2:0);
+  if(y<edge) return txMul(snowAt(x,y),y===edge-1?0.9:1);
+  if(y===edge) return txMul(dirtAt(x,y),0.68);
+  return dirtAt(x,y);
+});
+// 砂岩: 比沙子更冷更淡; 两层(各 15px) + 起伏的层理线 + 交错层理 + 风蚀小坑 + 边缘磨损
+const P_SST=txSteps("#8f7757 #9e8663 #b8a07a #cdb994 #dccaa8 #e9ddc2",8);
+txLit(71,(x,y)=>{
+  const wob=Math.round((txVN(x/TX_V*4,0.5,4,1,711)-0.5)*2.2);
+  const yy=txW(y-wob,15), pw=txWorley(x+.5,y+.5,6,6,712,1), pit=pw.d1<0.8 && txH(pw.id,0,716)<0.3;
+  return (yy===14?0:yy===13?0.55:1)*0.8+txFbm(x,y,6,6,2,713)*0.15-(pit?0.5:0);
+},(x,y,h,s)=>{
+  const chip=(x===0||y===0||x===TX_V-1||y===TX_V-1)&&txH(x,y,714)<0.12;
+  return txRamp(P_SST,0.2+h*0.6+s*1.8+Math.sin((x-y*0.6)*0.8)*0.03+(txH(x,y,715)-0.5)*0.1-(chip?0.2:0));
+},1.2,false,0.07);
+txLit(72,(x,y)=>{ const r=x%6; return (r===0?0:r===1||r===5?0.55:1)+txFbm(x,y,4,4,2,721)*0.2; }, // 仙人掌侧: 棱 + 刺
+(x,y,h,s)=>{
+  if(x%6===3 && (y*7+x)%10===2) return [226,214,150];                      // 刺
+  if(x%6===3 && (y*7+x)%10===3) return [120,104,64];
+  return txRamp(txPal("#264f1f #2f5f26 #39702d #438035 #4f903d #5da047 #6cb052"),0.18+h*0.6+s*1.8+(txH(x,y,722)-0.5)*0.12);
+},1.2);
+txPut(73,(x,y)=>{                                                         // 仙人掌顶: 放射棱 + 中心
+  const dx=x-14.5, dy=y-14.5, a=Math.atan2(dy,dx), r=Math.hypot(dx,dy);
+  const rib=Math.cos(a*8);
+  let t=0.45+rib*0.2-r*0.012+(txH(x,y,731)-0.5)*0.12;
+  if(r<2.5) t=0.85;
+  if(Math.max(Math.abs(dx),Math.abs(dy))>13.5) t-=0.25;
+  return txRamp(txPal("#2f5f26 #39702d #438035 #4f903d #5da047 #6cb052 #7cc05f"),t);
+},true);
+const P_PBARK=txPal("#22170f #2d1f14 #39281a #453120 #513a26 #5e452d #6b5035");
+txLit(74,(x,y)=>{ const w=txWorley(x+.5,y+.5,4,6,741,0.8); return clamp(w.e/2.2,0,1)*0.8+txFbm(x,y,6,2,2,742)*0.3; }, // 松木侧: 鳞片状树皮
+  (x,y,h,s)=>txRamp(P_PBARK,0.05+h*0.8+s*2.4+(txH(x,y,743)-0.5)*0.12),1.3,false,0.05);
+ringsTile(75,txPal("#5a4128 #694c2f #785837 #876440 #95714a #a37e55"),P_PBARK,751);
+// 红砖: 4 皮(8/7/8/7) 每皮两块错缝; 每块色差 + 倒角 + 磨损坑点 + 凹陷灰浆
+txLit(77,(x,y)=>{
+  const rows=[0,8,15,23,30]; let b=0; while(y>=rows[b+1]) b++;
+  const xx=txW(x-(b%2?7:0),15), yy=y-rows[b], hgt=rows[b+1]-rows[b];
+  if(yy===hgt-1||xx===14) return 0;
+  const e=Math.min(xx,13-xx,yy,hgt-2-yy);
+  return 0.55+Math.min(e,2)*0.18+txFbm(x,y,6,6,2,771)*0.15-(txH(x,y,772)<0.05?0.3:0);
+},(x,y,h,s)=>{
+  const rows=[0,8,15,23,30]; let b=0; while(y>=rows[b+1]) b++;
+  const bi=Math.floor(txW(x-(b%2?7:0),30)/15)+b*2;
+  if(h===0) return txRamp(txPal("#8a847b #9d968c #afa89e #c0b9ae"),0.35+(txH(x,y,773)-0.5)*0.6+s*1.5);
+  return txRamp(txPal("#62281d #732f22 #853728 #97402e #a64a35 #b3563e #c06549"),0.38+(txH(bi,0,774)-0.5)*0.5+h*0.25-0.12+s*1.8+(txH(x,y,775)-0.5)*0.12);
+},1.4);
+txPut(78,(x,y)=>{                                                         // 羊毛: 交织纤维 + 绒感
+  const fib=txFbm(x,y,10,3,2,783)+txFbm(x,y,3,10,2,784)-1;
+  return txRamp(txPal("#b4b1ab #c3c0ba #d0cdc7 #dbd8d2 #e5e2dc #efece7"),0.55+fib*0.9+(txFbm(x,y,3,3,2,781)-0.5)*0.4+(txH(x,y,782)-0.5)*0.14);
+});
+const P_HAY=txPal("#6f5418 #886a22 #a0802c #b49337 #c6a543 #d6b651 #e4c762");
+txPut(79,(x,y)=>{                                                         // 干草侧: 竖向草秆 + 两道捆绳
+  if((y>=7&&y<=9)||(y>=20&&y<=22)){ const k=(y===7||y===20)?0.3:(y===9||y===22)?0.05:0.18;
+    return txRamp(txPal("#4b3515 #5e4419 #72531f"),k*3+(txH(x,y,791)-0.5)*0.3); }
+  const t=0.25+txFbm(x,y,10,1,2,792)*0.6+(txH(x,y,793)-0.5)*0.15-(y===10||y===23?0.2:0);
+  return txRamp(P_HAY,t);
+});
+txPut(80,(x,y)=>{                                                         // 干草顶: 草秆断面(亮边暗芯) + 交错乱草
+  const w=txWorley(x+.5,y+.5,9,9,801,0.9), n=txFbm(x,y,4,4,2,802);
+  let t=0.35+(n-0.5)*0.5+(txH(x,y,803)-0.5)*0.15;
+  if(w.d1<0.7) t-=0.3; else if(w.d1<1.5) t+=0.25-((x+.5-w.fx)+(y+.5-w.fy))*0.1; else if(w.e<0.6) t-=0.2;
+  return txRamp(P_HAY,t);
+});
+// 陶土(红土台地): 三道 8~12px 色带 + 轻浮雕, 表面比风蚀岩平整
+const P_CLAYB=txPal("#b5694a #c98e6a #9e5a42 #d9b597 #a8603f #c27b57");
+txLit(81,(x,y)=>txFbm(x,y,3,3,3,811)*0.5+txFbm(x,y,2,8,2,813)*0.3,(x,y,h,s)=>{
+  const yy=txW(y+Math.round((txVN(x/TX_V*3,0.5,3,1,812)-0.5)*3),30), b=yy<11?0:yy<19?2:yy<27?1:3;
+  const c=P_CLAYB[[0,1,4,5][b]];
+  return txMul(c,clamp(0.92+(h-0.4)*0.25+s*1.0+(txH(x,y,814)-0.5)*0.08,0.7,1.2));
+},0.8,false,0.05);
+txPut(82,(x,y)=>{                                                         // 冰: 冰裂 + 气泡 + 斜向亮纹
+  const w=txWorley(x+.5,y+.5,3,3,821,1);
+  let t=0.45+(txFbm(x,y,3,3,2,822)-0.5)*0.5+((x+y)%10<2?0.16:0);
+  if(w.e<0.8) t=0.95;
+  if(txH(x,y,823)<0.02) t=1;
+  return txRamp(txPal("#8fb2ee #9dbef2 #abc9f5 #bad4f8 #c9dffb #dceafd"),t);
+});
+txLit(83,(x,y)=>{ const w=txWorley(x+.5,y+.5,6,6,831,0.9); return clamp(w.e/2.4,0,1); },  // 砂砾: 四种灰的卵石
+(x,y,h,s)=>{
+  const w=txWorley(x+.5,y+.5,6,6,831,0.9);
+  if(h<0.18) return txRamp(txPal("#4a4640 #57534d"),txH(x,y,832));
+  const base=txPal("#77736d #86817a #99948b #a8a39a")[Math.floor(txH(w.id,4,833)*4)];
+  return txMul(base,clamp(0.78+h*0.3+s*1.6+(txH(x,y,834)-0.5)*0.1,0.6,1.25));
+},1.6);
+// 矿石: 石头底 + 几团不规则矿粒(每粒左上高光、右下暗边)
+function oreTile(ti,pal){
+  const C=[[8,10],[21,20],[19,6],[7,23]];
+  const inOre=(x,y)=>{ for(let i=0;i<C.length;i++){ const d=Math.hypot(x-C[i][0],y-C[i][1])+(txH(x,y,ti)-0.5)*2.2; if(d<(i===3?2.6:3.8)) return true; } return false; };
+  txLit(ti,(x,y)=>stoneH(x,y)+(inOre(x,y)?0.6:0),(x,y,h,s)=>{
+    if(!inOre(x,y)) return stoneC(x,y,h,s);
+    const lt=!inOre(x-1,y-1), dk=!inOre(x+1,y+1);
+    return txRamp(pal,lt?0.95:dk?0.05:0.35+txH(x,y,ti+1)*0.4+s*1.2);
+  },1,false,0.06);
+}
+oreTile(84,txPal("#141416 #222225 #333337 #45454a"));                    // 煤
+oreTile(85,txPal("#9a7355 #b98f6c #d4aa86 #ecc9a8"));                    // 铁
+oreTile(86,txPal("#a67b18 #d4a92c #f3cf4a #fff0a0"));                    // 金
+oreTile(87,txPal("#1d8f8c #37c1bd #62e5de #c4fff8"));                    // 钻石
+/* 十字植物: 细线条 + 明暗, 透明底(钳制护边) */
+function plantTile(ti,fn){ txPut(ti,(x,y)=>fn(x,y)||[0,0,0,0],true); }
+const stemAt=(x,y,x0,top)=>y>=top && Math.abs(x-(x0+Math.sin(y*0.35)*0.8))<0.9;
+plantTile(90,(x,y)=>{                                                     // 高草: 十来根弯曲草叶, 根深梢亮
+  for(let i=0;i<11;i++){
+    const bx=2+i*2.5+txH(i,0,901)*1.5, top=4+txH(i,1,902)*12, bend=(txH(i,2,903)-0.5)*7;
+    const f=(29-y)/(29-top); if(y<top) continue;
+    const cx=bx+bend*f*f;
+    if(Math.abs(x+.5-cx)<(f<0.8?1.0:0.6)) return txLerp(txPal("#2c5e20 #3f7a2b #549637 #6cae45 #8cc75c"),1-((y-top)/(29-top))*0.8+(i%3)*0.06);
+  }
+});
+plantTile(97,(x,y)=>{                                                     // 枯木丛: 分叉枯枝
+  const segs=[[15,29,15,16],[15,20,8,10],[15,18,22,8],[15,24,5,19],[15,23,25,17],[8,10,5,4],[8,10,11,4],[22,8,26,3],[22,8,18,2],[5,19,2,14],[25,17,28,12]];
+  for(const [x0,y0,x1,y1] of segs){
+    const dx=x1-x0, dy=y1-y0, L=dx*dx+dy*dy, t=clamp(((x+.5-x0)*dx+(y+.5-y0)*dy)/L,0,1);
+    if(Math.hypot(x+.5-(x0+dx*t),y+.5-(y0+dy*t))<(y0===29?1.1:0.75)) return txLerp(txPal("#5e4424 #7a5a31 #97743f #b08d52"),0.3+t*0.6);
+  }
+});
+plantTile(88,(x,y)=>{                                                     // 玫瑰: 层叠花瓣 + 茎叶
+  const dx=x+.5-15, dy=y+.5-9, r=Math.hypot(dx,dy*1.1);
+  if(r<6.2){ const a=Math.atan2(dy,dx), sp=Math.sin(r*1.7+a*2);
+    return txRamp(txPal("#6e1414 #8c1a1a #aa2222 #c62d2b #de4a40 #f07a6a"),0.55+sp*0.2-(dx+dy)*0.035-(r>5.2?0.25:0)); }
+  if(stemAt(x,y,15,14)) return [58,120,44];
+  const lf=(cx,cy,dir)=>{ const u=(x+.5-cx)*dir, v=y+.5-cy; return u>0&&u<6&&Math.abs(v+u*0.35)<2.2-u*0.3; };
+  if(lf(15.5,21,1)||lf(14.5,17,-1)) return txRamp(txPal("#2f6a22 #3f822d #52993a"),(y%3)/3);
+});
+plantTile(89,(x,y)=>{                                                     // 雏菊: 白瓣 + 黄芯
+  const dx=x+.5-15, dy=y+.5-10, r=Math.hypot(dx,dy), a=Math.atan2(dy,dx);
+  if(r<2.4) return r<1.2?[255,236,120]:[232,186,52];
+  if(r<6.3 && Math.cos(a*8)>-0.35) return txMix([250,250,244],[196,198,206],clamp((dx+dy)*0.06+0.3,0,1));
+  if(stemAt(x,y,15,15)) return [62,132,48];
+  if(y>22 && y<27 && Math.abs(x+.5-15-(y-22)*0.9)<1.2) return [76,148,56];
+});
+plantTile(91,(x,y)=>{                                                     // 蘑菇: 红伞白点 + 菌柄
+  const dx=x+.5-15, dy=y+.5-15;
+  if(dy<0 && dy>-10 && Math.hypot(dx,dy*1.35)<11.5 && !(dy>-1.2)){
+    if(Math.hypot(dx+5,dy+5)<1.8||Math.hypot(dx-4,dy+7)<1.6||Math.hypot(dx-7,dy+2.5)<1.3||Math.hypot(dx+1,dy+9)<1.2) return [240,232,222];
+    return txRamp(txPal("#7a1e18 #962820 #b43328 #cc4232 #e05a46"),0.6-(dx+dy)*0.035-(dy>-2.5?0.3:0));
+  }
+  if(dy>=-1.2 && dy<14 && Math.abs(dx)<3.2-dy*0.05) return txRamp(txPal("#b8a88e #cfc0a6 #e2d6c0 #f0e8d8"),0.7-dx*0.1-(dy<0.8?0.4:0));
+});
+plantTile(98,(x,y)=>{                                                     // 睡莲: 圆叶带缺口 + 叶脉
+  const dx=x+.5-15, dy=y+.5-15, r=Math.hypot(dx,dy), a=Math.atan2(dy,dx);
+  if(r>13 || (a>-0.95&&a<-0.55&&r>1.5)) return null;
+  const vein=Math.abs(Math.sin(a*5))<0.12 && r>2;
+  return txRamp(txPal("#1f5a22 #28702b #328435 #3f9841 #50aa50"),vein?0.9:0.35+(txFbm(x,y,4,4,2,981)-0.5)*0.5-(r>11.8?0.3:0)-(dx+dy)*0.01);
+});
+txLit(92,(x,y)=>{ const r=(x+2)%6; return Math.sin(r/6*Math.PI)*0.9+txFbm(x,y,3,6,2,921)*0.15; }, // 南瓜侧: 鼓起的瓜棱
+  (x,y,h,s)=>txRamp(txPal("#9a520e #b06212 #c67218 #d8841f #e69629 #f0a736 #f8b84c"),0.2+h*0.6+s*1.0+(txH(x,y,922)-0.5)*0.1),1.0);
+txPut(93,(x,y)=>{                                                         // 南瓜顶: 放射瓜棱 + 瓜蒂
+  const dx=x-14.5, dy=y-14.5, a=Math.atan2(dy,dx), r=Math.hypot(dx,dy);
+  if(r<2.6) return txRamp(txPal("#3d4a1c #52612a #6a7a38"),0.6-(dx+dy)*0.12);
+  const rib=Math.abs(Math.sin(a*5));
+  return txRamp(txPal("#7e400a #95500e #ad6014 #c2701a #d38322 #e2962e"),0.2+rib*0.6+(txH(x,y,931)-0.5)*0.12-(r<4?0.25:0));
+},true);
+txPut(94,(x,y)=>{                                                         // 灯笼: 铁笼(边框+中竖/横条) + 顶盖 + 暖光玻璃(中心最亮)
+  const e=Math.min(x,y,TX_V-1-x,TX_V-1-y);
+  if(y<4) return txRamp(txPal("#241f1b #2e2a26 #474039"),y===3?0:(x+y)%5===0?0.9:0.4);
+  if(e<2||Math.abs(x-14.5)<1) return e===0?[30,27,24]:[46,42,38];
+  const d=Math.hypot(x-14.5,y-16)/13;
+  return txLerp(txPal("#fff1c4 #ffe39a #ffd27a #f0b458 #d08a38"),d+(txH(x,y,941)-0.5)*0.1);
+},true);
+// 风蚀岩(峡谷): 三道厚薄不一的红褐岩层(边界蜿蜒) + 水平擦痕 + 风蚀凹坑 + 顶部"沙漠漆"垂流
+const STRATA=txPal("#b5623f #c97b52 #d8966a #a45538 #e1af84 #bf7049 #9a4e34 #d48c60");
+txLit(99,(x,y)=>txFbm(x,y,2,10,3,992)*0.45+txFbm(x,y,4,4,2,995)*0.2-((w=>w.d1<0.8&&txH(w.id,0,998)<0.4)(txWorley(x+.5,y+.5,5,5,993,1))?0.3:0),(x,y,h,s)=>{
+  const yy=txW(y+(txFbm(x,y,2,1,2,991)-0.5)*4,30), b=yy<11?0:yy<18?1:yy<26?2:3;
+  const c=STRATA[[1,7,5,2][b]];
+  const varnish=(txH(x,0,996)<0.1 && y<5+txH(x,1,997)*12)?0.8:1;
+  return txMul(c,clamp((0.86+h*0.3+s*1.2+(txH(x,y,994)-0.5)*0.08)*varnish,0.6,1.2));
+},1.3,false,0.05);
+txPut(122,(x,y)=>{                                                        // 岩浆: 流动亮流 + 暗色结壳
+  const n=txFbm(x+txFbm(x,y,3,3,2,1221)*8,y,3,3,3,1222);
+  const w=txWorley(x+.5,y+.5,4,4,1223,1);
+  let t=n*1.1-0.1+(w.e<1.4?0.25:0);
+  return txLerp(txPal("#8e2308 #b93a0c #dc5a12 #f27e1c #fba42c #ffc955 #ffe790"),t);
+});
+txLit(123,(x,y)=>txFbm(x,y,3,3,3,1232),(x,y,h,s)=>{                      // 黑曜石: 深紫黑 + 贝壳状断口高光
+  const w=txWorley(x+.5,y+.5,4,4,1231,1);
+  if(w.e<0.5 && txH(w.id,0,1234)<0.5) return [74,58,102];
+  return txRamp(txPal("#0b0812 #120d1c #1a1327 #231a33 #2f2343 #3f3058 #57447a"),0.1+h*0.5+s*3.5+(txH(x,y,1233)-0.5)*0.1);
+},1.4);
+txPut(124,(x,y)=>{                                                        // 荧光水晶: 暗岩上的菱形晶簇
+  const C=[[9,9,5.5],[21,19,6.5],[22,6,3.4],[7,23,3.8]];
+  for(const [cx,cy,r] of C){ const dx=x+.5-cx, dy=y+.5-cy, m=Math.abs(dx)*0.8+Math.abs(dy)*0.55;
+    if(m<r){ const f=m/r; return txLerp(txPal("#e8feff #a8f2ff #62d6f2 #3aa8d4"),f*0.9+(dx>0?0.15:0)); } }
+  return txRamp(txPal("#24384a #2f4a5e #3b5c72 #486e86"),txFbm(x,y,4,4,2,1241)+(txH(x,y,1242)-0.5)*0.2);
+});
+txPut(125,(x,y)=>{                                                        // 岩浆岩: 暗色岩块 + 发光熔缝
+  const w=txWorley(x+.5,y+.5,5,5,1251,0.9);
+  if(w.e<1.6) return txLerp(txPal("#ffd070 #ff9a2a #e0601a #9c3414"),w.e/1.6+(txH(x,y,1252)-0.5)*0.2);
+  return txRamp(txPal("#2a1d1a #37261f #443026 #523a2d #604535"),0.3+(txH(w.id,1,1253)-0.5)*0.4+txFbm(x,y,6,6,2,1254)*0.3-(w.e<2.4?0.2:0));
+});
+txPut(146,(x,y)=>{                                                        // 混凝土: 细孔 + 浇筑分缝
+  if(x===0||y===0||x===15||y===15) return [140,140,143];
+  if(x===1||y===1||x===16||y===16) return [196,196,198];
+  const t=0.5+(txFbm(x,y,4,4,3,1461)-0.5)*0.45+(txH(x,y,1462)-0.5)*0.14-(txH(x,y,1463)<0.03?0.35:0);
+  return txRamp(txPal("#9f9fa2 #aaaaad #b4b4b7 #bdbdc0 #c6c6c9 #d0d0d2"),t);
+});
+txPut(147,(x,y)=>{                                                        // 沥青: 骨料颗粒 + 黄色虚线
+  if((y===14||y===15) && x%10<6) return txMix([232,206,78],[178,160,70],txH(x,y,1471)*0.5);
+  const g=txH(x,y,1472);
+  return txRamp(txPal("#27272a #303033 #39393c #434346 #505053 #626265"),0.35+(txFbm(x,y,5,5,2,1473)-0.5)*0.4+(g>0.9?0.4:g<0.1?-0.25:0));
+});
+txLit(148,(x,y)=>{                                                        // 钢板: 拉丝纹 + 铆钉 + 板缝
+  const e=Math.min(x,y,TX_V-1-x,TX_V-1-y);
+  const rv=[[4,4],[25,4],[4,25],[25,25],[14.5,4],[14.5,25]].some(([cx,cy])=>Math.hypot(x-cx,y-cy)<1.6);
+  return (e===0?0:0.5)+(rv?0.5:0)+txFbm(x,y,1,15,2,1481)*0.08;
+},(x,y,h,s)=>txRamp(txPal("#5d636d #6f7580 #818893 #939aa5 #a5acb6 #b8bec7"),0.3+h*0.5+s*2.6+(txFbm(x,y,1,15,2,1482)-0.5)*0.4),1.2,true);
+txPut(149,(x,y)=>{                                                        // 霓虹灯: 暗板上的粉/青/黄灯管 + 辉光
+  const tube=(v,c)=>{ const d=Math.abs(v); return d<1?txMix(c,[255,255,255],0.45):d<3?txMul(c,1-(d-1)*0.3):null; };
+  const r=tube(y-7.5,[255,60,170])||tube(y-22,[80,220,255])||tube(x-15+Math.round(Math.sin(y*0.4)*2),[255,236,110]);
+  return r||txRamp(txPal("#1c1624 #241c2e #2c2338"),txH(x,y,1491));
+});
+txPut(150,(x,y)=>{                                                        // 幕墙玻璃: 深色竖框 + 天光渐变 + 斜反光
+  if(x<2||y<2||x===15||x===16) return x===1||y===1?[78,86,100]:[52,58,70];
+  let c=txLerp(txPal("#9fd6f2 #7fbde4 #62a0d0 #4a86bb"),y/30);
+  if(txW(x+y,24)<2||txW(x+y-5,24)===0) c=txMix(c,[232,248,255],0.6);
+  return c;
+},true);
+txPut(159,(x,y)=>{                                                        // 发光矿脉: 暗岩 + 青蓝荧光脉 + 辉光晕
+  const w=txWorley(x*0.9+.5,y+.5,3,4,1591,1);
+  const v=Math.abs(txFbm(x,y,3,3,3,1592)-0.5);
+  if(w.e<0.9||v<0.035) return txLerp(txPal("#dffff8 #8ff5e6 #52dccc #2fb0c8"),Math.min(w.e/0.9,v/0.035)*0.8);
+  const glow=w.e<2.2||v<0.08;
+  return txRamp(glow?txPal("#23484e #2b5a60 #336c70"):txPal("#1f2228 #282b32 #31343c #3a3e47"),txFbm(x,y,5,5,2,1593)+(txH(x,y,1594)-0.5)*0.2);
+});
+txLit(233,(x,y)=>{ const e=Math.min(x,y,TX_V-1-x,TX_V-1-y); return e<1?0.6:1; },(x,y,h,s)=>{   // 罗马大理石: 暖白 + 1px 蜿蜒灰纹 + 2px 倒角
+  const v=Math.abs(Math.sin((x+y*2)*Math.PI/30+txFbm(x,y,3,3,2,2331)*6));     // 周期 30 → 可平铺
+  const v2=Math.abs(txFbm(x,y,4,4,2,2332)-0.5);
+  let c=txMul([230,224,210],0.97+(txFbm(x,y,3,3,2,2333)-0.5)*0.08+(txH(x,y,2334)-0.5)*0.03+s*0.9);
+  if(v<0.09||v2<0.02) c=txMix(c,[185,178,163],v<0.09?0.9:0.6);
+  else if(v<0.2) c=txMul(c,0.965);
+  return c;
+},0.6);
+txLit(234,(x,y)=>{                                                        // 陶瓦屋顶: 筒瓦(左亮右暗) + 每行错位半瓦 + 下沿搭接阴影 + 少量地衣
+  const rows=[0,8,15,23,30]; let b=0; while(y>=rows[b+1]) b++;
+  const xx=txW(x+(b%2?3:0),6);
+  return Math.sin((xx+.5)/6*Math.PI)*0.8+(y-rows[b])*0.03;
+},(x,y,h,s)=>{
+  const rows=[0,8,15,23,30]; let b=0; while(y>=rows[b+1]) b++;
+  if(y===rows[b+1]-1) return [106,46,30];
+  if(txH(x,y,2342)<0.02) return [138,138,90];
+  const xx=txW(x+(b%2?3:0),6);
+  return txMul(txLerp(txPal("#d98250 #c46a3e #a04a2a"),xx/5),clamp(0.85+h*0.2+(txH(x,y,2341)-0.5)*0.08,0.7,1.1));
+},1.2);
+txLit(250,(x,y)=>{ const w=txWorley(x+.5,y+.5,3,3,2501,0.9); return clamp(w.e/2,0,1)*0.7+(w.e>1&&w.e<2?0.25:0); }, // 盐壳顶: 龟裂盐盘 + 翘起的盐边
+(x,y,h,s)=>{
+  const w=txWorley(x+.5,y+.5,3,3,2501,0.9);
+  if(w.e<0.6) return txRamp(txPal("#8e8c92 #9c9aa0 #aaa8ae"),txH(x,y,2502));
+  if(txH(x,y,2503)>0.975) return [250,252,255];
+  return txRamp(txPal("#c8c5bb #d4d1c7 #dedbd2 #e7e5dd #f0eee8"),0.4+h*0.3+s*2+(txH(x,y,2504)-0.5)*0.15);
+},1.5);
+txPut(251,(x,y)=>{                                                        // 盐壳侧: 白灰沉积层理, 底部含泥
+  const yy=y+(txFbm(x,y,3,1,2,2511)-0.5)*2;
+  if(yy>24) return txRamp(txPal("#7d735e #8d826b #9c9078 #a99d85"),0.5+(txFbm(x,y,5,5,2,2512)-0.5)*0.7);
+  const band=Math.floor(yy/3)%3;
+  return txRamp(txPal("#c4c0b5 #d2cfc4 #dedbd1 #e8e6de #f1efe9"),[0.75,0.45,0.9][band]+(txH(x,y,2513)-0.5)*0.2-(txW(Math.floor(yy),3)===0?0.25:0));
+});
+txPut(252,(x,y)=>{                                                        // 盐晶: 淡粉晶面 + 晶棱 + 高光核
+  const dx=x+.5-15, dy=y+.5-15;
+  const f=Math.floor((Math.atan2(dy,dx)+Math.PI)/(Math.PI/3)), r=Math.abs(dx)+Math.abs(dy);
+  const facet=[0.55,0.75,0.9,0.7,0.45,0.35][f%6];
+  const edge=Math.abs(Math.sin(Math.atan2(dy,dx)*3))<0.08;
+  if(r<4) return [252,246,250];
+  return txRamp(txPal("#c9a9c6 #d6b9d3 #e2c9df #ecd8e9 #f5e7f2"),edge?1:facet+(txH(x,y,2521)-0.5)*0.12-r*0.004);
+});
+txPut(253,(x,y)=>{                                                        // 黑沙: 火山细砂 + 风纹 + 锈色斑
+  const rip=Math.sin((x*2+y+txFbm(x,y,3,3,2,2531)*5)*Math.PI*2/10);
+  const g=txH(x,y,2532);
+  if(g<0.012) return [98,72,62];
+  return txRamp(txPal("#1b191b #242123 #2d292b #373234 #433c3d #52494a"),0.4+rip*0.12+(txH(x,y,2533)-0.5)*0.3+(g>0.99?0.4:0));
+});
+txLit(254,(x,y)=>{ const w=txWorley(x+.5,y+.5,4,4,2541,0.55); return clamp(w.e/1.8,0,1); }, // 玄武岩顶: 六棱柱截面
+  (x,y,h,s)=>h<0.3?txRamp(txPal("#18181c #202025"),txH(x,y,2542)):txRamp(txPal("#34343b #3d3d45 #47474f #51515a #5c5c66"),0.3+(txH(txWorley(x+.5,y+.5,4,4,2541,0.55).id,1,2543)-0.5)*0.4+s*2+(txH(x,y,2544)-0.5)*0.15),1.2);
+txLit(255,(x,y)=>{ const c=x%5; return c===0?0:Math.sin(c/5*Math.PI)*0.8+0.2-((y*3+Math.floor(x/5)*11)%17===0?0.5:0); }, // 玄武岩侧: 竖直柱身
+  (x,y,h,s)=>h<0.05?[22,22,26]:txRamp(txPal("#2e2e34 #37373e #414148 #4b4b53 #56565f"),0.2+h*0.6+s*1.6+(txFbm(x,y,6,2,2,2551)-0.5)*0.4),1.2);
+/* 晶洞方解石 / 紫晶簇 / 沉船朽木 (235-237; 原先被斯芬克斯皮肤覆盖, 现斯芬克斯改用 238/185/194) */
+txLit(235,(x,y)=>txFbm(x,y,3,3,3,2351)*0.6+txFbm(x,y,2,6,2,2352)*0.3,(x,y,h,s)=>{   // 方解石: 乳白层理 + 细小晶面
+  const band=txW(Math.floor(y/5+txFbm(x,y,3,1,2,2353)*1.5),2);
+  if(txH(x,y,2354)<0.02) return [246,244,238];
+  return txRamp(txSteps("#bdb6a8 #cfc8ba #ddd7ca #e9e4d9 #f3f0e8",6),0.25+h*0.5+s*1.6+(band?0.08:-0.08));
+},1.0,false,0.05);
+txPut(236,(x,y)=>{                                                        // 紫晶簇: 暗紫岩 + 发光晶柱(亮面/暗面/高光棱)
+  const C=[[8,20,4,9],[17,14,5,13],[25,22,3.5,7],[12,8,3,6],[23,6,3,5]];
+  for(const [cx,cy,w,hh] of C){ const dx=x+.5-cx, dy=y+.5-cy;
+    if(Math.abs(dx)<w*(1-clamp((-dy)/hh,0,1)*0.6) && dy>-hh && dy<hh*0.6){
+      if(Math.abs(dx)<0.6) return [246,228,255];
+      return txLerp(txPal("#f0d8ff #c89af0 #9a62d6 #6a3aa6"),(dx>0?0.55:0.15)+clamp((dy+hh)/(hh*1.6),0,1)*0.4); } }
+  return txRamp(txPal("#2a1a3c #34224a #3e2a58 #4a3468"),txFbm(x,y,4,4,2,2361)+(txH(x,y,2362)-0.5)*0.2);
+});
+txLit(237,(x,y)=>{ const r=txFbm(x,y,6,1,3,2371); return Math.min(1,Math.abs(r-0.5)*4)*0.7+txFbm(x,y,8,2,2,2372)*0.3; }, // 沉船朽木: 深褐顺纹 + 盐白结晶裂纹 + 虫蛀
+(x,y,h,s)=>{
+  const w=txWorley(x+.5,y+.5,3,5,2373,1);
+  if(w.e<0.55 && txH(w.id,0,2374)<0.6) return txMix([200,190,164],[160,150,128],txH(x,y,2375));
+  if(txH(x,y,2376)<0.015) return [34,24,16];
+  return txRamp(txSteps("#3e2a1a #563b25 #6e4c30 #86603d",6),0.15+h*0.7+s*2+(txH(x,y,2377)-0.5)*0.1);
+},1.2,false,0.06);
+// TNT: 红纸筒 + 白色标签 + TNT 字样 / 顶部引信
+const TNT_GLYPH={T:["111","010","010","010","010"],N:["1001","1101","1011","1001","1001"]};
+txPut(33,(x,y)=>{
+  if(y>=9&&y<=20){
+    const lx=x-3, ly=y-10, X0=[0,8,18], ci=lx>=18?2:lx>=8?1:0, g=TNT_GLYPH["TNT"[ci]], cx=(lx-X0[ci])>>1;
+    if(ly>=0&&ly<10&&lx>=0&&lx<24&&cx<g[0].length&&g[ly>>1][cx]==="1") return [40,16,12];
+    return txRamp(txPal("#c8c0b0 #d8d2c4 #e6e0d4 #f0ebe2"),(y===9||y===20)?0.1:0.6+(txH(x,y,331)-0.5)*0.3);
+  }
+  const r=x%6;
+  return txRamp(txPal("#7e1c14 #9c2518 #b8301f #cc3c27 #dc4d32"),(r===0?0.05:r===1?0.85:0.5)+(txH(x,y,332)-0.5)*0.15);
+});
+txPut(34,(x,y)=>{
+  const cx=x%6-2.5, cy=y%6-2.5, d=Math.hypot(cx,cy);
+  if(Math.hypot(x-14.5,y-14.5)<2.2) return [40,34,30];
+  return txRamp(txPal("#6e1811 #8e2217 #ac2d1d #c63926 #d84a30"),d<1.2?0.2:d<2.6?0.75-(cx+cy)*0.08:0.02);
+});
 const atlasTex = gl.createTexture();
 gl.bindTexture(gl.TEXTURE_2D, atlasTex);
 gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,atlasCv);
-gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);
+// 手工 mipmap: 2×2 盒式平均, 颜色只取不透明像素(无黑边), 透明按覆盖率 ≥2/4 保留 → 树叶/植物远看不稀疏。
+// 每格 32px 且按 2 的幂对齐, 32→1px 的前 5 级都不跨格混色; 配合 1px 护边 + NEAREST_MIPMAP_LINEAR
+// (级内最近点, 不做双线性) 采样永远落在本格内 → 远处不闪烁、也不串色。近处仍是 NEAREST 放大的清晰像素。
+{
+  let w=atlasCv.width, src=actx.getImageData(0,0,w,w).data, lv=0;
+  while(w>1){
+    const nw=w>>1, dst=new Uint8Array(nw*nw*4);
+    for(let y=0;y<nw;y++) for(let x=0;x<nw;x++){
+      let r=0,g=0,b=0,a=0,n=0,ra=0,ga=0,ba=0;
+      for(let k=0;k<4;k++){
+        const i=((2*y+(k>>1))*w+2*x+(k&1))*4;
+        ra+=src[i]; ga+=src[i+1]; ba+=src[i+2];
+        if(src[i+3]>=128){ r+=src[i]; g+=src[i+1]; b+=src[i+2]; a+=src[i+3]; n++; }
+      }
+      const o=(y*nw+x)*4;
+      if(n>0){ dst[o]=r/n; dst[o+1]=g/n; dst[o+2]=b/n; } else { dst[o]=ra/4; dst[o+1]=ga/4; dst[o+2]=ba/4; }
+      dst[o+3]=n>=2?a/n:0;
+    }
+    gl.texImage2D(gl.TEXTURE_2D,++lv,gl.RGBA,nw,nw,0,gl.RGBA,gl.UNSIGNED_BYTE,dst);
+    src=dst; w=nw;
+  }
+}
+// WebGL2 可截断 mip 链: 第 5 级每格恰好 1px, 再往下才会多格混色
+if(typeof WebGL2RenderingContext!=="undefined" && gl instanceof WebGL2RenderingContext) gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAX_LEVEL,5);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST_MIPMAP_LINEAR);
 gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
 gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
 gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
@@ -4203,9 +4614,9 @@ const phoenixParts=(()=>{ const P=P16, B=131,H=132,W=133;
 /* ---- 古生物模型: 斯芬克斯/狮鹫/巨蝎/米诺陶/母狼/沙虫 ---- */
 // 斯芬克斯: 狮身 + 人面 + 法老头巾(在四足模板上换掉头部并加头巾)
 const sphinxParts=(()=>{ const P=P16;
-  const parts=quadruped(235,236,235,{bw:3.6,bh:4,bl:7.5,by:9,lh:5,lw:1.5,hs:4,tail:1});
-  parts.push({p:[0,13.6*P,-11.5*P], o:[0,0,0.6*P], s:[3.0*P,3.0*P,1.0*P], tF:237,tS:237,tT:237,tB:237, sw:0,fix:0}); // 头巾
-  parts.push({p:[0,16.4*P,-11.5*P], o:[0,0,0],     s:[0.7*P,1.2*P,0.7*P], tF:236,tS:236,tT:236,tB:236, sw:0,fix:0}); // 额饰(眼镜蛇)
+  const parts=quadruped(238,185,238,{bw:3.6,bh:4,bl:7.5,by:9,lh:5,lw:1.5,hs:4,tail:1});   // 图集: 狮身 238 / 人面 185 / 头巾 194 / 额饰 138
+  parts.push({p:[0,13.6*P,-11.5*P], o:[0,0,0.6*P], s:[3.0*P,3.0*P,1.0*P], tF:194,tS:194,tT:194,tB:194, sw:0,fix:0}); // 头巾
+  parts.push({p:[0,16.4*P,-11.5*P], o:[0,0,0],     s:[0.7*P,1.2*P,0.7*P], tF:138,tS:138,tT:138,tB:138, sw:0,fix:0}); // 额饰(眼镜蛇)
   return parts;})();
 // 狮鹫: 狮身 + 鹰头 + 一对可扇动的翅膀
 const griffinParts=(()=>{ const P=P16;
@@ -4295,7 +4706,7 @@ const MOB_DEFS={
   centurion:{name:"百夫长", hp:70, speed:2.5, w:0.40,h:2.3,  hostile:true, scale:1.2, poof:226, drop:"gapple", armFix:1.4, weapon:"sword", parts:legionaryParts(TILES_CENT)},
   caesar:  {name:"凯撒",   hp:260, speed:2.7, w:0.62,h:4.0,  hostile:true, boss:true, scale:2.1, poof:230, drop:"gapple", armFix:1.4, weapon:"sword", parts:humanoid(TILES_CAES,true)},
   // --- 古生物: 埃及与罗马神话中的野兽 ---
-  sphinx:  {name:"斯芬克斯",hp:170,speed:2.2, w:0.62,h:1.75, hostile:true, boss:true, scale:1.6, poof:236, drop:"gapple", parts:sphinxParts},
+  sphinx:  {name:"斯芬克斯",hp:170,speed:2.2, w:0.62,h:1.75, hostile:true, boss:true, scale:1.6, poof:238, drop:"gapple", parts:sphinxParts},
   griffin: {name:"狮鹫",   hp:90, speed:3.6, w:0.52,h:1.15, hostile:true, fly:true, hover:12, scale:1.3, poof:239, drop:"gapple", parts:griffinParts},
   serqet:  {name:"巨蝎",   hp:38, speed:2.8, w:0.42,h:0.52, hostile:true, spider:true, aggroRange:16, poof:241, drop:"", parts:serqetParts},
   minotaur:{name:"米诺陶", hp:120,speed:2.6, w:0.48,h:2.6,  hostile:true, scale:1.35, poof:244, drop:"gapple", armFix:1.4, weapon:"sword", parts:minotaurParts},
@@ -5866,7 +6277,9 @@ function explode(cx,cy,cz,scale){
 function shadedTileCanvas(tile,dark){
   const c=document.createElement("canvas"); c.width=c.height=16;
   const cx=c.getContext("2d");
-  cx.drawImage(atlasCv,(tile%16)*16,Math.floor(tile/16)*16,16,16,0,0,16,16);
+  // 图集每格 32px、可见区为格内 1..30 → 高质量缩放成 16px 图标面
+  cx.imageSmoothingEnabled=true; cx.imageSmoothingQuality="high";
+  cx.drawImage(atlasCv,(tile%16)*TX_PX+1,Math.floor(tile/16)*TX_PX+1,TX_V,TX_V,0,0,16,16);
   if(dark>0){ cx.globalCompositeOperation="source-atop"; cx.fillStyle=`rgba(0,0,0,${dark})`; cx.fillRect(0,0,16,16); }
   return c;
 }
