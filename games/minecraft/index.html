@@ -2004,12 +2004,18 @@ function drawVillage(s,put){
     put(X,h+4,Z,LANTERN,true); put(X,h+5,Z,DARKPLANK,true);
   }
   // ---- 11) 花草: 草甸上的高草/花/灌木, 水边芦苇, 睡莲 ----
+  // 小水塘按 10% 随机撒睡莲可能一朵都没有 → 另按村落布局定 3 个保底位(只依赖中心与布局, 各区块一致)
+  const lilyAt=new Set();
+  for(const a of [0.7,2.6,4.4]){
+    const rr=P.pondR(a)*0.5, X=Math.round(x+Math.cos(a)*rr), Z=Math.round(z+Math.sin(a)*rr);
+    if(get(X,Z)===3 && !P.dockSet.has(X+","+Z)) lilyAt.add(X+","+Z);
+  }
   for(let X=x-VIL_RP;X<=x+VIL_RP;X++) for(let Z=z-VIL_RP;Z<=z+VIL_RP;Z++){
     const dx=X-x, dz=Z-z, d=Math.hypot(dx,dz); if(d>VIL_WALL-1) continue;
     const c=get(X,Z), r=hash2(X*13+5,Z*11-3);
     if(P.dockSet.has(X+","+Z)) continue;                               // 栈桥木板上不长草/不漂睡莲
     if(c===3){
-      if(d<P.pondR(Math.atan2(dz,dx))-1 && r<0.10) put(X,h+1,Z,LILY,false);
+      if((d<P.pondR(Math.atan2(dz,dx))-1 && r<0.10) || lilyAt.has(X+","+Z)) put(X,h+1,Z,LILY,false);
       continue;
     }
     if(c!==1 && c!==0) continue;
@@ -11667,7 +11673,9 @@ function selftest(){
       const okPool=[...pool].every(t=>["scarab","serqet","spider","sandworm"].includes(t) && MOB_DEFS[t] && MOB_DEFS[t].hostile && !MOB_DEFS[t].boss);
       ok("沙暴袭击者均为沙漠系可战敌人", okPool && pool.size>=3, "谱系="+[...pool].join(","));
       ok("沙暴袭击限定干旱群系", aridBiome(BIO_DESERT)&&aridBiome(BIO_MESA)&&!aridBiome(BIO_SNOW)&&!aridBiome(BIO_FOREST), "ok");
-      const mlenS=mobs.length; const t0=sandRaidType(0.1); const spawned=spawnMob(t0,10,20);
+      // 新世界出生在村口, 10~20 格内有不少落点在村落安全区里(会被拒), 单次 spawnMob 可能合理落空 → 最多试 5 次
+      const mlenS=mobs.length; const t0=sandRaidType(0.1); let spawned=false;
+      for(let k=0;k<5 && !spawned;k++) spawned=spawnMob(t0,10,20);
       ok("沙暴袭击能刷出敌人", spawned && mobs.length-mlenS===1 && mobs[mobs.length-1].type===t0, "type="+t0+" ok="+spawned);
       mobs.length=mlenS;
     }
