@@ -68,6 +68,20 @@
   #hotbar { position:absolute; left:50%; bottom:10px; transform:translateX(-50%); display:flex; background:rgba(0,0,0,.35); border:2px solid rgba(0,0,0,.55); padding:2px; }
   .slot { width:50px; height:50px; border:2px solid #8b8b8b; border-right-color:#555; border-bottom-color:#555; background:rgba(139,139,139,.28); margin:1px; display:flex; align-items:center; justify-content:center; position:relative; }
   .slot.sel { border:3px solid #fff; box-shadow:0 0 0 2px #000 inset; }
+  /* 新手引导卡片(第八轮·本地) */
+  #tutCard { display:none; position:absolute; left:50%; bottom:124px; transform:translateX(-50%); width:min(430px,86vw); z-index:30;   /* 放在物品栏/提示条上方: 顶部两侧有任务框和指南针, 窄屏会压住 */
+    background:rgba(20,16,10,.82); border:2px solid #c9a24a; border-radius:10px; padding:10px 14px 12px; color:#f3e8cf;
+    font:14px/1.55 "Microsoft YaHei",sans-serif; box-shadow:0 6px 24px rgba(0,0,0,.45); pointer-events:auto; }
+  #tutCard .tt-h { display:flex; justify-content:space-between; font-size:12px; color:#c9b184; }
+  #tutSkip { cursor:pointer; } #tutSkip:hover { color:#fff; } #tutSkip b { color:#ffd23f; }
+  #tutTitle { font-size:17px; font-weight:bold; color:#ffd98a; margin:2px 0 3px; }
+  #tutText kbd { display:inline-block; min-width:18px; padding:0 5px; margin:0 1px; border:1px solid #a88c52; border-bottom-width:3px; border-radius:4px;
+    background:#3a2f1c; color:#ffe7a8; font:bold 12px/18px monospace; text-align:center; }
+  #tutCard .tt-bar { height:5px; margin-top:8px; background:rgba(255,255,255,.12); border-radius:3px; overflow:hidden; }
+  #tutBar { display:block; height:100%; width:0; background:linear-gradient(90deg,#e0a93a,#ffe08a); transition:width .2s; }
+  #tutCard.done { border-color:#7fd07a; } #tutCard.done #tutTitle { color:#a6f0a0; }
+  .slot.tut-pulse { animation:tutpulse .9s ease-in-out infinite; }
+  @keyframes tutpulse { 0%,100%{ box-shadow:0 0 0 2px #ffd23f } 50%{ box-shadow:0 0 12px 4px #ffd23f } }
   .slot canvas { width:42px; height:42px; image-rendering:pixelated; }
   #itemname { position:absolute; left:50%; bottom:78px; transform:translateX(-50%); color:#fff; font-size:18px; text-shadow:2px 2px 0 #3f3f3f; opacity:0; transition:opacity .5s; }
   #debug { position:absolute; left:6px; top:6px; color:#fff; font:13px/1.5 Consolas,monospace; text-shadow:1px 1px 0 #000; white-space:pre; display:none; }
@@ -260,6 +274,8 @@
   <div id="npcList"></div>
 </div>
 <div id="hud">
+  <div id="tutCard"><div class="tt-h"><span id="tutStep"></span><span id="tutSkip">跳过引导 ✕ <b>N</b></span></div>
+    <div id="tutTitle"></div><div id="tutText"></div><div class="tt-bar"><i id="tutBar"></i></div></div>
   <div id="npcPrompt"></div>
   <div id="vaultPrompt"></div>
   <div id="sphinxPrompt"></div>
@@ -4992,6 +5008,7 @@ function toggleEnch(){
 function toggleCraft(){
   if(enchOpen) toggleEnch();
   craftOpen=!craftOpen;
+  if(craftOpen) tutEvent("craft");
   const p=document.getElementById("craftPanel");
   p.style.display = craftOpen ? "flex" : "none";
   if(craftOpen){
@@ -5979,7 +5996,7 @@ function setTitleChrome(show){
     const el=document.getElementById(id); if(el) el.style.display=d;
   }
 }
-function enterGame(){ overlay.style.display="none"; hud.style.display="block"; showIntro(); }
+function enterGame(){ overlay.style.display="none"; hud.style.display="block"; beginOnboarding(); }
 /* 完整帮助浮层: H 键或点击标题切换; 打开时若在指针锁定中先释放, 方便阅读 */
 function chronicleHTML(){
   const rt=facTier(faction.rome), et=facTier(faction.egypt);
@@ -6024,7 +6041,74 @@ function toggleFullHelp(){
   const el=document.getElementById("fullhelp");
   const show = el.style.display!=="flex";
   el.style.display = show ? "flex" : "none";
+  if(show) tutEvent("help");
   if(show && document.pointerLockElement) document.exitPointerLock();
+}
+/* ---- 🧭 新手引导(第八轮·本地) ----
+   8 步, 每步由真实操作推进(不是计时翻页): 环顾 → 走 8 格 → 跳 → 挖 3 块 → 放 1 块 → 切到铁剑 → 开合成台 → 看完整帮助。
+   屏幕上方常驻卡片(步骤/按键/进度条), 需要切物品栏时对应格子闪烁; N 或点 ✕ 随时跳过。完成 +20 经验。
+   完成/跳过写入浏览器 localStorage(与世界存档无关, 开新世界也不再弹); 已有进度的老存档(主线已推进或等级>1)不弹。 */
+const TUT_KEY="sandsea_tutorial_v1";
+const TUT_STEPS=[
+  {id:"look",  t:"环顾四周",   d:"移动<kbd>鼠标</kbd>转动视角，看看这片沙海", goal:1.6, prog:()=>tut.c.look},
+  {id:"move",  t:"走起来",     d:"按 <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移动，走 8 格（双击 <kbd>W</kbd> 疾跑）", goal:8, prog:()=>tut.c.move},
+  {id:"jump",  t:"跳一下",     d:"按 <kbd>空格</kbd> 跳跃；半砖和楼梯不用跳，直接走上去", goal:1, prog:()=>tut.c.jump},
+  {id:"mine",  t:"挖掘方块",   d:"对准方块按 <kbd>左键</kbd>，挖 3 块——挖到的都进背包", goal:3, prog:()=>tut.c.mine},
+  {id:"place", t:"放置方块",   d:"按 <kbd>9</kbd> 选中弹跳板，<kbd>右键</kbd> 放在地上，踩上去试试", goal:1, prog:()=>tut.c.place, slot:()=>HOTBAR_ITEMS.indexOf(JUMPPAD)},
+  {id:"sword", t:"拿起武器",   d:"按 <kbd>4</kbd> 或滚动<kbd>滚轮</kbd>切到铁剑——夜里会有怪物出没", goal:1, prog:()=>HOTBAR_ITEMS[selSlot]==="sword"?1:0, slot:()=>HOTBAR_ITEMS.indexOf("sword")},
+  {id:"craft", t:"打开合成台", d:"按 <kbd>B</kbd> 看背包和配方，材料够了点一下就能合成（再按 <kbd>B</kbd> 关闭）", goal:1, prog:()=>tut.c.craft},
+  {id:"help",  t:"更多玩法",   d:"按 <kbd>H</kbd> 看完整帮助。之后跟着左上角的<b>主线任务</b>走，右上角<b>指南针</b>会指向金字塔", goal:1, prog:()=>tut.c.help},
+];
+const tut={active:false, step:0, c:{}, lastYaw:0, lastPitch:0, lastX:0, lastZ:0, flashT:0, html:""};
+function tutSeen(){ try{ return !!localStorage.getItem(TUT_KEY); }catch(e){ return false; } }
+function tutMark(v){ try{ localStorage.setItem(TUT_KEY,v); }catch(e){} }
+function startTutorial(force){
+  if(!force && (tutSeen() || questIdx>0 || lvl>1)) return false;
+  Object.assign(tut,{active:true, step:0, c:{look:0,move:0,jump:0,mine:0,place:0,craft:0,help:0}, lastYaw:player.yaw, lastPitch:player.pitch, lastX:player.x, lastZ:player.z, flashT:0, html:""});
+  renderTut(); return true;
+}
+function endTutorial(kind){
+  tut.active=false; tutMark(kind); renderTut();
+  if(kind==="done"){ addXP(20); sfxLevel && sfxLevel(); showName("🎉 新手引导完成（+20 经验）！跟着左上角的主线任务继续冒险"); }
+  else showName("已跳过新手引导 · 随时按 H 查看完整帮助");
+}
+function tutEvent(k,n){ if(tut.active) tut.c[k]=(tut.c[k]||0)+(n||1); }
+function updateTutorial(dt){
+  if(!tut.active) return;
+  let dy=player.yaw-tut.lastYaw; while(dy>Math.PI) dy-=6.283; while(dy<-Math.PI) dy+=6.283;
+  tut.c.look+=Math.abs(dy)+Math.abs(player.pitch-tut.lastPitch); tut.lastYaw=player.yaw; tut.lastPitch=player.pitch;
+  const mv=Math.hypot(player.x-tut.lastX, player.z-tut.lastZ); if(mv<3 && !riding) tut.c.move+=mv;   // 传送/载具不算
+  tut.lastX=player.x; tut.lastZ=player.z;
+  if(tut.flashT>0){
+    tut.flashT-=dt;
+    if(tut.flashT<=0){ tut.step++; if(tut.step>=TUT_STEPS.length){ endTutorial("done"); return; } }
+  } else {
+    const S=TUT_STEPS[tut.step];
+    if(S.prog()>=S.goal){ tut.flashT=0.9; sfxPickup && sfxPickup(); }
+  }
+  renderTut();
+}
+function renderTut(){
+  const card=document.getElementById("tutCard"); if(!card) return;
+  const on=tut.active && tut.step<TUT_STEPS.length;
+  card.style.display=on?"block":"none";
+  const S=on?TUT_STEPS[tut.step]:null, pulse=S&&S.slot&&tut.flashT<=0 ? S.slot() : -1;
+  document.querySelectorAll("#hotbar .slot").forEach((el,i)=>el.classList.toggle("tut-pulse", i===pulse));
+  if(!on) return;
+  const done=tut.flashT>0, pct=done?100:Math.min(100,Math.round(S.prog()/S.goal*100));
+  const html=(tut.step+1)+"|"+done+"|"+pct;
+  if(html===tut.html) return; tut.html=html;
+  card.classList.toggle("done",done);
+  document.getElementById("tutStep").textContent="新手引导 "+(tut.step+1)+" / "+TUT_STEPS.length;
+  document.getElementById("tutTitle").textContent=(done?"✓ ":"")+S.t;
+  document.getElementById("tutText").innerHTML=S.d;
+  document.getElementById("tutBar").style.width=pct+"%";
+}
+document.getElementById("tutSkip").addEventListener("click",()=>{ if(tut.active) endTutorial("skipped"); });
+function beginOnboarding(){                             // 进入世界: 新玩家走分步引导, 否则保留原来的三条开场提示
+  if(_introShown || tut.active) return;
+  if(startTutorial()){ _introShown=true; return; }
+  showIntro();
 }
 /* 首次进入世界的引导: 分几条依次提示, 只在本次会话弹一次 */
 let _introShown=false;
@@ -6112,6 +6196,7 @@ document.addEventListener("keydown",e=>{
     if(e.code==="KeyE") toggleRide();
     if(e.code==="KeyF"){ e.preventDefault(); if(npcPanelOpen) closeNPCPanel(); else if(talkNpc) openNPCPanel(); }
     if(e.code==="KeyB"){ e.preventDefault(); toggleCraft(); }
+    if(e.code==="KeyN" && tut.active){ e.preventDefault(); endTutorial("skipped"); }   // 新手引导: 跳过(第八轮·本地)
     if(e.code==="KeyJ"){ e.preventDefault(); toggleEnch(); }                  // 神庙附魔祭坛(第五轮·本地)
     if(e.code==="KeyX"){ e.preventDefault(); fishKey(); }                     // 绿洲钓鱼(第五轮·云端)
     if(e.code==="KeyG" && !e.repeat){ e.preventDefault(); startArena(); }   // 斗兽场开战
@@ -6311,6 +6396,7 @@ function doBreak(){
   if(brokeId===KAHEART){ kaHeartBroken(hit.x,hit.y,hit.z); questAdd("mine",1); return; }   // 第六轮·本地: 卡之石不进背包
   if(brokeId===LOOSESAND){ trapFired.add(tkey(hit.x,hit.y,hit.z)); bagAdd(SAND,1); return; }  // 松沙挖开只是普通沙子
   bagAdd(brokeId===GILDED?GOLD_ORE:brokeId===FURNACE_LIT?FURNACE:shapeItem(brokeId),1);        // 挖到的方块进背包, 供合成消耗(鎏金饰面 → 金矿石, 与旧装饰金掉落一致)
+  tutEvent("mine");
   const bonus=applyBiomeYield(brokeId);
   if(bonus) showName("⛏ "+(BLOCKS[brokeId]?BLOCKS[brokeId].name:"方块")+" + 群系产材 "+bonus.join("、"));
   questAdd("mine",1);
@@ -6384,6 +6470,7 @@ function doPlace(){
   const d=lookDir();
   setBlock(px,py,pz, STAIR_MAT[it] ? stairOf(it,d[0],d[2]) : it);   // 楼梯: 朝视线方向升高
   bagTake(it,1);                                       // 放置消耗背包库存(没有也不阻挡, 保持沙盒手感)
+  tutEvent("place");
   sfxPlace();
 }
 function doPick(){
@@ -10723,7 +10810,7 @@ function frame(now){
     } else {
       player.vy -= 28*dt;
       if(player.vy<-55) player.vy=-55;
-      if(keys.Space && player.onGround){ player.vy=8.6; player.onGround=false; }
+      if(keys.Space && player.onGround){ player.vy=8.6; player.onGround=false; tutEvent("jump"); }
     }
     stepOK=player.onGround && !player.flying && !water;
     player.onGround=false;
@@ -10865,6 +10952,7 @@ function frame(now){
     questTick(dt);
     updateNPC(dt);
     updateArch(dt);
+    updateTutorial(dt);
     updateArena(dt);
     updateCurse(dt);
     updateTraps(dt);
@@ -13509,6 +13597,39 @@ function selftest(){
           let okS=true; for(let X=x-2;X<=x+2;X++) if(at(X,h+1,z+D+1)!==S0 || at(X,h+2,z+D-1)!==S0 || at(X,h+3,z+D-3)!==S0) okS=false;
           ok("宫殿大台阶: 三级大理石基座正面各一级大理石楼梯(朝宫门升高)", okS, "palace="+x+","+z);
         }
+      }
+      // ---- 第八轮·本地: 新手引导 ----
+      {
+        const P0={x:player.x,y:player.y,z:player.z,yaw:player.yaw,pitch:player.pitch}, slot0=selSlot, st0={xp,lvl,maxHp,dmgMul,hp}, q0=questIdx;
+        let k0=null; try{ k0=localStorage.getItem(TUT_KEY); localStorage.removeItem(TUT_KEY); }catch(e){}
+        // 门槛: 没看过 + 新档 → 弹; 看过或老档 → 不弹
+        questIdx=0; lvl=1; const g1=startTutorial()===true; tut.active=false;
+        questIdx=3; const g2=startTutorial()===false; questIdx=0;
+        tutMark("done"); const g3=startTutorial()===false; try{ localStorage.removeItem(TUT_KEY); }catch(e){}
+        // 全流程: 每步做对应操作 → 打勾停 0.9 秒 → 下一步
+        const xpA=xp+lvl*1000;                                   // 门槛测试把等级临时改成了 1, 以流程开始这一刻为基准
+        startTutorial(true);
+        const seen=[], card=document.getElementById("tutCard"), shown=card.style.display==="block";
+        const acts={ look:()=>{ player.yaw+=2; }, move:()=>{ for(let k=0;k<9;k++){ player.x+=1; updateTutorial(0.01); } },
+          jump:()=>tutEvent("jump"), mine:()=>tutEvent("mine",3), place:()=>tutEvent("place"),
+          sword:()=>selectSlot(HOTBAR_ITEMS.indexOf("sword")), craft:()=>tutEvent("craft"), help:()=>tutEvent("help") };
+        let pulseOK=false, guard=0;
+        while(tut.active && guard++<40){
+          const S=TUT_STEPS[tut.step]; seen.push(S.id);
+          if(S.id==="sword"){ updateTutorial(0.01); const sl=document.querySelectorAll("#hotbar .slot")[HOTBAR_ITEMS.indexOf("sword")]; pulseOK=!!sl && sl.classList.contains("tut-pulse"); }
+          acts[S.id](); updateTutorial(0.01); const ticked=tut.flashT>0; updateTutorial(1);
+          if(!ticked) break;
+        }
+        let k1=null; try{ k1=localStorage.getItem(TUT_KEY); }catch(e){}
+        const flow=seen.join(",")==="look,move,jump,mine,place,sword,craft,help" && !tut.active && k1==="done" && xp+lvl*1000>xpA && card.style.display==="none";
+        // 跳过
+        try{ localStorage.removeItem(TUT_KEY); }catch(e){}
+        startTutorial(true); endTutorial("skipped"); let k2=null; try{ k2=localStorage.getItem(TUT_KEY); }catch(e){}
+        const skip=!tut.active && k2==="skipped";
+        try{ if(k0===null) localStorage.removeItem(TUT_KEY); else localStorage.setItem(TUT_KEY,k0); }catch(e){}
+        Object.assign(player,P0); selectSlot(slot0); xp=st0.xp; lvl=st0.lvl; maxHp=st0.maxHp; dmgMul=st0.dmgMul; hp=st0.hp; questIdx=q0; updateHearts(); updateXPHUD(); renderTut();
+        ok("新手引导: 新档且没看过才弹、老档/看过不弹; 8 步按真实操作依次推进(切剑时对应格闪烁)、完成 +经验并记住; 可跳过",
+           g1 && g2 && g3 && shown && flow && pulseOK && skip, "gate="+[g1,g2,g3]+" shown="+shown+" steps="+seen.join(",")+" flow="+flow+" pulse="+pulseOK+" skip="+skip);
       }
       { // 守墓石像被盯住时要有常驻提示, 否则玩家以为怪物卡死(用户报 bug: "僵尸突然不动了")
         const mobsP=mobs.slice(); mobs.length=0;
