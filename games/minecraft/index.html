@@ -416,7 +416,7 @@ const FURNACE=81, FURNACE_LIT=82;              // 第七轮·云端: 砂岩熔�
 // 地下密室(第六轮·本地, 图集 280-282): 卡之石——守墓石像的魂核, 打碎它, 与之相连的石像一起崩碎
 const KAHEART=74;
 const OSIRIS=75;
-const SLAB_SST=90, STAIR_N=91, STAIR_E=92, STAIR_S=93, STAIR_W=94, LAMPPOST=95;   // 第七轮·本地: 方块形状系统(见 SHAPES)                              // 奥西里斯宝匣(第六轮·本地, 图集 283/284): 试炼厅三波清完自动开启
+const SLAB_SST=90, STAIR_N=91, STAIR_E=92, STAIR_S=93, STAIR_W=94, LAMPPOST=95, IRONPOST=96;   // 第七轮·本地: 方块形状系统(见 SHAPES)                              // 奥西里斯宝匣(第六轮·本地, 图集 283/284): 试炼厅三波清完自动开启
 // t=顶面贴图 b=底面 s=侧面 (图集编号)
 const BLOCKS = {
   [GRASS]:  {name:"草方块",   t:0,  b:2,  s:1},
@@ -503,6 +503,7 @@ const BLOCKS = {
   [STAIR_S]: {name:"砂岩楼梯", t:71, b:71, s:71},
   [STAIR_W]: {name:"砂岩楼梯", t:71, b:71, s:71},
   [LAMPPOST]:{name:"铁灯柱",   t:264,b:264,s:264},
+  [IRONPOST]:{name:"细铁柱",   t:264,b:264,s:264},   // 不带灯头的细柱: 叠在铁灯柱下做高路灯
 };
 /* ---- 方块形状系统(第七轮·本地): 半砖 / 楼梯 / 灯柱 ----
    非整格方块由若干盒子 b=[x0,y0,z0,x1,y1,z1](格内 0..1)拼成; skip = 不出面的位掩码(按 FACES 下标, 用于楼梯内部贴合面);
@@ -515,6 +516,7 @@ const SHAPES={
   [STAIR_E]: [{b:[0,0,0,0.5,0.5,1], skip:1<<0}, {b:[0.5,0,0,1,1,1]}],
   [STAIR_W]: [{b:[0.5,0,0,1,0.5,1], skip:1<<1}, {b:[0,0,0,0.5,1,1]}],
   [LAMPPOST]:[{b:[0.4375,0,0.4375,0.5625,0.72,0.5625]}, {b:[0.3,0.72,0.3,0.7,1,0.7], tile:{t:94,b:94,s:94}, glow:true}],
+  [IRONPOST]:[{b:[0.4375,0,0.4375,0.5625,1,0.5625]}],
 };
 const STAIRS=[STAIR_N,STAIR_E,STAIR_S,STAIR_W];
 function shapeItem(id){ return STAIRS.indexOf(id)>=0 ? STAIR_N : id; }          // 挖下/选取时归到物品 ID
@@ -2154,11 +2156,11 @@ function drawVillage(s,put){
   }
   // ---- 9) 棕榈 ----
   for(const T of P.palms) drawPalm(put,T.x,h,T.z,T.th,T.lx,T.lz);
-  // ---- 10) 路灯: 圆石底座 + 木杆 + 灯笼 + 深色灯帽 ----
+  // ---- 10) 路灯(第七轮·本地换新): 圆石底座 + 两节细铁柱 + 铁灯柱灯头, 高度同旧款(木杆+灯笼+灯帽) ----
   for(const [X,Z] of P.lamps){
     put(X,h+1,Z,COBBLE,true);
-    put(X,h+2,Z,LOG,true); put(X,h+3,Z,LOG,true);
-    put(X,h+4,Z,LANTERN,true); put(X,h+5,Z,DARKPLANK,true);
+    put(X,h+2,Z,IRONPOST,true); put(X,h+3,Z,IRONPOST,true);
+    put(X,h+4,Z,LAMPPOST,true);
   }
   // ---- 11) 花草: 草甸上的高草/花/灌木, 水边芦苇, 睡莲 ----
   // 小水塘按 10% 随机撒睡莲可能一朵都没有 → 另按村落布局定 3 个保底位(只依赖中心与布局, 各区块一致)
@@ -2190,6 +2192,7 @@ function drawVillage(s,put){
 // 局部坐标 u 横向, v 进深(v=0 为朝水塘的正门墙)
 function drawVillageHouse(P,H,h,put){
   const Q=(u,v,y,id,f)=>{ const [X,Z]=P.toW(H,u,v); put(X,y,Z,id,f!==false); };
+  const stairToward=(du,dv)=>{ const [ax,az]=P.toW(H,0,0), [bx2,bz2]=P.toW(H,du,dv); return stairFacing(bx2-ax,bz2-az); };   // 房屋局部方向 → 世界朝向楼梯
   const hw=H.hw, D=H.D;
   const shell=(y,id,u0,u1,v0,v1)=>{ for(let u=u0;u<=u1;u++) for(let v=v0;v<=v1;v++) if(u===u0||u===u1||v===v0||v===v1) Q(u,v,y,id); };
   const slab=(y,id,u0,u1,v0,v1)=>{ for(let u=u0;u<=u1;u++) for(let v=v0;v<=v1;v++) Q(u,v,y,id); };
@@ -2226,7 +2229,7 @@ function drawVillageHouse(P,H,h,put){
       Q(-2,2,h+6,LEAVES); Q(2,D-2,h+6,LANTERN);
       Q(0,D-2,h+6,H.v2<0.5?BRICK:HAY); Q(0,D-2,h+7,H.v2<0.5?BRICK:HAY);   // 屋顶小烟囱/草垛
     }
-    for(let k=1;k<=4;k++) Q(hw+1,D-1-k,h+k,trim);                       // 侧墙外一列台阶通屋顶
+    for(let k=1;k<=4;k++) Q(hw+1,D-1-k,h+k,stairToward(0,-1));          // 侧墙外一列真楼梯通屋顶(朝门口方向升高, 不用一格格跳)
   } else {
     const PL=[PLASTER,PLASTER_ROSE,PLASTER_WHITE,PLASTER][Math.floor(H.v1*4)];   // 灰泥色: 赭黄/玫瑰/石灰白/赭黄
     const ROOF=H.v2<0.7?ROOFTILE:DARKPLANK;
@@ -2242,7 +2245,7 @@ function drawVillageHouse(P,H,h,put){
     for(let y=h+2;y<=h+6;y++){ Q(-hw,mid,y,DARKPLANK); Q(hw,mid,y,DARKPLANK); }                 // 侧墙中柱
     for(let y=h+5;y<=h+6;y++) Q(0,0,y,DARKPLANK);                                               // 正面二层中柱
     Q(-2,D-1,h+5,DARKPLANK); Q(-1,D-1,h+6,DARKPLANK); Q(2,D-1,h+5,DARKPLANK); Q(1,D-1,h+6,DARKPLANK);   // 背面人字斜撑
-    Q(0,0,h+2,AIR); Q(0,0,h+3,AIR); Q(0,-1,h+1,COBBLE);                 // 门 + 台阶
+    Q(0,0,h+2,AIR); Q(0,0,h+3,AIR); Q(0,-1,h+1,stairToward(0,1));      // 门 + 朝屋门升高的楼梯台阶(原圆石整块要跳)
     for(const u of [-2,2]){ Q(u,0,h+3,WINDOW_WOOD); Q(u,D-1,h+3,WINDOW_WOOD); Q(u,0,h+5,WINDOW_WOOD); Q(u,0,h+6,WINDOW_WOOD); }   // 一层小窗 + 二层高窗
     for(const v of [1,D-2]) for(const u of [-hw,hw]){ Q(u,v,h+3,WINDOW_WOOD); Q(u,v,h+5,WINDOW_WOOD); Q(u,v,h+6,WINDOW_WOOD); }
     for(const u of [-2,2]){ Q(u,-1,h+1,LEAVES); Q(u,-1,h+2,(u<0)===(H.v1<0.5)?ROSE:DAISY,false); }   // 窗下落地花丛(贴地, 不再悬空)
@@ -4816,6 +4819,8 @@ const RECIPES=[
    run(){ giveBlock(STAIR_N,4); return "获得 砂岩楼梯 x4"; }},
   {name:"铁灯柱", desc:"细铁柱顶一盏灯，照亮街道与庭院", cost:[[IRON_ORE,1],[COAL_ORE,1]],
    run(){ giveBlock(LAMPPOST,2); return "获得 铁灯柱 x2"; }},
+  {name:"细铁柱", desc:"叠在铁灯柱下面，做成街边高路灯", cost:[[IRON_ORE,1]],
+   run(){ giveBlock(IRONPOST,4); return "获得 细铁柱 x4"; }},
   // 第五轮·云端: 沙漠药水(每次酿 2 瓶, 按 V 打开药水面板饮用)
   {name:"🧪 酿造·耐热药水", desc:"仙人掌汁 + 盐晶：3 分钟不怕沙暴刮伤与火山灼烤", cost:[[CACTUS,3],[SALTCRYSTAL,1]], run(){ return brewPotion("heat"); }},
   {name:"🧪 酿造·迅捷药水", desc:"仙人掌汁 + 金：90 秒移动速度 +35%", cost:[[CACTUS,2],[GOLD_ORE,1]], run(){ return brewPotion("swift"); }},
@@ -12259,7 +12264,8 @@ function selftest(){
         }catch(e){ vErr=e.message; }
         const c=id=>cnt[id]||0;
         ok("村落生成无异常, 有水塘/睡莲/芦苇", !vErr && c(WATER)>=40 && c(LILY)>0 && c(REEDS)>0 && c(TALLGRASS)+c(REEDS)>=20, vErr||("水="+c(WATER)+" 睡莲="+c(LILY)+" 芦苇="+c(REEDS)+" 高草="+c(TALLGRASS)));
-        ok("村落有路灯(≥8 盏灯笼)与石板路", c(LANTERN)>=8 && c(COBBLE)>=60 && P.lamps.length>=4, "灯笼="+c(LANTERN)+" 圆石="+c(COBBLE)+" 路灯="+P.lamps.length);
+        ok("村落有路灯(灯笼+铁灯柱 ≥8 盏光源)与石板路", c(LANTERN)+c(LAMPPOST)>=8 && c(LAMPPOST)>=P.lamps.length && c(IRONPOST)===2*P.lamps.length && c(COBBLE)>=60 && P.lamps.length>=4,
+           "灯笼="+c(LANTERN)+" 铁灯柱="+c(LAMPPOST)+" 细铁柱="+c(IRONPOST)+" 圆石="+c(COBBLE)+" 路灯="+P.lamps.length);
         ok("村屋有窗/灰泥或泥砖墙/陶瓦或木屋顶", (c(GLASS)+c(WINDOW_WOOD))>=P.houses.length*4 && (c(CLAY)+c(CAVECALC)+c(WOOL)+c(PLASTER)+c(PLASTER_ROSE)+c(PLASTER_WHITE))>=100 && (c(ROOFTILE)+c(DARKPLANK))>=40,
            "窗="+(c(GLASS)+c(WINDOW_WOOD))+" 墙="+(c(CLAY)+c(CAVECALC)+c(WOOL)+c(PLASTER)+c(PLASTER_ROSE)+c(PLASTER_WHITE))+" 顶="+(c(ROOFTILE)+c(DARKPLANK)));
         ok("村落有棕榈/集市摊/水井/苔石墙拱门", P.palms.length>=3 && !!P.market && !!P.well && P.gates.length===2 && c(MOSSY)>=30 && (c(LOG)+c(PALM_LOG))>=20,
@@ -12298,6 +12304,16 @@ function selftest(){
             if(id===LANTERN || (y<=hv+3 && SOLID(id))) archBad.push(o+"/"+(y-hv)+"="+id);
           }
           ok("拱门口 3×3 通畅且拱顶不再塞发光灯笼", archBad.length===0, archBad.join(" ")||"ok");
+          // 第七轮·本地: 木筋屋门口楼梯朝屋门升高; 泥砖屋侧梯是真楼梯; 路灯 = 细铁柱×2 + 铁灯柱
+          const SD={[STAIR_N]:[0,-1],[STAIR_E]:[1,0],[STAIR_S]:[0,1],[STAIR_W]:[-1,0]};
+          const stBad=[];
+          for(const H of P.houses){
+            if(H.kind==="timber"){ const [sx,sz]=P.toW(H,0,-1), [dx,dz]=P.toW(H,0,0), id=at2(sx,hv+1,sz), d=SD[id]; if(!d || d[0]!==dx-sx || d[1]!==dz-sz) stBad.push("门"+sx+","+sz+"="+id); }
+            else for(let k=1;k<=4;k++){ const [sx,sz]=P.toW(H,H.hw+1,H.D-1-k), id=at2(sx,hv+k,sz); if(STAIRS.indexOf(id)<0) stBad.push("侧梯"+k+"@"+sx+","+sz+"="+id); }
+          }
+          const lampBad=P.lamps.filter(([X,Z])=>!(at2(X,hv+2,Z)===IRONPOST && at2(X,hv+3,Z)===IRONPOST && at2(X,hv+4,Z)===LAMPPOST));
+          ok("村落换新: 木筋屋门口楼梯朝屋门升高、泥砖屋侧墙通屋顶是真楼梯、路灯 = 细铁柱×2 + 铁灯柱", !stBad.length && !lampBad.length,
+             (stBad.join(" ")||"ok")+" 坏路灯="+lampBad.map(q=>q.join(",")).join(" "));
           let boxBad=[];
           for(const H of P.houses) if(H.kind==="timber") for(const u of [-2,2]){
             const [X,Z]=P.toW(H,u,-1);
