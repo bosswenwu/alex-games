@@ -397,6 +397,8 @@ const LOOSESAND=62;                           // 松沙陷坑: 外观与沙子�
 const PLASTER=63, PLASTER_ROSE=64, PLASTER_WHITE=65, WINDOW_WOOD=66, PALM_LOG=67, PALM_LEAF=68, REEDS=69, GILDED=70;
 // 金字塔墓室(第四轮, 图集 275/276): 象形文字砖(侧面彩绘经文, 可左右镜像——古埃及文字本就可左右书写) · 星空墓顶(底面青金石蓝 + 金色五角星)
 const HIERO=71, STARCEIL=72;
+// 地下密室(第六轮·本地, 图集 280-282): 卡之石——守墓石像的魂核, 打碎它, 与之相连的石像一起崩碎
+const KAHEART=74;
 // t=顶面贴图 b=底面 s=侧面 (图集编号)
 const BLOCKS = {
   [GRASS]:  {name:"草方块",   t:0,  b:2,  s:1},
@@ -471,13 +473,14 @@ const BLOCKS = {
   [GILDED]: {name:"鎏金饰面",   t:269,b:269,s:269},   // 装饰金(替代建筑外立面上的金矿石); 挖下得金矿石
   [HIERO]:  {name:"象形文字砖", t:71, b:71, s:275},   // 墓室/走廊墙面: 侧面刻彩绘经文, 顶底仍是砂岩
   [STARCEIL]:{name:"星空墓顶",  t:71, b:276,s:71},    // 只有底面(抬头看见的那面)是星空, 从外面挖开仍像砂岩
+  [KAHEART]:{name:"卡之石",    t:282,b:282,s:282},   // 石像回廊尽头的魂核(自发光), 挖碎 → 连接的守墓石像全部崩碎
 };
 // 植物可以直接走过去; 冰/玻璃/树叶不完全遮挡; 岩浆会陷进去
 const SOLID   = id => id!==AIR && id!==WATER && id!==LAVA && !PLANT(id);   // 碰撞
 const OPAQUE  = id => id!==AIR && id!==WATER && id!==LEAVES && id!==GLASS
                       && id!==PINE_LEAF && id!==PALM_LEAF && id!==ICE && !PLANT(id);  // 完全遮挡
 const OCCLUDE = id => SOLID(id) && id!==GLASS && id!==ICE;          // 产生环境光遮蔽
-const EMISSIVE= id => id===LANTERN || id===LAVA || id===CRYSTAL || id===MAGMA || id===NEON || id===WINDOW || id===GLOWVEIN || id===SALTCRYSTAL || id===AMETHYST; // 自发光
+const EMISSIVE= id => id===LANTERN || id===LAVA || id===CRYSTAL || id===MAGMA || id===NEON || id===WINDOW || id===GLOWVEIN || id===SALTCRYSTAL || id===AMETHYST || id===KAHEART; // 自发光
 /* 物品栏: 常用道具全部落在 1-9 键上, TNT 固定在 9 键 */
 const HOTBAR_ITEMS = ["firework", "grapple", "cola", "sword", "gun", "rpg", "bow", TNT, JUMPPAD];
 
@@ -1075,6 +1078,26 @@ function drawStructure(s,put){
     for(const [ox,oz,bx2,bz2] of pyramidNiches(s)){
       put(ox,h+1,oz,AIR,true); put(ox,h+2,oz,AIR,true); put(ox,h+3,oz,GILDED,true);
       put(bx2,h+1,bz2,SUSGRAVEL,true); put(bx2,h+2,bz2,HIERO,true);
+    }
+    // --- 地下密室·石像回廊(第六轮·本地): 墓室东侧楼梯向西下行 8 级 → 西侧南北向长廊; 尽头金座上是卡之石 ---
+    const G=tombGallery(s);
+    if(G){
+      box(G.x0-1,G.fy,G.z0-1,G.x1+1,G.fy+6,G.z1+1,SANDSTONE,true);          // 外壳
+      box(G.x0,G.fy+1,G.z0,G.x1,G.fy+5,G.z1,AIR,false);                     // 掏空
+      for(let Y=G.fy+1;Y<=G.fy+5;Y++){
+        for(let Z=G.z0;Z<=G.z1;Z++){ put(G.x0-1,Y,Z,HIERO,true); put(G.x1+1,Y,Z,HIERO,true); }
+        for(let X=G.x0;X<=G.x1;X++){ put(X,Y,G.z0-1,HIERO,true); put(X,Y,G.z1+1,HIERO,true); }
+      }
+      box(G.x0,G.fy+6,G.z0,G.x1,G.fy+6,G.z1,STARCEIL,false);
+      for(let Z=G.z0;Z<=G.z1;Z++) put(G.xc,G.fy,Z,GILDED,true);               // 地面金线直指卡之石
+      for(let Z=G.z0+2;Z<=G.z1-2;Z+=6){ put(G.x0,G.fy+4,Z,LANTERN,true); put(G.x1,G.fy+4,Z,LANTERN,true); }   // 稀疏壁灯: 昏暗才有压迫感
+      put(G.ka[0],G.ka[1]-1,G.ka[2],GILDED,true); put(G.ka[0],G.ka[1],G.ka[2],KAHEART,true);
+      for(let i=0;i<=7;i++){                                                 // 楼梯: 第 i 级台阶顶面 y=h-1-i
+        const X=x+3-i;
+        put(X,h-1-i,z-1,SANDSTONE,true);
+        for(let Y=h-i;Y<=h-i+2;Y++) put(X,Y,z-1,AIR,true);
+        if(i>=3){ put(X,h-i+3,z-1,STARCEIL,true); for(let Y=h-i;Y<=h-i+2;Y++){ put(X,Y,z-2,HIERO,true); put(X,Y,z,HIERO,true); } }
+      }
     }
     // --- 上层藏宝室(需要挖进去) ---
     box(x-2,h+9,z-2,x+2,h+11,z+2,AIR,false);
@@ -3732,6 +3755,41 @@ txPut(276,(x,y)=>{                                                        // 星
   }
   return base;
 });
+{ // 守墓石像(第六轮·本地): 280 脸(法老头巾条纹 + 松石绿眼 + 胡须) · 281 躯干(宽金项圈 + 竖褶裙) · 282 卡之石(黑曜底 + 发光生命符 + 放射裂纹)
+  const SST=(x,y,k)=>txRamp(P_SST,clamp(0.35+txFbm(x,y,4,4,2,k)*0.4+(txH(x,y,k+1)-0.5)*0.1,0,1));
+  txPut(280,(x,y)=>{
+    const base=SST(x,y,2801);
+    if(y<6 || x<5 || x>24){                                                 // 头巾: 金/青金横条
+      const band=Math.floor((y<6?y:y+(x<5?x:29-x))/3)%2;
+      return txMul(band?[214,168,62]:[46,86,150],0.9+txH(x,y,2803)*0.15);
+    }
+    if(y>=11&&y<=13 && ((x>=8&&x<=12)||(x>=17&&x<=21))){                 // 眼: 黑描边 + 松石绿瞳
+      if(y===12 && (x===10||x===19||x===11||x===18)) return [90,235,210];
+      return [34,28,24];
+    }
+    if(y===9 && ((x>=8&&x<=12)||(x>=17&&x<=21))) return txMul(base,0.6);  // 眉
+    if(x>=14&&x<=15&&y>=13&&y<=18) return txMul(base,y===18?0.6:0.85);    // 鼻
+    if(y===21 && x>=11&&x<=18) return txMul(base,0.6);                      // 嘴
+    if(y>=24 && x>=13&&x<=16) return txMul([120,92,60],0.9+(y%2)*0.12);     // 法老胡须
+    return base;
+  });
+  txPut(281,(x,y)=>{
+    const base=SST(x,y,2811);
+    if(y<9){ const r=y%3; return r===2?[34,28,24]:(Math.floor(x/3)+y)%2?[214,168,62]:[58,160,150]; }   // 宽金项圈(usekh)
+    if(y>=17) return txMul(base, x%4===0?0.72:1.0);                        // 褶裙竖纹
+    if(y===16) return [214,168,62];                                         // 腰带
+    return base;
+  });
+  txPut(282,(x,y)=>{
+    const cx=x-14.5, cy=y-14.5, r=Math.hypot(cx,cy);
+    const ank=(Math.abs(cx)<=1.5 && y>=12 && y<=26) || (y>=12&&y<=13&&Math.abs(cx)<=6) || (Math.abs(Math.hypot(cx,(y-7.5)*1.15)-4)<1.4 && y<=12);
+    if(ank) return txMix([255,226,120],[120,245,220],clamp(r/14,0,1));     // 生命符(发光)
+    const crack=Math.abs(Math.sin(Math.atan2(cy,cx)*5+txFbm(x,y,3,3,2,2821)*3))<0.08 && r>7;
+    if(crack) return [70,200,190];
+    const glow=clamp(1-r/13,0,1)*0.35;
+    return txMix(txLerp(txPal("#141019 #1e1826 #2a2233"),txFbm(x,y,4,4,2,2822)),[60,180,170],glow);
+  });
+}
 let ATLAS_MIPS=0;                                                         // 手工 mip 级数(自测用: 512×1024 → 1×1 共 10 级)
 const atlasTex = gl.createTexture();
 gl.bindTexture(gl.TEXTURE_2D, atlasTex);
@@ -3832,6 +3890,7 @@ function cellSky(bx,bz,x,y,z){
 const EMIT_LV=new Uint8Array(256);                    // 光源等级
 EMIT_LV[LANTERN]=14; EMIT_LV[LAVA]=13; EMIT_LV[MAGMA]=11; EMIT_LV[NEON]=11; EMIT_LV[WINDOW]=11;
 EMIT_LV[CRYSTAL]=9; EMIT_LV[GLOWVEIN]=9; EMIT_LV[SALTCRYSTAL]=9; EMIT_LV[AMETHYST]=9;
+EMIT_LV[KAHEART]=10;                                  // 第六轮·本地: 卡之石
 const BL_OPQ=new Uint8Array(256);                     // 挡光(= OPAQUE)
 for(let i=0;i<256;i++) BL_OPQ[i]=OPAQUE(i)?1:0;
 const BL_R=13;                                        // 最远传播格数(14 级光源 13 格外还剩 1 级)
@@ -5783,6 +5842,7 @@ function doBreak(){
   setBlock(hit.x,hit.y,hit.z,AIR);
   sfxBreak();
   if(brokeId===TRAPPLATE){ trapFired.add(tkey(hit.x,hit.y,hit.z)); showName("🔧 拆除了机关压力板 — 机关已失效"); return; } // 谨慎的玩家可挖掉压力板来拆解机关
+  if(brokeId===KAHEART){ kaHeartBroken(hit.x,hit.y,hit.z); questAdd("mine",1); return; }   // 第六轮·本地: 卡之石不进背包
   if(brokeId===LOOSESAND){ trapFired.add(tkey(hit.x,hit.y,hit.z)); bagAdd(SAND,1); return; }  // 松沙挖开只是普通沙子
   bagAdd(brokeId===GILDED?GOLD_ORE:brokeId,1);        // 挖到的方块进背包, 供合成消耗(鎏金饰面 → 金矿石, 与旧装饰金掉落一致)
   const bonus=applyBiomeYield(brokeId);
@@ -6679,6 +6739,12 @@ function deathPoof(m){
   });
 }
 function hurtMob(m,dmg,kx,kz,silent){
+  if(m.def.sentinel){                                    // 守墓石像刀枪不入: 只溅石屑, 提示去找卡之石
+    m.hurtT=0.12; if(!silent) sfxHit();
+    for(let k=0;k<6;k++) particles.push({x:m.x+(Math.random()-.5)*.5, y:m.y+1+Math.random(), z:m.z+(Math.random()-.5)*.5, vx:(Math.random()-.5)*3, vy:2+Math.random()*2, vz:(Math.random()-.5)*3, life:.3, size:.07, u:(71%16)*TS+Math.random()*TS*.6, v:Math.floor(71/16)*TV+Math.random()*TV*.6, l:1});
+    if(performance.now()-sentinelState.hintT>2500){ sentinelState.hintT=performance.now(); showName("🗿 石像刀枪不入——打碎长廊尽头的「卡之石」"); }
+    return;
+  }
   if(m.burrowed) dmg*=0.4;                    // 沙虫埋沙时只受 4 成伤害(出土露头才是反击窗口), 但仍可击杀, 避免"隐身无敌"
   m.hp-=dmg; m.hurtT=0.4;
   m.kbx+=kx; m.kbz+=kz;
@@ -6957,6 +7023,7 @@ function updateMobs(dt){
     m.swingT=Math.max(0,m.swingT-dt);
     m.t-=dt;
     if(m===riding){ continue; }                            // 正在被骑乘: 由玩家控制
+    if(D.sentinel){ updateSentinel(m,dt); continue; }      // 守墓石像: 被盯住不动(第六轮·本地)
     if(D.car){ updateCar(m,dt); continue; }                // 汽车: 地面行驶
     if(D.plane){ updatePlane(m,dt); continue; }            // 飞机: 高空巡航
     if(D.mount && D.mountFly){ updateBike(m,dt); continue; } // 悬浮摩托: 待命悬停(马匹会往下走到普通四足 AI)
@@ -7828,6 +7895,89 @@ function maceStrike(m,dir,mul,fall){                   // doBreak 里瞄到生�
     showName("🔨 塞特震地！下落 "+fall.toFixed(1)+" 格 · "+dmg+" 伤害"+(aoe?" · 震飞 "+aoe+" 个":""));
   }
   return {dmg,smash,aoe};
+}
+/* ---- 🗿 守墓石像 + 地下石像回廊 (第六轮·本地, 对标 Minecraft The Garden Awakens 的 Creaking) ----
+   金字塔墓室东侧有楼梯下到地下长廊, 走进去四尊守墓石像苏醒:
+   · 你看着它(视野约 ±40° 内且无遮挡)时纹丝不动; 一移开视线就朝你疾行, 贴身重击 5 点。
+   · 刀枪不入——长廊尽头金座上的「卡之石」是它们的魂核, 挖碎卡之石, 相连的石像全部崩碎, 掉落法老陪葬。
+   · 卡之石还在、玩家在长廊里、且附近没有活着的同源石像时才(重新)唤醒; 卡之石挖碎后随 blockDiff 存档, 永不再现。 */
+function tombGallery(s){                               // 回廊几何(结构生成 / 运行时 / 自测共用); 地基太浅则不建
+  const x=s.x, z=s.z, h=s.h; if(h<14) return null;
+  return {x0:x-12, x1:x-5, z0:z-10, z1:z+8, fy:h-9, xc:x-9, ka:[x-9,h-7,z+8],
+          statues:[[x-11,z-7],[x-6,z-7],[x-11,z+5],[x-6,z+5]], key:x+","+z};
+}
+const SENTINEL_SEE_COS=Math.cos(40*Math.PI/180);
+const TILES_SEN={hf:280,hs:71,ht:71,bd:281,ar:71,lg:71};
+MOB_DEFS.sentinel={name:"守墓石像", hp:999, speed:5.4, w:0.42, h:2.3, hostile:true, sentinel:true, scale:1.2, poof:71, drop:"", armFix:1.4, parts:humanoid(TILES_SEN,true)};
+const sentinelState={woken:0, shattered:0, hintT:0};
+let sentinelTickT=0;
+function sentinelSeen(m){                              // 玩家正看着它(视锥内 + 视线无遮挡)
+  const [lx,ly,lz]=lookDir(), ex=player.x, ey=player.y+EYE, ez=player.z;
+  const dx=m.x-ex, dy=(m.y+m.def.h*0.6)-ey, dz=m.z-ez, L=Math.hypot(dx,dy,dz)||1;
+  if((dx*lx+dy*ly+dz*lz)/L<SENTINEL_SEE_COS) return false;
+  return mobCanSeePlayer(m);
+}
+function updateSentinel(m,dt,forceSeen){               // forceSeen: 自测用
+  const dx=player.x-m.x, dz=player.z-m.z, dist=Math.hypot(dx,dz)||1e-6;
+  const seen=forceSeen!==undefined?forceSeen:(!dead && sentinelSeen(m));
+  m.frozen=seen; m.burning=false;
+  const kd=Math.pow(0.01,dt); m.kbx*=kd; m.kbz*=kd;
+  if(seen){ m.vx=m.vz=0; return; }                      // 被盯住: 连击退和重力都不吃, 真正"定"住
+  let sp=0;
+  if(!dead && dist<40){
+    m.tgtYaw=Math.atan2(dx,-dz); m.yaw=m.tgtYaw; sp=m.def.speed;           // 不被看时瞬间转向、疾行
+    if(dist<1.7 && Math.abs(player.y-m.y)<2 && m.atkCd<=0){ m.atkCd=1.1; m.swingT=0.3; foeStrike(5, dx/dist*9, dz/dist*9, m); }
+    m.grindT=(m.grindT||0)-dt; if(m.grindT<=0){ m.grindT=0.45; sfxStoneGrind(dist); }
+    m.animT+=dt*1.6;
+  }
+  m.vx=Math.sin(m.yaw)*sp+m.kbx; m.vz=-Math.cos(m.yaw)*sp+m.kbz;
+  m.vy-=28*dt; if(m.vy<-50) m.vy=-50;
+  entMove(m,dt,m.def.w,m.def.h);
+}
+function spawnSentinels(G){                             // 按回廊唤醒四尊石像; 返回新生成数
+  let n=0;
+  for(const [sx,sz] of G.statues){
+    const def=MOB_DEFS.sentinel;
+    mobs.push({type:"sentinel", def, x:sx+0.5, y:G.fy+1, z:sz+0.5, vx:0,vy:0,vz:0, kbx:0,kbz:0,
+      yaw:0, tgtYaw:0, hp:def.hp, maxHp:def.hp, hurtT:0, animT:0, t:0, atkCd:1.5, burnT:0, swingT:0, groanT:0, fleeT:0,
+      onGround:true, pause:false, burning:false, held:null, kaKey:G.key, frozen:true});
+    n++;
+  }
+  sentinelState.woken+=n;
+  return n;
+}
+function maintainTombSentinels(dt){
+  sentinelTickT-=dt; if(sentinelTickT>0) return; sentinelTickT=0.5;
+  const s=nearStructure(["pyramid"],30); if(!s) return;
+  const G=tombGallery(s); if(!G) return;
+  const inside=player.x>=G.x0 && player.x<=G.x1+1 && player.z>=G.z0 && player.z<=G.z1+1 && player.y>=G.fy && player.y<=G.fy+6;
+  if(!inside || getBlock(G.ka[0],G.ka[1],G.ka[2])!==KAHEART) return;
+  if(mobs.some(m=>m.kaKey===G.key)) return;
+  spawnSentinels(G);
+  showName("🗿 守墓石像苏醒了！盯住它们就不会动——去长廊尽头打碎发光的「卡之石」");
+}
+function kaHeartBroken(x,y,z){                          // 挖碎卡之石: 相连石像崩碎 + 法老陪葬
+  const s=nearStructure(["pyramid"],40), G=s?tombGallery(s):null;
+  const key=(G && G.ka[0]===x && G.ka[2]===z) ? G.key : null;
+  let n=0;
+  for(let i=mobs.length-1;i>=0;i--){ const m=mobs[i]; if(m.kaKey && (key===null || m.kaKey===key) && Math.hypot(m.x-x,m.z-z)<48){ deathPoof(m); mobs.splice(i,1); n++; } }
+  sentinelState.shattered+=n;
+  for(let i=0;i<40;i++) particles.push({x:x+0.5,y:y+0.5,z:z+0.5, vx:(Math.random()-.5)*7, vy:Math.random()*6, vz:(Math.random()-.5)*7,
+    life:.6+Math.random()*.4, size:.1, u:15*TS+Math.random()*TS*.6, v:Math.random()*TV*.6, l:2.4});
+  giveBlock(GOLD_ORE,4); giveBlock(GEM_ORE,2); npcState.relics+=3; addXP(80); addFaction('egypt',8);
+  sfxLevel && sfxLevel();
+  showName("💥 卡之石碎裂！"+(n?n+" 尊守墓石像随之崩塌 · ":"")+"法老陪葬：金x4 钻x2 文物x3 +80 经验");
+  return n;
+}
+function sfxStoneGrind(dist){                           // 石像挪动: 低沉的石头摩擦声, 越近越响
+  if(!actx2 || dist>24) return;
+  const t=actx2.currentTime, len=0.22;
+  const buf=actx2.createBuffer(1,actx2.sampleRate*len,actx2.sampleRate), d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.sin(Math.PI*i/d.length);
+  const src=actx2.createBufferSource(); src.buffer=buf;
+  const f=actx2.createBiquadFilter(); f.type="lowpass"; f.frequency.value=320+Math.random()*120;
+  const g=actx2.createGain(); g.gain.value=0.5*Math.max(0.1,1-dist/24);
+  src.connect(f).connect(g).connect(actx2.destination); src.start(t);
 }
 function tickSunburn(dt){                              // 在 updateMobs 之后调用: AI 每帧先清 burning, 这里再点亮火色
   for(let i=mobs.length-1;i>=0;i--){
@@ -10533,7 +10683,7 @@ function archaeologyDig(x,y,z,opt){
   }
   sfxLevel && sfxLevel();
 }
-function updateArch(dt){ maintainDigSites(dt); maintainTombNiches(dt); tickDigSparkle(dt); updateBrush(dt); }
+function updateArch(dt){ maintainDigSites(dt); maintainTombNiches(dt); maintainTombSentinels(dt); tickDigSparkle(dt); updateBrush(dt); }
 
 /* ---- 🖌 按住刷考古 + 金字塔侧龛 (第四轮) ----
    可疑沙砾不再一镐刨开: 对准按住左键(触屏按住挖掘键)用刷子慢慢刷, 约 1.4 秒刷净出土, 原地留下一块沙(不再挖出坑);
@@ -12579,6 +12729,52 @@ function selftest(){
            poor && lv5 && spent && capped && mul && saved && legacyZero, "poor="+poor+" lv5="+lv5+" spent="+spent+" cap="+capped+" mul="+mul+" saved="+saved+" legacy="+legacyZero);
         ok("附魔效果: 火焰附加 II 点燃 4 秒、横扫之刃 III 溅射 45%(2.5 格外不中)、击退 II 加推力; 非近战武器不触发", fx && noWeapon,
            "n="+n+" nb="+nb.hp+" fr="+fr.hp+" burn="+t.sunBurn+" kbx="+t.kbx.toFixed(1)+" noWeapon="+noWeapon);
+      }
+      // ---- 第六轮·本地: 地下石像回廊 + 守墓石像 + 卡之石 ----
+      {
+        const ax=atlasCv.getContext("2d"), px=(t)=>ax.getImageData((t%16)*32+1,Math.floor(t/16)*32+1,30,30).data;
+        let opq=true; const cols=[280,281,282].map(t=>{ const d=px(t), c=new Set(); for(let i=0;i<d.length;i+=4){ if(d[i+3]<255) opq=false; c.add((d[i]>>4)+","+(d[i+1]>>4)+","+(d[i+2]>>4)); } return c.size; });
+        ok("卡之石(74, 图集 282, 自发光 10 级)已注册; 石像脸/躯干/卡之石贴图 280-282 不透明且有细节; 石像生物已定义",
+           KAHEART===74 && BLOCKS[KAHEART].s===282 && EMISSIVE(KAHEART) && EMIT_LV[KAHEART]===10 && SOLID(KAHEART) && opq && cols.every(n=>n>=6)
+           && !!MOB_DEFS.sentinel && MOB_DEFS.sentinel.sentinel===true && MOB_DEFS.sentinel.parts.length===6,
+           "opq="+opq+" 色数="+cols.join("/"));
+      }
+      {
+        let pyr=null; for(let sx=-40;sx<=40&&!pyr;sx++) for(let sz=-40;sz<=40&&!pyr;sz++){ const s2=structureAt(sx,sz); if(s2&&s2.type==="pyramid"&&s2.h>=14) pyr=s2; }
+        if(!pyr) ok("地下回廊: 附近找到地基足够深的金字塔", false, "none");
+        else {
+          const cache=new Map(), at=(X,Y,Z)=>{ const cx=Math.floor(X/CS), cz=Math.floor(Z/CS), k=cx+","+cz;
+            if(!cache.has(k)) cache.set(k,genChunk(cx,cz)); return cache.get(k)[((X-cx*CS)*CS+(Z-cz*CS))*H+Y]; };
+          const {x,z,h}=pyr, G=tombGallery(pyr);
+          let stairs=true; for(let i=0;i<=7;i++){ const X=x+3-i; if(!SOLID(at(X,h-1-i,z-1)) || at(X,h-i,z-1)!==AIR || at(X,h-i+1,z-1)!==AIR || at(X,h-i+2,z-1)!==AIR) stairs=false; }
+          let hall=true; for(let X=G.x0;X<=G.x1;X++) for(let Z=G.z0;Z<=G.z1;Z++){ if(X===G.ka[0]&&Z===G.ka[2]) continue; if(!SOLID(at(X,G.fy,Z)) || at(X,G.fy+1,Z)!==AIR || at(X,G.fy+2,Z)!==AIR) hall=false; }
+          const joint=at(x-5,G.fy+1,z-1)===AIR && at(x-5,G.fy+2,z-1)===AIR;        // 最后一级台阶旁就是回廊
+          ok("地下回廊: 墓室东侧 8 级楼梯可走(每级头顶留 3 格)、落进长廊; 长廊 8×19 地面实心可走, 星空顶/经文墙, 尽头金座托着卡之石",
+             stairs && hall && joint && at(G.xc,G.fy+6,z)===STARCEIL && at(G.x0-1,G.fy+3,z)===HIERO && at(G.ka[0],G.ka[1],G.ka[2])===KAHEART && at(G.ka[0],G.ka[1]-1,G.ka[2])===GILDED && at(x,h+1,z+2)===SARCO,
+             "stairs="+stairs+" hall="+hall+" joint="+joint+" ka="+at(G.ka[0],G.ka[1],G.ka[2]));
+        }
+      }
+      {
+        const mobsS=mobs.slice(); mobs.length=0; const pyS=player.y, yawS=player.yaw, pitS=player.pitch, hpS=hp, woS=sentinelState.woken;
+        const bagS=new Map(bag), relS=npcState.relics, xpS=xp, lvlS=lvl, dmgS=dmgMul, maxS=maxHp, shS=sentinelState.shattered;
+        player.y=120; player.pitch=0;
+        const G={statues:[[0,0]], fy:0, key:"test"};
+        spawnSentinels(G); const m=mobs[0];
+        m.x=player.x; m.z=player.z-8; m.y=player.y; m.atkCd=5;
+        { let best=-2, by=0; for(let k=0;k<72;k++){ player.yaw=k/72*6.2832; const d=lookDir(); const v=-d[2]; if(v>best){best=v; by=player.yaw;} } player.yaw=by; }   // 找正对 -z(石像方向)的朝向
+        const seenNow=sentinelSeen(m);
+        const z0=m.z; for(let k=0;k<10;k++) updateSentinel(m,0.05); const froze=Math.abs(m.z-z0)<1e-6 && m.frozen;
+        player.yaw+=Math.PI;                                                       // 转身背对
+        const notSeen=!sentinelSeen(m);
+        for(let k=0;k<10;k++) updateSentinel(m,0.05); const moved=m.z-z0>1.5 && !m.frozen;
+        const hp0=m.hp; hurtMob(m,500,0,0,true); const invuln=m.hp===hp0;
+        mobs.push(Object.assign({},m,{kaKey:"other", x:player.x+60}));             // 远处/别处的石像不受影响
+        const n=kaHeartBroken(Math.floor(m.x),Math.floor(m.y),Math.floor(m.z));
+        const shattered=n===1 && !mobs.includes(m) && mobs.length===1;
+        mobs.length=0; for(const q of mobsS) mobs.push(q); player.y=pyS; player.yaw=yawS; player.pitch=pitS; sentinelState.woken=woS; sentinelState.shattered=shS;
+        bag.clear(); for(const [k,v] of bagS) bag.set(k,v); npcState.relics=relS; xp=xpS; lvl=lvlS; dmgMul=dmgS; maxHp=maxS; hp=hpS; updateHearts(); updateXPHUD();
+        ok("守墓石像: 正对时判定被看见且纹丝不动; 转身后疾行逼近; 刀枪不入; 挖碎卡之石只崩碎附近相连石像",
+           seenNow && froze && notSeen && moved && invuln && shattered, "seen="+seenNow+" froze="+froze+" notSeen="+notSeen+" moved="+moved+" invuln="+invuln+" shattered="+shattered);
       }
       // 沙漠药水(第五轮·云端): 酿造 +2 / 饮用生效与扣库存 / 迅捷与耐热与夜视效果 / 治疗 / 空瓶拒绝 / 存档往返与老档归零
       {
