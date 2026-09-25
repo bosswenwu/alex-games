@@ -408,7 +408,8 @@ const HIERO=71, STARCEIL=72;
 const CHEST=80;                                // 第六轮·云端: 储物箱(图集 290 顶 / 291 侧)
 // 地下密室(第六轮·本地, 图集 280-282): 卡之石——守墓石像的魂核, 打碎它, 与之相连的石像一起崩碎
 const KAHEART=74;
-const OSIRIS=75;                              // 奥西里斯宝匣(第六轮·本地, 图集 283/284): 试炼厅三波清完自动开启
+const OSIRIS=75;
+const SLAB_SST=90, STAIR_N=91, STAIR_E=92, STAIR_S=93, STAIR_W=94, LAMPPOST=95;   // 第七轮·本地: 方块形状系统(见 SHAPES)                              // 奥西里斯宝匣(第六轮·本地, 图集 283/284): 试炼厅三波清完自动开启
 // t=顶面贴图 b=底面 s=侧面 (图集编号)
 const BLOCKS = {
   [GRASS]:  {name:"草方块",   t:0,  b:2,  s:1},
@@ -484,14 +485,72 @@ const BLOCKS = {
   [HIERO]:  {name:"象形文字砖", t:71, b:71, s:275},   // 墓室/走廊墙面: 侧面刻彩绘经文, 顶底仍是砂岩
   [STARCEIL]:{name:"星空墓顶",  t:71, b:276,s:71},    // 只有底面(抬头看见的那面)是星空, 从外面挖开仍像砂岩
   [CHEST]:  {name:"储物箱",   t:290,b:290,s:291},   // 第六轮·云端: 右键打开储物面板
-  [KAHEART]:{name:"卡之石",    t:282,b:282,s:282},
-  [OSIRIS]: {name:"奥西里斯宝匣", t:284,b:71, s:283}, // 试炼完成前挖不开   // 石像回廊尽头的魂核(自发光), 挖碎 → 连接的守墓石像全部崩碎
+  [KAHEART]:{name:"卡之石",    t:282,b:282,s:282},   // 石像回廊尽头的魂核(自发光), 挖碎 → 连接的守墓石像全部崩碎
+  [OSIRIS]: {name:"奥西里斯宝匣", t:284,b:71, s:283}, // 试炼完成前挖不开
+  // 第七轮·本地: 方块形状系统(非整格, 形状见 SHAPES)
+  [SLAB_SST]:{name:"砂岩半砖", t:71, b:71, s:71},
+  [STAIR_N]: {name:"砂岩楼梯", t:71, b:71, s:71},
+  [STAIR_E]: {name:"砂岩楼梯", t:71, b:71, s:71},
+  [STAIR_S]: {name:"砂岩楼梯", t:71, b:71, s:71},
+  [STAIR_W]: {name:"砂岩楼梯", t:71, b:71, s:71},
+  [LAMPPOST]:{name:"铁灯柱",   t:264,b:264,s:264},
 };
+/* ---- 方块形状系统(第七轮·本地): 半砖 / 楼梯 / 灯柱 ----
+   非整格方块由若干盒子 b=[x0,y0,z0,x1,y1,z1](格内 0..1)拼成; skip = 不出面的位掩码(按 FACES 下标, 用于楼梯内部贴合面);
+   tile 覆盖默认贴图; glow = 自发光部件。它们仍是 SOLID(可站立/可挖), 但不算 OPAQUE/OCCLUDE: 邻格照常出面、不压 AO、不挡光。
+   楼梯按"朝哪边升高"分 4 个 ID(N=-z, E=+x, S=+z, W=-x), 背包/物品栏里统一记作 STAIR_N, 放置时按玩家朝向换成对应 ID。 */
+const SHAPES={
+  [SLAB_SST]:[{b:[0,0,0,1,0.5,1]}],
+  [STAIR_N]: [{b:[0,0,0.5,1,0.5,1], skip:1<<5}, {b:[0,0,0,1,1,0.5]}],
+  [STAIR_S]: [{b:[0,0,0,1,0.5,0.5], skip:1<<4}, {b:[0,0,0.5,1,1,1]}],
+  [STAIR_E]: [{b:[0,0,0,0.5,0.5,1], skip:1<<0}, {b:[0.5,0,0,1,1,1]}],
+  [STAIR_W]: [{b:[0.5,0,0,1,0.5,1], skip:1<<1}, {b:[0,0,0,0.5,1,1]}],
+  [LAMPPOST]:[{b:[0.4375,0,0.4375,0.5625,0.72,0.5625]}, {b:[0.3,0.72,0.3,0.7,1,0.7], tile:{t:94,b:94,s:94}, glow:true}],
+};
+const STAIRS=[STAIR_N,STAIR_E,STAIR_S,STAIR_W];
+function shapeItem(id){ return STAIRS.indexOf(id)>=0 ? STAIR_N : id; }          // 挖下/选取时归到物品 ID
+function stairFacing(dx,dz){ return Math.abs(dx)>Math.abs(dz) ? (dx>0?STAIR_E:STAIR_W) : (dz>0?STAIR_S:STAIR_N); }   // 朝视线方向升高
+/* 形状面片(格内坐标): cull(f) 为真时, 贴在整格边界上的 f 面被剔除。返回 [{f, pos:[[x,y,z]×4], uv:[[a,b]×4], tile, glow, edge}] */
+function shapeQuads(id, cull){
+  const out=[], def=BLOCKS[id];
+  for(const P of SHAPES[id]){
+    const lo=[P.b[0],P.b[1],P.b[2]], hi=[P.b[3],P.b[4],P.b[5]], T=P.tile||def;
+    for(let f=0;f<6;f++){
+      if(P.skip && ((P.skip>>f)&1)) continue;
+      const F=FACES[f], d=F.d;
+      const edge=(d[0]===1&&hi[0]===1)||(d[0]===-1&&lo[0]===0)||(d[1]===1&&hi[1]===1)||(d[1]===-1&&lo[1]===0)||(d[2]===1&&hi[2]===1)||(d[2]===-1&&lo[2]===0);
+      if(edge && cull && cull(f)) continue;
+      const pos=[], uv=[];
+      for(let k=0;k<4;k++){
+        const i=CORNERS[k][0], j=CORNERS[k][1], v=[0,0,0];
+        for(let a=0;a<3;a++) v[a] = d[a]===1?hi[a] : d[a]===-1?lo[a] : ((i*F.u[a]+j*F.v[a])?hi[a]:lo[a]);
+        pos.push(v);
+        uv.push((f===2||f===3) ? [v[0],v[2]] : [F.u[0]?v[0]:v[2], 1-v[1]]);       // 侧面: 贴图上端对齐方块顶(半砖露下半张)
+      }
+      out.push({f, pos, uv, tile:f===2?T.t:f===3?T.b:T.s, glow:!!P.glow, edge});
+    }
+  }
+  return out;
+}
+/* 碰撞: 格 (bx,by,bz) 的方块 id 与 AABB(中心 x/z, 脚底 y, 半宽 w, 高 h)严格相交的那个盒子(世界坐标), 不相交返回 null */
+function hitBoxAt(bx,by,bz,id,x,y,z,w,h){
+  const S=SHAPES[id];
+  if(!S) return (x+w>bx && x-w<bx+1 && y+h>by && y<by+1 && z+w>bz && z-w<bz+1) ? [bx,by,bz,bx+1,by+1,bz+1] : null;
+  for(const P of S){ const b=P.b;
+    if(x+w>bx+b[0] && x-w<bx+b[3] && y+h>by+b[1] && y<by+b[4] && z+w>bz+b[2] && z-w<bz+b[5]) return [bx+b[0],by+b[1],bz+b[2],bx+b[3],by+b[4],bz+b[5]]; }
+  return null;
+}
+function aabbFits(x,y,z,w,h){                          // 该位置 AABB 不与任何实心盒子相交
+  for(let bx=Math.floor(x-w);bx<=Math.floor(x+w);bx++) for(let by=Math.floor(y);by<=Math.floor(y+h);by++) for(let bz=Math.floor(z-w);bz<=Math.floor(z+w);bz++){
+    const id=getBlock(bx,by,bz); if(SOLID(id) && hitBoxAt(bx,by,bz,id,x,y,z,w,h)) return false; }
+  return true;
+}
+const STEP_H=0.55;                                     // 自动上台阶高度: 半砖/楼梯不用跳
 // 植物可以直接走过去; 冰/玻璃/树叶不完全遮挡; 岩浆会陷进去
 const SOLID   = id => id!==AIR && id!==WATER && id!==LAVA && !PLANT(id);   // 碰撞
 const OPAQUE  = id => id!==AIR && id!==WATER && id!==LEAVES && id!==GLASS
-                      && id!==PINE_LEAF && id!==PALM_LEAF && id!==ICE && !PLANT(id);  // 完全遮挡
-const OCCLUDE = id => SOLID(id) && id!==GLASS && id!==ICE;          // 产生环境光遮蔽
+                      && id!==PINE_LEAF && id!==PALM_LEAF && id!==ICE && !PLANT(id) && !SHAPES[id];  // 完全遮挡(非整格方块不算)
+const OCCLUDE = id => SOLID(id) && id!==GLASS && id!==ICE && !SHAPES[id];          // 产生环境光遮蔽
 const EMISSIVE= id => id===LANTERN || id===LAVA || id===CRYSTAL || id===MAGMA || id===NEON || id===WINDOW || id===GLOWVEIN || id===SALTCRYSTAL || id===AMETHYST || id===KAHEART; // 自发光
 /* 物品栏: 常用道具全部落在 1-9 键上, TNT 固定在 9 键 */
 const HOTBAR_ITEMS = ["firework", "grapple", "cola", "sword", "gun", "rpg", "bow", TNT, JUMPPAD];
@@ -1106,7 +1165,7 @@ function drawStructure(s,put){
       put(G.ka[0],G.ka[1]-1,G.ka[2],GILDED,true); put(G.ka[0],G.ka[1],G.ka[2],KAHEART,true);
       for(let i=0;i<=7;i++){                                                 // 楼梯: 第 i 级台阶顶面 y=h-1-i
         const X=x+3-i;
-        put(X,h-1-i,z-1,SANDSTONE,true);
+        put(X,h-1-i,z-1,STAIR_E,true);                      // 真楼梯(朝东升高): 下行不再一格一跌
         for(let Y=h-i;Y<=h-i+2;Y++) put(X,Y,z-1,AIR,true);
         if(i>=3){ put(X,h-i+3,z-1,STARCEIL,true); for(let Y=h-i;Y<=h-i+2;Y++){ put(X,Y,z-2,HIERO,true); put(X,Y,z,HIERO,true); } }
       }
@@ -3950,7 +4009,7 @@ function cellSky(bx,bz,x,y,z){
 const EMIT_LV=new Uint8Array(256);                    // 光源等级
 EMIT_LV[LANTERN]=14; EMIT_LV[LAVA]=13; EMIT_LV[MAGMA]=11; EMIT_LV[NEON]=11; EMIT_LV[WINDOW]=11;
 EMIT_LV[CRYSTAL]=9; EMIT_LV[GLOWVEIN]=9; EMIT_LV[SALTCRYSTAL]=9; EMIT_LV[AMETHYST]=9;
-EMIT_LV[KAHEART]=10;                                  // 第六轮·本地: 卡之石
+EMIT_LV[KAHEART]=10; EMIT_LV[LAMPPOST]=13;                                  // 第六轮·本地: 卡之石
 const BL_OPQ=new Uint8Array(256);                     // 挡光(= OPAQUE)
 for(let i=0;i<256;i++) BL_OPQ[i]=OPAQUE(i)?1:0;
 const BL_R=13;                                        // 最远传播格数(14 级光源 13 格外还剩 1 级)
@@ -4148,6 +4207,22 @@ function buildChunkMesh(c){
         }
         continue;
       }
+      if(SHAPES[id]){                                   // 方块形状系统: 逐盒出面, 只剔除贴在整格边界且邻格不透明的面; 无 AO
+        const sky0=cellSky(bx,bz,wx,y,wz), bl0=(blOn&&y>=blLo&&y<=blHi)?blAt(wx,y,wz):0;
+        for(const Q of shapeQuads(id, f=>{ const d=FACES[f].d, n=gb(wx+d[0],y+d[1],wz+d[2]); return n!==AIR && OPAQUE(n); })){
+          const d=FACES[Q.f].d, u0=(Q.tile%16)*TS, v0=Math.floor(Q.tile/16)*TV;
+          let sky=sky0, bl=bl0;
+          if(Q.edge){ sky=cellSky(bx,bz,wx+d[0],y+d[1],wz+d[2]); if(blOn&&y+d[1]>=blLo&&y+d[1]<=blHi) bl=blAt(wx+d[0],y+d[1],wz+d[2]); }
+          if(Q.glow){ sky=1; }
+          for(let k=0;k<4;k++){
+            const P=Q.pos[k];
+            oV.push(wx+P[0], y+P[1], wz+P[2], u0+EP+Q.uv[k][0]*(TS-2*EP), v0+EPV+Q.uv[k][1]*(TV-2*EPV), Q.glow?2.2:1, Q.f+8*Math.round(sky*15)+2048*bl);
+          }
+          if(FACES[Q.f].fl) oI.push(oN,oN+2,oN+1, oN,oN+3,oN+2); else oI.push(oN,oN+1,oN+2, oN,oN+2,oN+3);
+          oN+=4;
+        }
+        continue;
+      }
       const wTop = isW && gb(wx,y+1,wz)!==WATER;
       // 高位附加码: 树叶 = 风摆类别 2; 水 = 水色类别(1 = 沼泽)
       const hiF = isW ? (biomeAt(wx,wz)===BIO_SWAMP ? 128 : 0) : 128*swayClass(id,false);
@@ -4290,19 +4365,24 @@ function lookDir(){
   const cy=Math.cos(player.yaw),  sy=Math.sin(player.yaw);
   return [sy*cp, -sp, -cy*cp];
 }
+let stepOK=false;                                  // 本帧起步时站在地上 → 水平碰撞可自动迈上 ≤STEP_H 的台阶(方块形状系统)
 function collideAxis(axis){
   const x0=Math.floor(player.x-PW), x1=Math.floor(player.x+PW);
   const y0=Math.floor(player.y),    y1=Math.floor(player.y+PH);
   const z0=Math.floor(player.z-PW), z1=Math.floor(player.z+PW);
   for(let bx=x0;bx<=x1;bx++) for(let by=y0;by<=y1;by++) for(let bz=z0;bz<=z1;bz++){
-    if(!SOLID(getBlock(bx,by,bz))) continue;
+    const bid=getBlock(bx,by,bz);
+    if(!SOLID(bid)) continue;
+    const B=hitBoxAt(bx,by,bz,bid,player.x,player.y,player.z,PW,PH);   // 严格相交的盒子(整格即整格)
+    if(!B) continue;
+    if(axis!==1 && stepOK && B[4]>player.y && B[4]-player.y<=STEP_H && aabbFits(player.x,B[4],player.z,PW,PH)){ player.y=B[4]; continue; }   // 迈上台阶
     if(axis===0){
-      if(player.vx>0) player.x=bx-PW-0.001; else if(player.vx<0) player.x=bx+1+PW+0.001;
+      if(player.vx>0) player.x=B[0]-PW-0.001; else if(player.vx<0) player.x=B[3]+PW+0.001;
       player.vx=0;
     } else if(axis===1){
-      if(player.vy>0){ player.y=by-PH-0.001; player.vy=0; }
+      if(player.vy>0){ player.y=B[1]-PH-0.001; player.vy=0; }
       else if(player.vy<0){
-        player.y=by+1;
+        player.y=B[4];
         if(getBlock(bx,by,bz)===JUMPPAD){        // 弹跳板: 不停下, 直接把玩家弹上天
           player.vy=17; player.onGround=false; fallStart=null; jumpPadGrace=true;
           sfxPlace();
@@ -4313,7 +4393,7 @@ function collideAxis(axis){
         } else { player.vy=0; player.onGround=true; }
       }
     } else {
-      if(player.vz>0) player.z=bz-PW-0.001; else if(player.vz<0) player.z=bz+1+PW+0.001;
+      if(player.vz>0) player.z=B[2]-PW-0.001; else if(player.vz<0) player.z=B[5]+PW+0.001;
       player.vz=0;
     }
     return;
@@ -4678,6 +4758,13 @@ const RECIPES=[
   {name:"🔨 塞特之锤", desc:"沙暴之神的重锤：下落越高伤害越大，高处砸下震飞周围敌人", cost:[[IRON_ORE,8],[GOLD_ORE,2]],
    ok(){ return !maceOwned; }, lockMsg:"已拥有塞特之锤",
    run(){ setMace(true); selectSlot(HOTBAR_ITEMS.indexOf("mace")); addXP(30); return "🔨 塞特之锤已锻成！(数字键 0) 爬高再砸下来"; }},
+  // 第七轮·本地: 方块形状系统
+  {name:"砂岩半砖", desc:"半格高的砂岩：铺台阶、做屋檐；两块叠放合成整块", cost:[[SANDSTONE,3]],
+   run(){ giveBlock(SLAB_SST,6); return "获得 砂岩半砖 x6"; }},
+  {name:"砂岩楼梯", desc:"放下时朝你面对的方向升高，走上去不用跳", cost:[[SANDSTONE,6]],
+   run(){ giveBlock(STAIR_N,4); return "获得 砂岩楼梯 x4"; }},
+  {name:"铁灯柱", desc:"细铁柱顶一盏灯，照亮街道与庭院", cost:[[IRON_ORE,1],[COAL_ORE,1]],
+   run(){ giveBlock(LAMPPOST,2); return "获得 铁灯柱 x2"; }},
   // 第五轮·云端: 沙漠药水(每次酿 2 瓶, 按 V 打开药水面板饮用)
   {name:"🧪 酿造·耐热药水", desc:"仙人掌汁 + 盐晶：3 分钟不怕沙暴刮伤与火山灼烤", cost:[[CACTUS,3],[SALTCRYSTAL,1]], run(){ return brewPotion("heat"); }},
   {name:"🧪 酿造·迅捷药水", desc:"仙人掌汁 + 金：90 秒移动速度 +35%", cost:[[CACTUS,2],[GOLD_ORE,1]], run(){ return brewPotion("swift"); }},
@@ -6027,7 +6114,7 @@ function doBreak(){
   if(brokeId===TRAPPLATE){ trapFired.add(tkey(hit.x,hit.y,hit.z)); showName("🔧 拆除了机关压力板 — 机关已失效"); return; } // 谨慎的玩家可挖掉压力板来拆解机关
   if(brokeId===KAHEART){ kaHeartBroken(hit.x,hit.y,hit.z); questAdd("mine",1); return; }   // 第六轮·本地: 卡之石不进背包
   if(brokeId===LOOSESAND){ trapFired.add(tkey(hit.x,hit.y,hit.z)); bagAdd(SAND,1); return; }  // 松沙挖开只是普通沙子
-  bagAdd(brokeId===GILDED?GOLD_ORE:brokeId,1);        // 挖到的方块进背包, 供合成消耗(鎏金饰面 → 金矿石, 与旧装饰金掉落一致)
+  bagAdd(brokeId===GILDED?GOLD_ORE:shapeItem(brokeId),1);        // 挖到的方块进背包, 供合成消耗(鎏金饰面 → 金矿石, 与旧装饰金掉落一致)
   const bonus=applyBiomeYield(brokeId);
   if(bonus) showName("⛏ "+(BLOCKS[brokeId]?BLOCKS[brokeId].name:"方块")+" + 群系产材 "+bonus.join("、"));
   questAdd("mine",1);
@@ -6088,19 +6175,24 @@ function doPlace(){
   }
   const hit=raycast(5.5, currentAim());
   if(!hit) return;
+  if(it===SLAB_SST && hit.id===SLAB_SST && hit.face[1]===1 && !hitBoxAt(hit.x,hit.y,hit.z,SANDSTONE,player.x,player.y,player.z,PW,PH)){   // 半砖叠半砖 → 合成整块砂岩(人站在上面时不合, 免得卡进方块)
+    setBlock(hit.x,hit.y,hit.z,SANDSTONE); bagTake(it,1); sfxPlace(); return;
+  }
   const px=hit.x+hit.face[0], py=hit.y+hit.face[1], pz=hit.z+hit.face[2];
   const cur=getBlock(px,py,pz);
   if(cur!==AIR && cur!==WATER) return;
   // 不能放在玩家身体里
   if(px+1>player.x-PW && px<player.x+PW && pz+1>player.z-PW && pz<player.z+PW &&
      py+1>player.y && py<player.y+PH) return;
-  setBlock(px,py,pz,it);
+  const d=lookDir();
+  setBlock(px,py,pz, it===STAIR_N ? stairFacing(d[0],d[2]) : it);   // 楼梯: 朝视线方向升高
   bagTake(it,1);                                       // 放置消耗背包库存(没有也不阻挡, 保持沙盒手感)
   sfxPlace();
 }
 function doPick(){
   const hit=raycast(5.5, currentAim());
   if(!hit || !BLOCKS[hit.id]) return;
+  hit.id=shapeItem(hit.id);                            // 四向楼梯统一选成物品 STAIR_N
   const i=HOTBAR_ITEMS.indexOf(hit.id);
   if(i>=0){ selectSlot(i); return; }
   let j=selSlot;                     // 不覆盖武器/食物格
@@ -6893,23 +6985,28 @@ function drawEntity(ent){
 }
 
 /* ---- 实体物理 ---- */
-function entCollide(m,axis,w,h){
+function entCollide(m,axis,w,h,step){
   const x0=Math.floor(m.x-w), x1=Math.floor(m.x+w);
   const y0=Math.floor(m.y),   y1=Math.floor(m.y+h);
   const z0=Math.floor(m.z-w), z1=Math.floor(m.z+w);
   for(let bx=x0;bx<=x1;bx++) for(let by=y0;by<=y1;by++) for(let bz=z0;bz<=z1;bz++){
-    if(!SOLID(getBlock(bx,by,bz))) continue;
-    if(axis===0){ if(m.vx>0) m.x=bx-w-0.001; else if(m.vx<0) m.x=bx+1+w+0.001; m.vx=0; return true; }
-    if(axis===1){ if(m.vy>0){ m.y=by-h-0.001; m.vy=0; } else if(m.vy<0){ m.y=by+1; m.vy=0; m.onGround=true; } return false; }
-    if(m.vz>0) m.z=bz-w-0.001; else if(m.vz<0) m.z=bz+1+w+0.001; m.vz=0; return true;
+    const bid=getBlock(bx,by,bz);
+    if(!SOLID(bid)) continue;
+    const B=hitBoxAt(bx,by,bz,bid,m.x,m.y,m.z,w,h);
+    if(!B) continue;
+    if(axis!==1 && step && B[4]>m.y && B[4]-m.y<=STEP_H && aabbFits(m.x,B[4],m.z,w,h)){ m.y=B[4]; continue; }   // 生物同样能走上半砖/楼梯
+    if(axis===0){ if(m.vx>0) m.x=B[0]-w-0.001; else if(m.vx<0) m.x=B[3]+w+0.001; m.vx=0; return true; }
+    if(axis===1){ if(m.vy>0){ m.y=B[1]-h-0.001; m.vy=0; } else if(m.vy<0){ m.y=B[4]; m.vy=0; m.onGround=true; } return false; }
+    if(m.vz>0) m.z=B[2]-w-0.001; else if(m.vz<0) m.z=B[5]+w+0.001; m.vz=0; return true;
   }
   return false;
 }
 function entMove(m,dt,w,h){
+  const step=m.onGround;
   m.onGround=false;
-  m.x+=m.vx*dt; const b1=entCollide(m,0,w,h);
+  m.x+=m.vx*dt; const b1=entCollide(m,0,w,h,step);
   m.y+=m.vy*dt; entCollide(m,1,w,h);
-  m.z+=m.vz*dt; const b2=entCollide(m,2,w,h);
+  m.z+=m.vz*dt; const b2=entCollide(m,2,w,h,step);
   return b1||b2;
 }
 
@@ -10382,10 +10479,12 @@ function frame(now){
       if(player.vy<-55) player.vy=-55;
       if(keys.Space && player.onGround){ player.vy=8.6; player.onGround=false; }
     }
+    stepOK=player.onGround && !player.flying && !water;
     player.onGround=false;
     player.x+=player.vx*dt; collideAxis(0);
     player.y+=player.vy*dt; collideAxis(1);
     player.z+=player.vz*dt; collideAxis(2);
+    stepOK=false;
     }
     // 摔落伤害
     if(player.onGround && player.vy<=0) jumpPadGrace=false;   // 稳稳落地后解除
@@ -13078,6 +13177,47 @@ function selftest(){
         updateHearts(); updateXPHUD();
         ok("试炼流程: 进厅开试炼 → 三波依次刷出(末波阿努比斯) → 清完宝匣自开、宝库钥匙+1; 中途离开则中断且残余试炼怪消散",
            started && done && aborted, "started="+started+" waves="+waves.join(" | ")+" done="+done+" aborted="+aborted);
+      }
+      // ---- 第七轮·本地: 方块形状系统(半砖/楼梯/灯柱) ----
+      {
+        const ids=[SLAB_SST,STAIR_N,STAIR_E,STAIR_S,STAIR_W,LAMPPOST];
+        const defs=ids.every((id,k)=>id===90+k && !!BLOCKS[id] && !!SHAPES[id] && SOLID(id) && !OPAQUE(id) && !OCCLUDE(id) && !BL_OPQ[id]) && EMIT_LV[LAMPPOST]===13;
+        const items=STAIRS.every(id=>shapeItem(id)===STAIR_N) && shapeItem(SLAB_SST)===SLAB_SST
+          && stairFacing(1,0.2)===STAIR_E && stairFacing(-1,0)===STAIR_W && stairFacing(0.1,1)===STAIR_S && stairFacing(0,-1)===STAIR_N;
+        const all=()=>true, none=()=>false;
+        const slab=shapeQuads(SLAB_SST,none), slabMaxY=Math.max(...slab.flatMap(q=>q.pos.map(v=>v[1])));
+        const slabSide=slab.find(q=>q.f===0), sideV=slabSide.uv.map(u=>u[1]);
+        const geo=slab.length===6 && slabMaxY===0.5 && Math.min(...sideV)===0.5 && Math.max(...sideV)===1
+          && shapeQuads(SLAB_SST,all).length===1                               // 四周都不透明: 只剩不贴边的顶面
+          && shapeQuads(STAIR_N,none).length===11 && shapeQuads(STAIR_N,all).length===2
+          && shapeQuads(LAMPPOST,none).filter(q=>q.glow).length===6
+          && ids.every(id=>shapeQuads(id,none).every(q=>q.pos.every(v=>v.every(c=>c>=0&&c<=1)))) ;
+        ok("方块形状: 半砖/四向楼梯/铁灯柱(90-95)已注册——实心可站但不遮挡/不压 AO/不挡光; 楼梯按视线朝向、挖下归一; 面片几何与贴图裁切正确",
+           defs && items && geo, "defs="+defs+" items="+items+" geo="+geo+" slab="+slab.length+" stairAll="+shapeQuads(STAIR_N,all).length);
+      }
+      {
+        const S={x:player.x,y:player.y,z:player.z,vx:player.vx,vy:player.vy,vz:player.vz,og:player.onGround};
+        const cx=Math.floor(player.x)+3, cz=Math.floor(player.z)+3; let Y=H-10; while(Y>0 && (getBlock(cx,Y,cz)!==AIR || getBlock(cx+1,Y,cz)!==AIR || getBlock(cx+1,Y+1,cz)!==AIR)) Y--;
+        const put=(x,y,z,id)=>setBlock(x,y,z,id);
+        put(cx,Y,cz,SANDSTONE); put(cx+1,Y,cz,SANDSTONE); put(cx+1,Y+1,cz,SLAB_SST);
+        // 1) 站地面走向半砖: 自动迈上 0.5 格
+        Object.assign(player,{x:cx+0.5,y:Y+1,z:cz+0.5,vx:5,vy:0,vz:0,onGround:true}); stepOK=true;
+        player.x=cx+0.9; collideAxis(0); const stepped=Math.abs(player.y-(Y+1.5))<1e-6 && Math.abs(player.x-(cx+0.9))<1e-6;
+        // 2) 从上方落到半砖顶: 停在 +0.5
+        stepOK=false; Object.assign(player,{x:cx+1.5,y:Y+1.45,z:cz+0.5,vx:0,vy:-8,vz:0,onGround:false}); collideAxis(1);
+        const landed=Math.abs(player.y-(Y+1.5))<1e-6 && player.onGround;
+        // 3) 整格墙(高 1)迈不上去
+        put(cx+1,Y+1,cz,SANDSTONE);
+        Object.assign(player,{x:cx+0.5,y:Y+1,z:cz+0.5,vx:5,vy:0,vz:0,onGround:true}); stepOK=true;
+        player.x=cx+0.9; collideAxis(0); const wall=Math.abs(player.y-(Y+1))<1e-6 && player.x<cx+1-PW;
+        // 4) 生物同样能走上半砖
+        put(cx+1,Y+1,cz,SLAB_SST);
+        const m={x:cx+0.5,y:Y+1,z:cz+0.5,vx:6,vy:0,vz:0,onGround:true};
+        entMove(m,0.1,0.3,1.8); const mobStep=m.y>=Y+1.5-1e-6;
+        stepOK=false; put(cx,Y,cz,AIR); put(cx+1,Y,cz,AIR); put(cx+1,Y+1,cz,AIR);
+        Object.assign(player,{x:S.x,y:S.y,z:S.z,vx:S.vx,vy:S.vy,vz:S.vz,onGround:S.og});
+        ok("形状碰撞: 站地面自动迈上半砖(0.5 格)、从上方落在半砖顶停在 +0.5、整格墙迈不上去、生物也能走上半砖",
+           stepped && landed && wall && mobStep, "stepped="+stepped+" landed="+landed+" wall="+wall+" mob="+mobStep+" y="+m.y.toFixed(2));
       }
       { // 守墓石像被盯住时要有常驻提示, 否则玩家以为怪物卡死(用户报 bug: "僵尸突然不动了")
         const mobsP=mobs.slice(); mobs.length=0;
