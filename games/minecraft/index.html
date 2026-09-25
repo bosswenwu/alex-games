@@ -337,7 +337,7 @@
 <div id="fullhelp">
   <div class="fh-card">
     <div class="fh-title">完整帮助 · 按 <b>H</b> 或点此关闭</div>
-    <b>F1</b> 拍照模式　<b>F2</b> 截图　<b>F5</b> 第三人称(Shift+F5 看正脸)　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成(可熔铸☀拉之烈阳剑、🔨塞特之锤)　<b>0</b> 第10格　<b>J</b> 附魔祭坛(献文物)　<b>Esc</b> 暂停　<b>T</b> 编年史　<b>P</b> 陶片图鉴　<b>K</b> 神话遗物　<b>U</b> 开宝库　<b>R</b> 答斯芬克斯　<b>L</b> 神灯许愿<br>
+    <b>F1</b> 拍照模式　<b>F2</b> 截图　<b>F5</b> 第三人称(Shift+F5 看正脸)　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成(可熔铸☀拉之烈阳剑、🔨塞特之锤)　<b>0</b> 第10格　<b>J</b> 附魔祭坛(献文物)　<b>Esc</b> 暂停　<b>T</b> 编年史　<b>P</b> 陶片图鉴　<b>K</b> 神话遗物　<b>U</b> 开宝库　<b>R</b> 答斯芬克斯　<b>L</b> 神灯许愿　<b>N</b> 大地图(右上角为小地图)<br>
     <b>物品栏</b>：1烟花 2钩爪 3可乐 4铁剑 5机关枪 6火箭筒 7弓 8=TNT(右键放·左键点燃) 9弹跳板<br>
     <b>2 钩爪</b>甩向准星把你拉过去；<b>3 可乐</b>回血+加速；<b>9 弹跳板</b>踩上去高高弹飞不摔伤<br>
     击杀获得<b>经验</b>升级(提升生命与伤害)。白天长、夜晚短而亮，敌人只是点缀<br>
@@ -5310,6 +5310,7 @@ function furnaceSpill(x,y,z){                              // 熔炉被挖掉/�
   if(n) showName("🔥 熔炉拆了，炉内 "+n+" 件物品收回背包");
   return n;
 }
+
 
 /* =========================================================
    🌿 氛围小生物(第六轮·云端): 黄昏/夜里的萤火虫、村落烟囱炊烟、水面跃鱼 —— 纯粒子, 不占生物上限、不影响刷怪
@@ -11108,7 +11109,7 @@ function loadGame(){
   for(const P of POTIONS){ potions[P.k]=Math.max(0,(s.potions&&s.potions[P.k])|0); if(P.k in potionFx) potionFx[P.k]=0; }   // 第五轮·云端: 老存档无 potions → 全 0
   fishState.on=false; fishState.fish=Math.max(0,(s.fish&&s.fish.n)|0); fishState.caught=Math.max(0,(s.fish&&s.fish.caught)|0);   // 第五轮·云端
   for(const k in chests) delete chests[k];                                                              // 第六轮·云端: 储物箱/收纳袋
-  if(s.chests && typeof s.chests==="object") for(const k in s.chests){ const st=s.chests[k], o={}; if(st&&typeof st==="object") for(const id in st){ const n=st[id]|0; if(n>0 && BLOCKS[id]) o[id]=n; } chests[k]=o; }
+  if(s.chests && typeof s.chests==="object" && !Array.isArray(s.chests)) for(const k in s.chests){ const st=s.chests[k], o={}; if(!st||typeof st!=="object") continue; for(const id in st){ const n=st[id]|0; if(n>0 && BLOCKS[id]) o[id]=n; } chests[k]=o; }
   bundleState.owned=!!(s.bundle&&s.bundle.owned); bundleState.items={};
   fishState.cooked=Math.max(0,(s.fish&&s.fish.cooked)|0);                                             // 第七轮·云端: 烤鱼/熔炉(老存档无 → 0/空)
   for(const k in furnaces) delete furnaces[k];
@@ -11117,7 +11118,7 @@ function loadGame(){
     if(okIn(q.in)&&(q.inN|0)>0){ f.in=q.in; f.inN=q.inN|0; } if(okFuel(q.fuel)&&(q.fuelN|0)>0){ f.fuel=q.fuel; f.fuelN=q.fuelN|0; } if(okOut(q.out)&&(q.outN|0)>0){ f.out=q.out; f.outN=Math.min(FURNACE_OUT_MAX,q.outN|0); }
     f.burn=Math.max(0,+q.burn||0); f.burnMax=Math.max(f.burn,+q.burnMax||0); f.prog=clamp(+q.prog||0,0,FURNACE_T); furnaces[k]=f; }
   if(s.bundle && s.bundle.items) for(const id in s.bundle.items){ const n=s.bundle.items[id]|0; if(n>0 && BLOCKS[id]) bundleState.items[id]=n; }
-  bag.clear(); if(s.bag) for(const k in s.bag) bag.set(+k, s.bag[k]);
+  bag.clear(); if(s.bag && typeof s.bag==="object" && !Array.isArray(s.bag)) for(const k in s.bag){ const n=s.bag[k]|0; if(n>0 && BLOCKS[+k]) bag.set(+k, n); }   // 坏存档(字符串/数组/非法 ID)不再往背包塞垃圾(第八轮·云端: 老存档兼容矩阵发现)
   // 优先用 id 定位关卡(抗关卡表变动), 没有 id 的老存档才退回下标
   const qById = s.questId ? QUESTS.findIndex(q=>q.id===s.questId) : -1;
   questIdx = qById>=0 ? qById : Math.min(s.questIdx??0, QUESTS.length);
@@ -12537,6 +12538,46 @@ function selftest(){
     ok("残缺存档: 缺字段子系统全部归零",
        npcState.relics===0&&archState.pottery===0&&faction.rome===0&&faction.egypt===0&&undeadNight.survived===0,
        "npc="+npcState.relics+" arch="+archState.pottery+" fac="+faction.rome+"/"+faction.egypt+" undead="+undeadNight.survived);
+    // 3c. 老存档兼容矩阵(第八轮·云端): 按各轮存档形状删掉之后新增的字段, 真走一遍 loadGame —— 后来的子系统归零、原有字段不丢;
+    //     再喂一份字段类型全错的坏存档, 必须不抛错且各子系统落在安全默认值
+    {
+      let mxErr=null; const rows=[];
+      try{
+        localStorage.setItem(SAVE_KEY,'{"seed":1234}'); loadGame();                      // 从干净状态起步
+        bag.clear(); bag.set(GOLD_ORE,7); lvl=3; xp=5;
+        for(const k in potions) potions[k]=0; potions.swift=3; enchState.sharp=2; fishState.fish=4; fishState.cooked=2;
+        for(const k in chests) delete chests[k]; chests["1,2,3"]={[SAND]:5}; bundleState.owned=true; bundleState.items={[HAY]:2};
+        for(const k in furnaces) delete furnaces[k]; furnaces["4,5,6"]=Object.assign(newFurnace(),{in:SAND,inN:3,fuel:PLANKS,fuelN:2,out:GLASS,outN:1});
+        const full=collectSave();
+        const SHAPES_BY_ROUND=[                                                            // [轮次名, 要删的字段(之后各轮才有的)]
+          ["第四轮", ["ench","sunblade","mace","potions","fish","chests","bundle","furnaces"]],
+          ["第五轮", ["chests","bundle","furnaces","fish.cooked"]],
+          ["第六轮", ["furnaces","fish.cooked"]],
+          ["第七轮", []],
+        ];
+        for(const [name,drop] of SHAPES_BY_ROUND){
+          const sv=JSON.parse(JSON.stringify(full));
+          for(const f of drop){ const [a,b]=f.split("."); if(b){ if(sv[a]) delete sv[a][b]; } else delete sv[a]; }
+          localStorage.setItem(SAVE_KEY, JSON.stringify(sv));
+          const loaded=loadGame();
+          const has=f=>!drop.includes(f);
+          const keep=loaded===true && bagCount(GOLD_ORE)===7 && lvl===3;
+          const r5=has("potions") ? (potions.swift===3 && enchState.sharp===2 && fishState.fish===4) : (potions.swift===0 && enchState.sharp===0 && fishState.fish===0);
+          const r6=has("chests") ? (!!chests["1,2,3"] && chests["1,2,3"][SAND]===5 && bundleState.owned && bundleState.items[HAY]===2) : (Object.keys(chests).length===0 && !bundleState.owned);
+          const r7=has("furnaces") ? (!!furnaces["4,5,6"] && furnaces["4,5,6"].inN===3 && furnaces["4,5,6"].out===GLASS && fishState.cooked===2) : (Object.keys(furnaces).length===0 && fishState.cooked===0);
+          rows.push(name+(keep&&r5&&r6&&r7?"✓":"✗(keep="+keep+" r5="+r5+" r6="+r6+" r7="+r7+")"));
+        }
+        // 类型全错的坏存档
+        localStorage.setItem(SAVE_KEY, JSON.stringify({seed:1234, bag:"x", potions:null, fish:"x", ench:null, chests:[1], bundle:5,
+          furnaces:{"1,1,1":"x","2,2,2":{in:999,inN:-4,fuel:SAND,fuelN:3,out:12345,outN:9,burn:"hot",prog:99}}, market:[], trophies:{}, landSeen:"abc", bioSeen:7}));
+        const badLoaded=loadGame(), f2=furnaces["2,2,2"];
+        const badOk=badLoaded===true && bag.size===0 && potions.swift===0 && fishState.fish===0 && Object.keys(chests).length===0 && !bundleState.owned
+          && !furnaces["1,1,1"] && !!f2 && f2.inN===0 && f2.fuelN===0 && f2.outN===0 && f2.burn===0 && f2.prog===FURNACE_T;
+        rows.push("坏存档"+(badOk?"✓":"✗(loaded="+badLoaded+" bag="+bag.size+" f2="+JSON.stringify(f2)+")"));
+      }catch(e){ mxErr=e.message; }
+      for(const k in furnaces) delete furnaces[k]; for(const k in chests) delete chests[k];
+      ok("老存档兼容矩阵: 第四~第七轮存档形状逐一载入(新子系统归零、旧字段不丢) + 类型错乱的坏存档不抛错", !mxErr && rows.every(r=>r.endsWith("✓")), mxErr||rows.join(" · "));
+    }
     // 还原真实(测试)存档并重载, 让后续用例在有效世界上继续
     try{ if(_bkSave!=null) localStorage.setItem(SAVE_KEY,_bkSave); else localStorage.removeItem(SAVE_KEY); }catch(e){}
     if(_bkSave!=null) loadGame();
@@ -14191,6 +14232,28 @@ function selftest(){
       }
     }
 
+    // 第八轮·云端·地图: 圆形小地图有内容 + HH:MM 时间 + 坐标与玩家一致; N 大地图能开关
+    try{
+      const mr=mmRenderSync();
+      const xyzOk = mr.xyz===(Math.floor(player.x)+","+Math.floor(player.y)+","+Math.floor(player.z));
+      ok("小地图: 画布有非透明像素·时间 HH:MM·坐标与玩家一致", mr.opaque>1000 && /^([01]\d|2[0-3]):[0-5]\d$/.test(mr.time) && xyzOk,
+         "opaque="+mr.opaque+" time="+mr.time+" xyz="+mr.xyz+" tiles="+mr.tiles);
+      const on=toggleBigMap(true), shown=getComputedStyle(document.getElementById("bigmap")).display;
+      const off=toggleBigMap(false), hidden=getComputedStyle(document.getElementById("bigmap")).display;
+      ok("大地图(N)能打开/关闭", on===true && shown==="flex" && off===false && hidden==="none", "on="+on+"/"+shown+" off="+off+"/"+hidden);
+      { // 与本地新手引导共用 N 键: 引导进行中 N = 跳过引导(不开地图); 引导结束后 N 才开关大地图
+        const key0=(function(){ try{ return localStorage.getItem(TUT_KEY); }catch(e){ return null; } })(), act0=tut.active;
+        const pressN=()=>document.dispatchEvent(new KeyboardEvent("keydown",{code:"KeyN",key:"n",bubbles:true}));
+        const sl0=softLock; softLock=true;                                            // 键盘处理要求 playing()
+        toggleBigMap(false); startTutorial(true); pressN();
+        const skipped=!tut.active && !MM.bigOpen;
+        pressN(); const opened=MM.bigOpen; toggleBigMap(false); softLock=sl0;
+        try{ if(key0==null) localStorage.removeItem(TUT_KEY); else localStorage.setItem(TUT_KEY,key0); }catch(e){}
+        if(act0) startTutorial(true); else { tut.active=false; renderTut(); }
+        ok("N 键: 新手引导进行中按 N 跳过引导且不开地图; 引导结束后按 N 打开大地图", skipped && opened, "skipped="+skipped+" opened="+opened);
+      }
+    }catch(err){ ok("小地图/大地图自测未抛错", false, String(err&&err.stack||err)); }
+
     // 收尾再确认一次: 即使中途 saveGame 写过测试世界, 还原后玩家存档仍在
     sandseaStorageRestore(liveStore);
     let endSave=null; try{ endSave=localStorage.getItem(SAVE_KEY); }catch(e){}
@@ -14215,6 +14278,391 @@ function selftest(){
               "font-weight:bold;color:"+(fail===0?"#4caf50":"#f44336"));
   return {pass, fail, total:pass+fail, results};
 }
+/* =========================================================
+   🗺 第八轮·云端·地图: 右上角圆形小地图(北朝上, 箭头随视线) + N 键全屏大地图
+   缓存策略:
+   · 以区块(16×16)为单位缓存俯视颜色瓦片(1px/格的小 canvas), 世界坐标锚定, 玩家走动不需要重画旧瓦片;
+     每帧只花 ≤0.6ms 预算补新露出/新加载/被标脏的瓦片(大地图打开时放宽到 6ms), 超预算就留到下一帧。
+   · 已加载区块取真实顶层方块颜色 + 高度明暗; 未加载区块用 biomeAt/heightAt 每 2 格采样一次做近似, 区块加载后自动替换。
+   · 小地图底图(11×11 瓦片拼合)只在跨区块或有新瓦片时重拼(≤6 次/秒); 圆形画布 12 次/秒重绘; 玩家箭头用 CSS 旋转每帧跟随。
+   · 玩家身边 3×3 区块每 2 秒标脏一次, 反映挖掘/建造; 瓦片超过 1500 块时淘汰远处的。
+   ========================================================= */
+const MM={
+  R:56,                 // 小地图半径(格)
+  TR:5,                 // 小地图底图的瓦片半径
+  BIG_SPAN:256,         // 大地图显示范围(格)
+  BTR:9,                // 大地图瓦片半径
+  tiles:new Map(),      // "cx,cz" → {c:canvas, st: 1=真实方块 0=噪声近似 -1=待刷新}
+  complete:false, lastScan:0, lastDirty:0,
+  base:null, baseCx:1e9, baseCz:1e9, baseDirty:true, lastBase:0,
+  bigBase:null, bigCx:1e9, bigCz:1e9, bigDirty:true, lastBig:0,
+  lastDraw:0, lastText:0, lastYaw:1e9,
+  structs:[], structT:-1e9, structCell:"",
+  bigOpen:false, bigWasLocked:false,
+  cost:0, costMax:0, frames:0,
+  el:null, cv:null, ctx:null, me:null, timeEl:null, xyzEl:null, tgtEl:null,
+  bigEl:null, bigCv:null, bigCtx:null, bigFoot:null
+};
+const MM_BIOCOL=[0x7cb24a,0x7f9a5a,0xe6cf8b,0xeef3f8,0xa89a6a,0xc2b45e,0x4f6b3a,0xc0633a,0xefeadf,0xb9774a,0x3a3436];
+const MM_BCOL=(()=>{
+  const a=new Int32Array(256).fill(-1);
+  const S=(id,c)=>{ a[id]=c; };
+  S(GRASS,0x79b04a); S(DIRT,0x8a6242); S(STONE,0x8c8c8c); S(SAND,0xe8d193); S(WATER,0x3b78c8);
+  S(LOG,0x6e4f2e); S(LEAVES,0x3f7a2e); S(PLANKS,0xb58a52); S(COBBLE,0x7d7d7d); S(GLASS,0xcfe8f0);
+  S(BEDROCK,0x444444); S(SNOW,0xf4f7fb); S(TNT,0xd0402c); S(SANDSTONE,0xdcc07e); S(CACTUS,0x4c8c34);
+  S(PINE_LOG,0x5a4028); S(PINE_LEAF,0x355f34); S(BRICK,0xb4523c); S(WOOL,0xe8e4dc); S(HAY,0xd8b440);
+  S(CLAY,0xa7a9b6); S(ICE,0xa8d4f4); S(GRAVEL,0x8a8480); S(COAL_ORE,0x6c6c6c); S(IRON_ORE,0x9c8a7c);
+  S(GOLD_ORE,0xb8a060); S(GEM_ORE,0x70a8b0); S(DARKPLANK,0x5c4028); S(MOSSY,0x6a8060); S(PUMPKIN,0xe08a28);
+  S(LANTERN,0xffd070); S(LAVA,0xff7a1c); S(OBSIDIAN,0x2a2038); S(CRYSTAL,0xb89cf0); S(MAGMA,0xb8401c);
+  S(CONCRETE,0xb8b8b4); S(ASPHALT,0x3c3c40); S(METAL,0xa0a8b0); S(NEON,0xff4fb0); S(WINDOW,0x8cc0e0);
+  S(SARCO,0xd4aa50); S(JUMPPAD,0x60d060); S(MARBLE,0xece6da); S(ROOFTILE,0xc0482e);
+  S(SALTCRUST,0xf2efe6); S(SALTCRYSTAL,0xfafaff); S(BLACKSAND,0x2c2a2e); S(BASALT,0x45424a);
+  S(WINDROCK,0xc08250); S(GLOWVEIN,0xf0c040); S(CAVECALC,0xe0dcd0); S(AMETHYST,0x9a6ad0); S(WRECKWOOD,0x7a6448);
+  S(SUSGRAVEL,0x8a8480); S(TRAPPLATE,0xcfb070); S(LOOSESAND,0xe8d193);
+  S(PLASTER,0xe0c49a); S(PLASTER_ROSE,0xe0a08c); S(PLASTER_WHITE,0xf2ece0); S(WINDOW_WOOD,0x9a7446);
+  S(PALM_LOG,0x8a6a3e); S(PALM_LEAF,0x4f9a3a); S(GILDED,0xf0c848); S(HIERO,0xd8bc78); S(STARCEIL,0x2a3e8c);
+  S(CHEST,0xa87a3c); S(FURNACE,0xb09a70); S(FURNACE_LIT,0xc08a50); S(KAHEART,0x50c0c0); S(OSIRIS,0x40a080);
+  S(SLAB_SST,0xdcc07e); S(STAIR_N,0xdcc07e); S(STAIR_E,0xdcc07e); S(STAIR_S,0xdcc07e); S(STAIR_W,0xdcc07e);
+  S(LAMPPOST,0x302a24); S(IRONPOST,0x707478);
+  return a;
+})();
+const MM_SPIRAL=(()=>{            // 由近到远的瓦片偏移(先补玩家身边)
+  const o=[];
+  for(let dx=-MM.BTR;dx<=MM.BTR;dx++) for(let dz=-MM.BTR;dz<=MM.BTR;dz++) o.push([dx,dz,Math.max(Math.abs(dx),Math.abs(dz)),dx*dx+dz*dz]);
+  o.sort((a,b)=>a[3]-b[3]);
+  return o;
+})();
+const _mmImg=(()=>{ try{ return new ImageData(16,16); }catch(e){ return document.createElement("canvas").getContext("2d").createImageData(16,16); } })();
+const _mmH=new Int16Array(256), _mmC=new Int32Array(256), _mmW=new Uint8Array(256);
+function mmRenderTile(cx,cz){
+  const k=key(cx,cz), ch=world.get(k), bx=cx*CS, bz=cz*CS;
+  if(ch){
+    const bl=ch.blocks;
+    for(let lx=0;lx<16;lx++) for(let lz=0;lz<16;lz++){
+      const base=(lx*CS+lz)*H; let y=H-1, b=AIR;
+      while(y>0){ b=bl[base+y]; if(b!==AIR && !PLANT(b)) break; y--; }
+      let c=MM_BCOL[b]; if(c<0) c=MM_BIOCOL[biomeAt(bx+lx,bz+lz)]|0;
+      const i=lz*16+lx; _mmW[i]=0;
+      if(b===WATER){ let d=0; while(d<7 && y-d>0 && bl[base+y-d]===WATER) d++; c=mmShade(c,1.18-d*0.07); _mmW[i]=1; }
+      _mmH[i]=y; _mmC[i]=c;
+    }
+  } else {                              // 未加载: 噪声近似, 每 2 格采样一次(省 3/4 的 heightAt)
+    for(let lx=0;lx<16;lx+=2) for(let lz=0;lz<16;lz+=2){
+      const x=bx+lx, z=bz+lz, h=Math.floor(heightAt(x,z));
+      let c, y=h, w=0;
+      if(h<WATER_Y){ c=mmShade(0x3b78c8, 1.18-Math.min(7,WATER_Y-h)*0.07); y=WATER_Y; w=1; }
+      else c=MM_BIOCOL[biomeAt(x,z)]|0;
+      for(let a=0;a<2;a++) for(let b2=0;b2<2;b2++){ const i=(lz+b2)*16+lx+a; _mmH[i]=y; _mmC[i]=c; _mmW[i]=w; }
+    }
+  }
+  const d=_mmImg.data;
+  for(let lz=0;lz<16;lz++) for(let lx=0;lx<16;lx++){
+    const i=lz*16+lx; let c=_mmC[i];
+    if(!_mmW[i]){                       // 高度明暗: 西北光照的简易山影 + 海拔微调
+      const hn = lz>0 ? _mmH[i-16] : _mmH[i], hw = lx>0 ? _mmH[i-1] : _mmH[i];
+      const dy=clamp((_mmH[i]-hn)+(_mmH[i]-hw),-4,4);
+      c=mmShade(c, 1+dy*0.055+clamp((_mmH[i]-WATER_Y-6)*0.004,-0.12,0.14));
+    }
+    const p=i*4; d[p]=c>>16&255; d[p+1]=c>>8&255; d[p+2]=c&255; d[p+3]=255;
+  }
+  let t=MM.tiles.get(k);
+  if(!t){ const cv=document.createElement("canvas"); cv.width=cv.height=16; t={c:cv, x:null, st:0}; t.x=cv.getContext("2d"); MM.tiles.set(k,t); }
+  t.x.putImageData(_mmImg,0,0);
+  t.st = ch ? 1 : 0;
+}
+function mmShade(c,f){
+  const r=Math.min(255,Math.max(0,((c>>16&255)*f)|0)), g=Math.min(255,Math.max(0,((c>>8&255)*f)|0)), b=Math.min(255,Math.max(0,((c&255)*f)|0));
+  return (r<<16)|(g<<8)|b;
+}
+/* 按预算补瓦片; 返回是否已全部就绪 */
+function mmPump(now,budget,rad){
+  const t0=performance.now();
+  const pcx=Math.floor(player.x)>>4, pcz=Math.floor(player.z)>>4;
+  if(now-MM.lastDirty>2000){                      // 身边 3×3 区块定期刷新, 反映挖掘/建造
+    MM.lastDirty=now;
+    for(let dx=-1;dx<=1;dx++) for(let dz=-1;dz<=1;dz++){ const t=MM.tiles.get(key(pcx+dx,pcz+dz)); if(t && t.st===1) t.st=-1; }
+    MM.complete=false;
+  }
+  if(MM.complete && now-MM.lastScan<500) return true;
+  let done=true;
+  for(const o of MM_SPIRAL){
+    if(o[2]>rad) continue;
+    const cx=pcx+o[0], cz=pcz+o[1], k=key(cx,cz), t=MM.tiles.get(k);
+    if(t && t.st===1) continue;
+    if(t && t.st===0 && !world.has(k)) continue;
+    if(performance.now()-t0>budget){ done=false; break; }
+    mmRenderTile(cx,cz);
+    if(o[2]<=MM.TR+1) MM.baseDirty=true;
+    MM.bigDirty=true;
+  }
+  MM.complete=done; if(done) MM.lastScan=now;
+  if(MM.tiles.size>1500){                          // 淘汰远处瓦片
+    for(const [k,t] of MM.tiles){ const p=k.split(","); if(Math.max(Math.abs(p[0]-pcx),Math.abs(p[1]-pcz))>24) MM.tiles.delete(k); }
+  }
+  return done;
+}
+/* 把瓦片拼成底图: 以 (ccx,ccz) 区块为中心, tr 为瓦片半径 */
+function mmCompose(cv,ccx,ccz,tr){
+  const n=(tr*2+1)*16;
+  if(cv.width!==n){ cv.width=cv.height=n; }
+  const g=cv.getContext("2d");
+  g.fillStyle="#1a1622"; g.fillRect(0,0,n,n);
+  for(let dx=-tr;dx<=tr;dx++) for(let dz=-tr;dz<=tr;dz++){
+    const t=MM.tiles.get(key(ccx+dx,ccz+dz));
+    if(t) g.drawImage(t.c,(dx+tr)*16,(dz+tr)*16);
+  }
+}
+function mmStructs(now){                           // 附近建筑/地标(每 0.7s 或换格子才重算)
+  const sx=Math.floor(player.x/CELL), sz=Math.floor(player.z/CELL), cell=sx+","+sz;
+  if(now-MM.structT<700 && cell===MM.structCell) return MM.structs;
+  MM.structT=now; MM.structCell=cell;
+  const out=[];
+  for(let dx=-2;dx<=2;dx++) for(let dz=-2;dz<=2;dz++){
+    const s=structureAt(sx+dx,sz+dz); if(!s) continue;
+    const nm=LANDMARKS[s.type];
+    out.push({x:s.x, z:s.z, type:s.type, land:!!nm, name:nm||"", seen:!!nm && landSeen.has(s.type+":"+(sx+dx)+":"+(sz+dz))});
+  }
+  MM.structs=out;
+  return out;
+}
+function mmTarget(){                                // 和指南针同源: 远征宝藏优先, 否则最近地标
+  if(typeof expeditionState!=="undefined" && expeditionState.active)
+    return {x:expeditionState.tx, z:expeditionState.tz, label:"🌊 金羊毛 "+Math.ceil(expeditionState.t)+"s"};
+  const l=nearestLandmark(player.x,player.z);
+  return l ? {x:l.x, z:l.z, label:LANDMARKS[l.type]} : null;
+}
+function mmSplitName(s){ const a=Array.from(s); return [a[0]||"", a.slice(1).join("")]; }
+function mmTimeStr(){
+  const m=Math.floor((((dayT*24+6)%24+24)%24)*60);
+  return String(Math.floor(m/60)%24).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
+}
+function mmXYZ(){ return Math.floor(player.x)+","+Math.floor(player.y)+","+Math.floor(player.z); }
+/* 通用叠加层: 建筑/地标/生物/目标. k=每格像素, (cx,cy)=玩家所在像素, lim=可见半径(像素), big=大地图 */
+function mmOverlay(g,k,cx,cy,lim,big,now){
+  const px=player.x, pz=player.z, inR=(sx,sy)=>big ? (Math.abs(sx-cx)<=lim && Math.abs(sy-cy)<=lim) : Math.hypot(sx-cx,sy-cy)<=lim;
+  const S=big?1.6:1;
+  // 普通建筑: 红色小方块
+  g.fillStyle="#e04a3a"; g.strokeStyle="rgba(0,0,0,.6)"; g.lineWidth=1;
+  for(const s of mmStructs(now)){
+    if(s.land) continue;
+    const sx=cx+(s.x-px)*k, sy=cy+(s.z-pz)*k; if(!inR(sx,sy)) continue;
+    const r=3*S*MM.dpr; g.fillRect(sx-r,sy-r,r*2,r*2); g.strokeRect(sx-r,sy-r,r*2,r*2);
+  }
+  // 生物: 敌对红点 / 驯服骆驼金点
+  for(const m of mobs){
+    if(!m || !m.def) continue;
+    let col=null, r=2.2;
+    if(m.tamed) { col="#ffd23f"; r=3; }
+    else if(m.def.boss) { col="#ff2a2a"; r=4.5; }
+    else if(m.def.hostile) col="#ff4a4a";
+    if(!col) continue;
+    const sx=cx+(m.x-px)*k, sy=cy+(m.z-pz)*k; if(!inR(sx,sy)) continue;
+    g.beginPath(); g.arc(sx,sy,r*S*MM.dpr,0,6.283); g.fillStyle=col; g.fill(); g.strokeStyle="rgba(0,0,0,.7)"; g.stroke();
+  }
+  // 地标: 金圈=已发现, 灰圈=未发现
+  g.textAlign="center"; g.textBaseline="middle";
+  for(const s of mmStructs(now)){
+    if(!s.land) continue;
+    const sx=cx+(s.x-px)*k, sy=cy+(s.z-pz)*k; if(!inR(sx,sy)) continue;
+    const r=(big?11:7.5)*MM.dpr, [ico,nm]=mmSplitName(s.name);
+    g.beginPath(); g.arc(sx,sy,r,0,6.283); g.fillStyle="rgba(18,16,26,.82)"; g.fill();
+    g.lineWidth=1.6*MM.dpr; g.strokeStyle=s.seen?"#e8bb6a":"rgba(220,220,230,.55)"; g.stroke();
+    g.font=Math.round(r*1.15)+"px sans-serif"; g.fillStyle="#fff"; g.fillText(ico,sx,sy+0.5*MM.dpr);
+    if(big){
+      const label=s.seen?nm:nm+"（未探访）";
+      g.font="bold "+Math.round(12*MM.dpr)+"px 'Microsoft YaHei',sans-serif";
+      g.lineWidth=3*MM.dpr; g.strokeStyle="rgba(0,0,0,.85)"; g.strokeText(label,sx,sy+r+9*MM.dpr);
+      g.fillStyle=s.seen?"#ffe9a8":"rgba(230,225,215,.8)"; g.fillText(label,sx,sy+r+9*MM.dpr);
+    }
+  }
+  // 指南针目标: 在范围内画金色菱形, 超出则贴边画金色小三角
+  const tg=mmTarget();
+  if(tg){
+    let sx=cx+(tg.x-px)*k, sy=cy+(tg.z-pz)*k;
+    if(!inR(sx,sy)){
+      const a=Math.atan2(sy-cy,sx-cx), rr=lim-6*MM.dpr;
+      if(big){ const f=rr/Math.max(Math.abs(Math.cos(a)),Math.abs(Math.sin(a))); sx=cx+Math.cos(a)*f; sy=cy+Math.sin(a)*f; }
+      else { sx=cx+Math.cos(a)*rr; sy=cy+Math.sin(a)*rr; }
+      g.save(); g.translate(sx,sy); g.rotate(a+Math.PI/2); g.beginPath();
+      const q=5*S*MM.dpr; g.moveTo(0,-q); g.lineTo(q*0.8,q*0.7); g.lineTo(-q*0.8,q*0.7); g.closePath();
+      g.fillStyle="#ffd23f"; g.fill(); g.lineWidth=1*MM.dpr; g.strokeStyle="rgba(0,0,0,.7)"; g.stroke(); g.restore();
+    }
+  }
+}
+function mmDrawMini(now){
+  const g=MM.ctx, S=MM.cv.width, k=S/(MM.R*2);
+  const pcx=Math.floor(player.x)>>4, pcz=Math.floor(player.z)>>4;
+  if(pcx!==MM.baseCx || pcz!==MM.baseCz || (MM.baseDirty && now-MM.lastBase>160)){
+    mmCompose(MM.base,pcx,pcz,MM.TR); MM.baseCx=pcx; MM.baseCz=pcz; MM.baseDirty=false; MM.lastBase=now;
+  }
+  const ox=(pcx-MM.TR)*16, oz=(pcz-MM.TR)*16, n=MM.base.width;
+  g.clearRect(0,0,S,S);
+  g.save();
+  g.beginPath(); g.arc(S/2,S/2,S/2,0,6.283); g.clip();
+  g.fillStyle="#1a1622"; g.fillRect(0,0,S,S);
+  g.imageSmoothingEnabled=false;
+  g.drawImage(MM.base, S/2-(player.x-ox)*k, S/2-(player.z-oz)*k, n*k, n*k);
+  const vg=g.createRadialGradient(S/2,S/2,S*0.34,S/2,S/2,S/2);   // 边缘暗角, 和深色描边衔接
+  vg.addColorStop(0,"rgba(18,16,26,0)"); vg.addColorStop(1,"rgba(18,16,26,.55)");
+  g.fillStyle=vg; g.fillRect(0,0,S,S);
+  mmOverlay(g,k,S/2,S/2,S/2-2*MM.dpr,false,now);
+  g.restore();
+}
+function mmUpdateText(){
+  const ts=mmTimeStr(); if(MM.timeEl.textContent!==ts) MM.timeEl.textContent=ts;
+  const xs=mmXYZ(); if(MM.xyzEl.textContent!==xs) MM.xyzEl.textContent=xs;
+  MM.timeEl.parentNode.title = sunH<0.02 ? "夜晚" : "白天";
+  const tg=mmTarget();
+  if(!tg){ MM.tgtEl.style.visibility="hidden"; return; }
+  MM.tgtEl.style.visibility="visible";
+  const dx=tg.x-player.x, dz=tg.z-player.z, m=Math.round(Math.hypot(dx,dz));
+  MM.tgtEl.querySelector(".mm-ta").style.transform="rotate("+Math.atan2(dx,-dz)+"rad)";   // 北朝上: 直接用世界方位角
+  const lab=MM.tgtEl.querySelector(".mm-tl"); if(lab.textContent!==tg.label) lab.textContent=tg.label;
+  MM.tgtEl.querySelector(".mm-td").textContent = m>=1000 ? (m/1000).toFixed(1)+"km" : m+"m";
+}
+function mmDrawBig(now){
+  const g=MM.bigCtx, S=MM.bigCv.width, k=S/MM.BIG_SPAN;
+  const pcx=Math.floor(player.x)>>4, pcz=Math.floor(player.z)>>4;
+  if(pcx!==MM.bigCx || pcz!==MM.bigCz || (MM.bigDirty && now-MM.lastBig>200)){
+    mmCompose(MM.bigBase,pcx,pcz,MM.BTR); MM.bigCx=pcx; MM.bigCz=pcz; MM.bigDirty=false; MM.lastBig=now;
+  }
+  const ox=(pcx-MM.BTR)*16, oz=(pcz-MM.BTR)*16, n=MM.bigBase.width;
+  g.fillStyle="#1a1622"; g.fillRect(0,0,S,S);
+  g.imageSmoothingEnabled=false;
+  g.drawImage(MM.bigBase, S/2-(player.x-ox)*k, S/2-(player.z-oz)*k, n*k, n*k);
+  // 64 格网格线 + 坐标
+  g.strokeStyle="rgba(18,16,26,.28)"; g.lineWidth=1; g.fillStyle="rgba(255,240,210,.75)";
+  g.font=Math.round(10*MM.dpr)+"px monospace"; g.textAlign="left"; g.textBaseline="top";
+  const x0=player.x-MM.BIG_SPAN/2, z0=player.z-MM.BIG_SPAN/2;
+  for(let gx=Math.ceil(x0/64)*64; gx<=x0+MM.BIG_SPAN; gx+=64){ const sx=(gx-x0)*k; g.beginPath(); g.moveTo(sx,0); g.lineTo(sx,S); g.stroke(); g.fillText(String(gx),sx+2,2); }
+  for(let gz=Math.ceil(z0/64)*64; gz<=z0+MM.BIG_SPAN; gz+=64){ const sy=(gz-z0)*k; g.beginPath(); g.moveTo(0,sy); g.lineTo(S,sy); g.stroke(); g.fillText(String(gz),2,sy+2); }
+  mmOverlay(g,k,S/2,S/2,S/2-2*MM.dpr,true,now);
+  // 玩家箭头
+  g.save(); g.translate(S/2,S/2); g.rotate(player.yaw);
+  const q=9*MM.dpr; g.beginPath(); g.moveTo(0,-q); g.lineTo(q*0.72,q*0.85); g.lineTo(0,q*0.42); g.lineTo(-q*0.72,q*0.85); g.closePath();
+  g.fillStyle="#fff"; g.fill(); g.lineWidth=2*MM.dpr; g.strokeStyle="#b5822e"; g.stroke(); g.restore();
+  // 北向标记
+  g.beginPath(); g.arc(S/2,14*MM.dpr,10*MM.dpr,0,6.283); g.fillStyle="#e8bb6a"; g.fill();
+  g.fillStyle="#2a1c08"; g.font="bold "+Math.round(12*MM.dpr)+"px sans-serif"; g.textAlign="center"; g.textBaseline="middle"; g.fillText("N",S/2,14.5*MM.dpr);
+  const tg=mmTarget(), seen=landTypesSeen().size;
+  MM.bigFoot.innerHTML='📍 '+mmXYZ()+'　🕘 '+mmTimeStr()+'　🌍 '+BIOME_NAME[biomeAt(Math.floor(player.x),Math.floor(player.z))]
+    +(tg?'　🧭 '+tg.label+' '+Math.round(Math.hypot(tg.x-player.x,tg.z-player.z))+'m':'')+'　已发现地标 '+seen+'/'+PAYOFF_N
+    +'<br><span style="color:#e04a3a">■</span> 建筑　<span style="color:#ff4a4a">●</span> 敌对生物　<span style="color:#ffd23f">●</span> 驯服骆驼　'
+    +'<span style="color:#e8bb6a">◯</span> 已探访地标　<span style="opacity:.6">◯</span> 未探访　<span style="color:#ffd23f">▲</span> 指南针目标　网格 64 格';
+}
+function toggleBigMap(force){
+  const show = force===undefined ? !MM.bigOpen : !!force;
+  if(show===MM.bigOpen) return MM.bigOpen;
+  MM.bigOpen=show;
+  if(show){
+    const css=Math.floor(Math.max(240,Math.min(innerHeight*0.74, innerWidth*0.86, 760)));
+    MM.bigCv.style.width=MM.bigCv.style.height=css+"px";
+    MM.bigCv.width=MM.bigCv.height=Math.round(css*MM.dpr);
+    MM.bigEl.classList.add("on");
+    MM.bigWasLocked=!!document.pointerLockElement;
+    MM.complete=false; MM.bigDirty=true; MM.bigCx=1e9;
+    const now=performance.now(); mmPump(now,40,MM.BTR); mmDrawBig(now);
+    if(document.pointerLockElement) document.exitPointerLock();
+  } else {
+    MM.bigEl.classList.remove("on");
+    if(MM.bigWasLocked && !dead && !softLock) enterPointerLock();
+    MM.bigWasLocked=false;
+  }
+  return MM.bigOpen;
+}
+/* 同步整张重绘(自测/调试用) */
+function mmRenderSync(){
+  const now=performance.now();
+  MM.complete=false; mmPump(now,500,MM.TR+1); MM.baseCx=1e9;
+  mmDrawMini(now); mmUpdateText();
+  const img=MM.ctx.getImageData(0,0,MM.cv.width,MM.cv.height).data;
+  let opaque=0; for(let i=3;i<img.length;i+=4) if(img[i]>0) opaque++;
+  return {opaque, time:MM.timeEl.textContent, xyz:MM.xyzEl.textContent, tiles:MM.tiles.size};
+}
+function mmUpdate(now){
+  const t0=performance.now();
+  if(MM.bigOpen){
+    mmPump(now,6,MM.BTR);
+    if(now-MM.lastDraw>120){ MM.lastDraw=now; mmDrawBig(now); }
+  } else if(playing()){
+    MM.el.style.display="block";
+    mmPump(now,0.6,MM.TR+1);
+    if(Math.abs(player.yaw-MM.lastYaw)>0.004){ MM.lastYaw=player.yaw; MM.me.style.transform="translate(-50%,-50%) rotate("+player.yaw+"rad)"; }
+    if(now-MM.lastDraw>80){ MM.lastDraw=now; mmDrawMini(now); }
+    if(now-MM.lastText>200){ MM.lastText=now; mmUpdateText(); }
+  } else return;
+  const c=performance.now()-t0; MM.frames++;
+  MM.cost=MM.cost*0.95+c*0.05; if(MM.frames>120) MM.costMax=Math.max(MM.costMax*0.999,c);
+}
+(function mmInit(){
+  const st=document.createElement("style");
+  st.textContent=`
+  #compass { display:none !important; }                                   /* 第八轮·云端·地图: 指南针并入小地图 */
+  #stats { right:186px !important; }
+  #minimap { position:absolute; right:10px; top:8px; width:168px; display:none; pointer-events:none; text-align:center;
+             font:bold 12px/1.3 "Microsoft YaHei",sans-serif; color:#ffe9c4; text-shadow:1px 1px 0 #000; }
+  #minimap .mm-pill { display:inline-block; padding:1px 10px; border-radius:10px; background:rgba(18,16,26,.85);
+             box-shadow:0 0 0 1px rgba(232,187,106,.6) inset; letter-spacing:1px; }
+  #minimap .mm-time { font-size:14px; margin-bottom:9px; }
+  #minimap .mm-ring { position:relative; width:150px; height:150px; margin:0 auto; border-radius:50%; background:rgba(18,16,26,.85);
+             box-shadow:0 0 0 3px #e8bb6a, 0 0 0 5px rgba(18,16,26,.85), 0 3px 12px rgba(0,0,0,.55); }
+  #minimap canvas { display:block; width:150px; height:150px; border-radius:50%; }
+  #minimap .mm-n { position:absolute; left:50%; top:-9px; transform:translateX(-50%); width:17px; height:17px; border-radius:50%;
+             background:#e8bb6a; color:#2a1c08; font:bold 11px/17px sans-serif; text-shadow:none; box-shadow:0 0 0 2px rgba(18,16,26,.85); }
+  #minimap .mm-me { position:absolute; left:50%; top:50%; width:22px; height:22px; transform:translate(-50%,-50%); }
+  #minimap .mm-me svg { display:block; filter:drop-shadow(0 0 2px rgba(0,0,0,.8)); }
+  #minimap .mm-xyz { margin-top:9px; font-size:12px; }
+  #minimap .mm-tgt { margin-top:4px; font-size:12px; white-space:nowrap; }
+  #minimap .mm-ta { display:inline-block; width:0; height:0; vertical-align:middle; margin-right:3px;
+             border-left:5px solid transparent; border-right:5px solid transparent; border-bottom:11px solid #ffd23f; }
+  #minimap .mm-td { color:#a8e6a0; font-size:11px; margin-left:3px; }
+  #bigmap { position:fixed; inset:0; z-index:61; display:none; align-items:center; justify-content:center;
+            background:rgba(6,5,12,.7); backdrop-filter:blur(2px); }
+  #bigmap.on { display:flex; }
+  #bigmap .bm-card { padding:12px 16px 10px; border-radius:14px; text-align:center; color:#ffe9c4; font:13px/1.55 "Microsoft YaHei",sans-serif;
+            background:radial-gradient(circle at 50% 0%,rgba(60,44,24,.97),rgba(14,11,22,.98));
+            box-shadow:0 0 0 1px rgba(232,187,106,.35) inset, 0 12px 40px rgba(0,0,0,.6); }
+  #bigmap .bm-title { font-size:17px; font-weight:bold; color:#fff; margin-bottom:8px; cursor:pointer; }
+  #bigmap .bm-title b { color:#e8bb6a; }
+  #bigmap canvas { display:block; margin:0 auto; border-radius:10px; box-shadow:0 0 0 2px #e8bb6a, 0 0 0 4px rgba(18,16,26,.85); }
+  #bigmap .bm-foot { margin-top:8px; font-size:12px; opacity:.92; }`;
+  document.head.appendChild(st);
+  MM.dpr=Math.min(2,window.devicePixelRatio||1);
+  const el=document.createElement("div"); el.id="minimap";
+  el.innerHTML='<div class="mm-pill mm-time">06:00</div>'
+    +'<div class="mm-ring"><canvas></canvas><div class="mm-n">N</div>'
+    +'<div class="mm-me"><svg viewBox="-11 -11 22 22" width="22" height="22"><path d="M0,-9 L6.5,7.5 L0,3.8 L-6.5,7.5 Z" fill="#fff" stroke="#b5822e" stroke-width="1.8" stroke-linejoin="round"/></svg></div></div>'
+    +'<div class="mm-pill mm-xyz">0,0,0</div>'
+    +'<div class="mm-tgt"><span class="mm-ta"></span><span class="mm-tl">—</span><span class="mm-td"></span></div>';
+  (document.getElementById("hud")||document.body).appendChild(el);
+  MM.el=el; MM.cv=el.querySelector("canvas"); MM.cv.width=MM.cv.height=Math.round(150*MM.dpr);
+  MM.ctx=MM.cv.getContext("2d"); MM.me=el.querySelector(".mm-me");
+  MM.timeEl=el.querySelector(".mm-time"); MM.xyzEl=el.querySelector(".mm-xyz"); MM.tgtEl=el.querySelector(".mm-tgt");
+  MM.base=document.createElement("canvas"); MM.bigBase=document.createElement("canvas");
+  const bm=document.createElement("div"); bm.id="bigmap";
+  bm.innerHTML='<div class="bm-card"><div class="bm-title">🗺 大地图 · 以你为中心 '+MM.BIG_SPAN+'×'+MM.BIG_SPAN+' 格 · 按 <b>N</b> / <b>Esc</b> 或点此关闭</div><canvas></canvas><div class="bm-foot"></div></div>';
+  document.body.appendChild(bm);
+  MM.bigEl=bm; MM.bigCv=bm.querySelector("canvas"); MM.bigCtx=MM.bigCv.getContext("2d"); MM.bigFoot=bm.querySelector(".bm-foot");
+  bm.addEventListener("click",e=>{ if(e.target===bm || e.target.classList.contains("bm-title")) toggleBigMap(false); });
+  // 捕获阶段先于主键盘处理: N 开关大地图, 打开时 Esc 只关地图不触发暂停
+  window.addEventListener("keydown",e=>{
+    const tag=(e.target&&e.target.tagName)||"";
+    if(tag==="INPUT"||tag==="TEXTAREA") return;
+    if(e.code==="KeyN"){
+      if(!MM.bigOpen && typeof tut!=="undefined" && tut.active) return;   // 新手引导进行中: N 仍是「跳过引导」(第八轮·本地), 引导结束后 N 才开大地图
+      if(e.repeat){ if(MM.bigOpen) e.stopImmediatePropagation(); return; }
+      if(MM.bigOpen){ e.preventDefault(); e.stopImmediatePropagation(); toggleBigMap(false); }
+      else if(playing() && !dead){ e.preventDefault(); e.stopImmediatePropagation(); toggleBigMap(true); }
+      return;
+    }
+    if(e.code==="Escape" && MM.bigOpen){ e.preventDefault(); e.stopImmediatePropagation(); toggleBigMap(false); }
+  },true);
+  function mmFrame(now){
+    requestAnimationFrame(mmFrame);
+    try{ mmUpdate(now); }catch(err){ console.error(err); }
+  }
+  requestAnimationFrame(mmFrame);
+})();
 if(/[?&]selftest=1/.test(location.search||"")){
   (function waitSelftest(){
     if(typeof worldGenReady!=="undefined" && worldGenReady && typeof selftest==="function"){
