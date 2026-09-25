@@ -399,6 +399,7 @@ const PLASTER=63, PLASTER_ROSE=64, PLASTER_WHITE=65, WINDOW_WOOD=66, PALM_LOG=67
 const HIERO=71, STARCEIL=72;
 // 地下密室(第六轮·本地, 图集 280-282): 卡之石——守墓石像的魂核, 打碎它, 与之相连的石像一起崩碎
 const KAHEART=74;
+const OSIRIS=75;                              // 奥西里斯宝匣(第六轮·本地, 图集 283/284): 试炼厅三波清完自动开启
 // t=顶面贴图 b=底面 s=侧面 (图集编号)
 const BLOCKS = {
   [GRASS]:  {name:"草方块",   t:0,  b:2,  s:1},
@@ -473,7 +474,8 @@ const BLOCKS = {
   [GILDED]: {name:"鎏金饰面",   t:269,b:269,s:269},   // 装饰金(替代建筑外立面上的金矿石); 挖下得金矿石
   [HIERO]:  {name:"象形文字砖", t:71, b:71, s:275},   // 墓室/走廊墙面: 侧面刻彩绘经文, 顶底仍是砂岩
   [STARCEIL]:{name:"星空墓顶",  t:71, b:276,s:71},    // 只有底面(抬头看见的那面)是星空, 从外面挖开仍像砂岩
-  [KAHEART]:{name:"卡之石",    t:282,b:282,s:282},   // 石像回廊尽头的魂核(自发光), 挖碎 → 连接的守墓石像全部崩碎
+  [KAHEART]:{name:"卡之石",    t:282,b:282,s:282},
+  [OSIRIS]: {name:"奥西里斯宝匣", t:284,b:71, s:283}, // 试炼完成前挖不开   // 石像回廊尽头的魂核(自发光), 挖碎 → 连接的守墓石像全部崩碎
 };
 // 植物可以直接走过去; 冰/玻璃/树叶不完全遮挡; 岩浆会陷进去
 const SOLID   = id => id!==AIR && id!==WATER && id!==LAVA && !PLANT(id);   // 碰撞
@@ -1098,6 +1100,20 @@ function drawStructure(s,put){
         for(let Y=h-i;Y<=h-i+2;Y++) put(X,Y,z-1,AIR,true);
         if(i>=3){ put(X,h-i+3,z-1,STARCEIL,true); for(let Y=h-i;Y<=h-i+2;Y++){ put(X,Y,z-2,HIERO,true); put(X,Y,z,HIERO,true); } }
       }
+      // --- 试炼厅(第六轮·本地): 墓室正下方, 与回廊共用东墙并开门; 顶比回廊低一格(不打穿走廊塌陷坑) ---
+      const T=trialHall(s);
+      box(T.x0-1,T.fy,T.z0-1,T.x1+1,T.fy+5,T.z1+1,SANDSTONE,true);
+      box(T.x0,T.fy+1,T.z0,T.x1,T.fy+4,T.z1,AIR,false);
+      for(let Y=T.fy+1;Y<=T.fy+4;Y++){
+        for(let Z=T.z0;Z<=T.z1;Z++) put(T.x1+1,Y,Z,HIERO,true);
+        for(let X=T.x0;X<=T.x1;X++){ put(X,Y,T.z0-1,HIERO,true); put(X,Y,T.z1+1,HIERO,true); }
+      }
+      box(T.x0,T.fy+5,T.z0,T.x1,T.fy+5,T.z1,STARCEIL,false);
+      for(const [sx,sz] of T.spawns) for(let a=-1;a<=1;a++) for(let b=-1;b<=1;b++) if(!a||!b) put(sx+a,T.fy,sz+b,GILDED,true);   // 召唤阵: 金十字
+      for(let X=T.x0+2;X<=T.x1-2;X+=5){ put(X,T.fy+3,T.z0,LANTERN,true); put(X,T.fy+3,T.z1,LANTERN,true); }
+      for(let Y=T.fy+1;Y<=T.fy+5;Y++) for(let Z=T.z0-1;Z<=T.z1+1;Z++) put(T.x0-1,Y,Z,HIERO,true);   // 共用墙: 两面都是经文(外壳会盖成素砂岩)
+      put(T.chest[0],T.chest[1],T.chest[2],OSIRIS,true);
+      put(T.door[0],T.fy+1,T.door[1],AIR,true); put(T.door[0],T.fy+2,T.door[1],AIR,true); put(T.door[0],T.fy+3,T.door[1],GILDED,true);   // 回廊东墙开门
     }
     // --- 上层藏宝室(需要挖进去) ---
     box(x-2,h+9,z-2,x+2,h+11,z+2,AIR,false);
@@ -3790,6 +3806,24 @@ txPut(276,(x,y)=>{                                                        // 星
     return txMix(txLerp(txPal("#141019 #1e1826 #2a2233"),txFbm(x,y,4,4,2,2822)),[60,180,170],glow);
   });
 }
+{ // 奥西里斯宝匣(第六轮·本地): 283 侧面(青金底 + 金框 + 中央荷鲁斯之眼) · 284 顶盖(金盖 + 青金横纹 + 圣甲虫扣)
+  txPut(283,(x,y)=>{
+    const e=Math.min(x,y,29-x,29-y);
+    if(e<3) return txMul(e===0?[150,108,34]:[226,180,64],0.92+txH(x,y,2831)*0.12);          // 金框
+    const cx=x-14.5, cy=y-15;
+    const eye=Math.abs(Math.hypot(cx*0.6,cy*1.4)-4)<0.9 || (Math.hypot(cx,cy)<1.8) || (cy>2&&cy<9&&Math.abs(cx+2+cy*0.1)<0.8);
+    if(eye) return [240,200,90];
+    if(y===9||y===21) return [196,150,52];                                                   // 金色横带
+    return txLerp(txPal("#1b2f6e #22398a #2c47a0"),txFbm(x,y,3,3,2,2832)*0.8+(txH(x,y,2833)-0.5)*0.1);
+  });
+  txPut(284,(x,y)=>{
+    const e=Math.min(x,y,29-x,29-y);
+    if(e<2) return [150,108,34];
+    if(Math.hypot(x-14.5,y-14.5)<4.2) return txMix([58,172,160],[20,90,84],Math.hypot(x-14.5,y-14.5)/4.2);   // 松石圣甲虫扣
+    if(y%6===0) return [34,57,138];                                                           // 青金横纹
+    return txMul([226,180,64],0.9+txFbm(x,y,4,4,2,2841)*0.2);
+  });
+}
 let ATLAS_MIPS=0;                                                         // 手工 mip 级数(自测用: 512×1024 → 1×1 共 10 级)
 const atlasTex = gl.createTexture();
 gl.bindTexture(gl.TEXTURE_2D, atlasTex);
@@ -5836,7 +5870,8 @@ function doBreak(){
   const hit=raycast(5.5, dir);
   if(!hit || hit.id===BEDROCK) return;
   if(hit.id===TNT){ igniteTNT(hit.x,hit.y,hit.z); showName("嘶嘶嘶……快跑！"); return; }
-  if(hit.id===SUSGRAVEL){ brushPoke(hit); return; }   // 考古刷点: 按住慢慢刷(见 updateBrush), 不再一镐刨开
+  if(hit.id===SUSGRAVEL){ brushPoke(hit); return; }
+  if(hit.id===OSIRIS){ showName("🔒 奥西里斯宝匣被封印——在试炼厅撑过三波试炼，宝匣自会开启"); return; }   // 第六轮·本地   // 考古刷点: 按住慢慢刷(见 updateBrush), 不再一镐刨开
   const brokeId=hit.id;
   spawnParticles(hit.x,hit.y,hit.z,hit.id);
   setBlock(hit.x,hit.y,hit.z,AIR);
@@ -7978,6 +8013,68 @@ function sfxStoneGrind(dist){                           // 石像挪动: 低沉�
   const f=actx2.createBiquadFilter(); f.type="lowpass"; f.frequency.value=320+Math.random()*120;
   const g=actx2.createGain(); g.gain.value=0.5*Math.max(0.1,1-dist/24);
   src.connect(f).connect(g).connect(actx2.destination); src.start(t);
+}
+/* ---- ⚔ 奥西里斯试炼厅 (第六轮·本地, 对标 Minecraft Tricky Trials 的试炼密室) ----
+   石像回廊东墙有门通往墓室正下方的试炼厅。走进去开始三波试炼(木乃伊+圣甲虫 → 加巨蝎 → 阿努比斯守卫压阵),
+   怪从四个金十字召唤阵里冒出; 离开厅外 6 格或死亡则试炼中断(残余试炼怪消散), 可再来。
+   三波清完「奥西里斯宝匣」自动开启: 钻×3 金×6 文物×4 +150 经验 + 宝库钥匙×1(接上现有封印宝库)。宝匣开启随 blockDiff 存档。 */
+function trialHall(s){
+  const x=s.x, z=s.z, h=s.h;
+  return {x0:x-3, x1:x+9, z0:z-11, z1:z-4, fy:h-9, door:[x-4,z-7], chest:[x+3,h-8,z-11],
+          spawns:[[x-1,z-9],[x+7,z-9],[x-1,z-6],[x+7,z-6]], key:"T"+x+","+z};
+}
+const TRIAL_WAVES=[["mummy","scarab","scarab","mummy"],["serqet","mummy","scarab","serqet"],["anubis","mummy","serqet"]];
+const trialState={active:false, key:null, wave:0, alive:[], nextT:0, done:0, T:null};
+function inTrialHall(T,margin){ const m=margin||0;
+  return player.x>=T.x0-m && player.x<=T.x1+1+m && player.z>=T.z0-m && player.z<=T.z1+1+m && player.y>=T.fy-m && player.y<=T.fy+5+m; }
+function spawnTrialMob(type,x,y,z){
+  const def=MOB_DEFS[type], hp=def.boss?def.hp:Math.max(1,Math.round(def.hp*foeHpMul()));
+  const m={type, def, x:x+0.5, y, z:z+0.5, vx:0,vy:0,vz:0, kbx:0,kbz:0, yaw:Math.random()*6.283, tgtYaw:0, hp, maxHp:hp,
+    hurtT:0, animT:0, t:0, atkCd:1, burnT:0, swingT:0, groanT:2, fleeT:0, onGround:false, pause:false, burning:false,
+    held:def.weapon?heldFor(def.weapon,def.handP):null, trial:true};
+  mobs.push(m);
+  for(let i=0;i<14;i++) particles.push({x:x+0.5+(Math.random()-.5), y:y+Math.random()*1.5, z:z+0.5+(Math.random()-.5), vx:0, vy:1.5+Math.random()*2, vz:0,
+    life:.5, size:.09, u:15*TS+Math.random()*TS*.6, v:Math.random()*TV*.6, l:2.2});
+  return m;
+}
+function startTrial(T){
+  Object.assign(trialState,{active:true, key:T.key, wave:0, alive:[], nextT:1.5, T});
+  showName("⚔ 奥西里斯试炼开始！撑过三波，宝匣自会开启（离开大厅则中断）");
+}
+function abortTrial(msg){
+  for(const m of trialState.alive){ const i=mobs.indexOf(m); if(i>=0){ deathPoof(m); mobs.splice(i,1); } }
+  trialState.active=false; trialState.alive=[];
+  if(msg) showName(msg);
+}
+function completeTrial(T){
+  trialState.active=false; trialState.done++;
+  const [cx,cy,cz]=T.chest;
+  if(getBlock(cx,cy,cz)===OSIRIS) setBlock(cx,cy,cz,AIR);
+  for(let i=0;i<50;i++) particles.push({x:cx+0.5,y:cy+0.6,z:cz+0.5, vx:(Math.random()-.5)*6, vy:2+Math.random()*6, vz:(Math.random()-.5)*6,
+    life:.7+Math.random()*.5, size:.1, u:15*TS+Math.random()*TS*.6, v:Math.random()*TV*.6, l:2.6});
+  giveBlock(GEM_ORE,3); giveBlock(GOLD_ORE,6); npcState.relics+=4; addXP(150); arenaState.keys=(arenaState.keys|0)+1;
+  sfxLevel && sfxLevel();
+  showName("🏆 奥西里斯试炼通关！宝匣开启：钻x3 金x6 文物x4 +150 经验 · 宝库钥匙 x1（现有 "+arenaState.keys+"）");
+}
+function updateTrial(dt,Tover,insideOver){             // Tover/insideOver: 自测用
+  let T=Tover;
+  if(!T){ const s=nearStructure(["pyramid"],30); T=s?trialHall(s):null; }
+  if(!trialState.active){
+    const inside=insideOver!==undefined?insideOver:(T && inTrialHall(T));
+    if(T && inside && !dead && getBlock(T.chest[0],T.chest[1],T.chest[2])===OSIRIS) startTrial(T);
+    return;
+  }
+  const stay=insideOver!==undefined?insideOver:(T && T.key===trialState.key && inTrialHall(T,6));
+  if(dead || !stay){ abortTrial(dead?"":"⚔ 离开了试炼厅——试炼中断，残余的守卫化作沙尘"); return; }
+  trialState.alive=trialState.alive.filter(m=>m.hp>0 && mobs.includes(m));
+  if(trialState.alive.length) return;
+  trialState.nextT-=dt; if(trialState.nextT>0) return;
+  const TT=trialState.T||T;
+  if(trialState.wave>=TRIAL_WAVES.length){ completeTrial(TT); return; }
+  const list=TRIAL_WAVES[trialState.wave++];
+  list.forEach((type,i)=>{ const [sx,sz]=TT.spawns[i%TT.spawns.length]; trialState.alive.push(spawnTrialMob(type,sx,TT.fy+1,sz)); });
+  trialState.nextT=2.5;
+  showName("⚔ 试炼第 "+trialState.wave+"/"+TRIAL_WAVES.length+" 波"+(trialState.wave===TRIAL_WAVES.length?"：阿努比斯守卫亲临！":""));
 }
 function tickSunburn(dt){                              // 在 updateMobs 之后调用: AI 每帧先清 burning, 这里再点亮火色
   for(let i=mobs.length-1;i>=0;i--){
@@ -10683,7 +10780,7 @@ function archaeologyDig(x,y,z,opt){
   }
   sfxLevel && sfxLevel();
 }
-function updateArch(dt){ maintainDigSites(dt); maintainTombNiches(dt); maintainTombSentinels(dt); tickDigSparkle(dt); updateBrush(dt); }
+function updateArch(dt){ maintainDigSites(dt); maintainTombNiches(dt); maintainTombSentinels(dt); updateTrial(dt); tickDigSparkle(dt); updateBrush(dt); }
 
 /* ---- 🖌 按住刷考古 + 金字塔侧龛 (第四轮) ----
    可疑沙砾不再一镐刨开: 对准按住左键(触屏按住挖掘键)用刷子慢慢刷, 约 1.4 秒刷净出土, 原地留下一块沙(不再挖出坑);
@@ -12775,6 +12872,45 @@ function selftest(){
         bag.clear(); for(const [k,v] of bagS) bag.set(k,v); npcState.relics=relS; xp=xpS; lvl=lvlS; dmgMul=dmgS; maxHp=maxS; hp=hpS; updateHearts(); updateXPHUD();
         ok("守墓石像: 正对时判定被看见且纹丝不动; 转身后疾行逼近; 刀枪不入; 挖碎卡之石只崩碎附近相连石像",
            seenNow && froze && notSeen && moved && invuln && shattered, "seen="+seenNow+" froze="+froze+" notSeen="+notSeen+" moved="+moved+" invuln="+invuln+" shattered="+shattered);
+      }
+      // ---- 第六轮·本地: 奥西里斯试炼厅 ----
+      {
+        let pyr=null; for(let sx=-40;sx<=40&&!pyr;sx++) for(let sz=-40;sz<=40&&!pyr;sz++){ const s2=structureAt(sx,sz); if(s2&&s2.type==="pyramid"&&s2.h>=14) pyr=s2; }
+        if(!pyr) ok("试炼厅: 附近找到地基足够深的金字塔", false, "none");
+        else {
+          const cache=new Map(), at=(X,Y,Z)=>{ const cx=Math.floor(X/CS), cz=Math.floor(Z/CS), k=cx+","+cz;
+            if(!cache.has(k)) cache.set(k,genChunk(cx,cz)); return cache.get(k)[((X-cx*CS)*CS+(Z-cz*CS))*H+Y]; };
+          const {x,z,h}=pyr, T=trialHall(pyr), G=tombGallery(pyr);
+          let hall=true; for(let X=T.x0;X<=T.x1;X++) for(let Z=T.z0;Z<=T.z1;Z++){ if(X===T.chest[0]&&Z===T.chest[2]) continue; if(!SOLID(at(X,T.fy,Z)) || at(X,T.fy+1,Z)!==AIR || at(X,T.fy+2,Z)!==AIR || at(X,T.fy+4,Z)!==AIR) hall=false; }
+          const door=at(T.door[0],T.fy+1,T.door[1])===AIR && at(T.door[0],T.fy+2,T.door[1])===AIR && at(T.door[0]-1,T.fy+1,T.door[1])===AIR;
+          const wallBoth=at(T.x0-1,T.fy+3,T.z0+2)===HIERO && at(G.x1+1,G.fy+5,T.z0+2)===HIERO;
+          let pitOk=true; for(let dz=9;dz<=10;dz++) if(at(x,h-3,z-dz)===AIR && at(x,h-4,z-dz)!==STARCEIL) pitOk=false;   // 塌陷坑底下是试炼厅顶, 没被打穿
+          const stairsIntact=SOLID(at(x-4,h-8,z-1)) && at(x-4,h-7,z-1)===AIR;
+          ok("试炼厅: 13×8 大厅可走、东墙门通回廊、共用墙两面经文、宝匣在北墙下、4 个金十字召唤阵, 没打穿塌陷坑也没挡楼梯",
+             hall && door && wallBoth && at(T.chest[0],T.chest[1],T.chest[2])===OSIRIS && T.spawns.every(([sx,sz])=>at(sx,T.fy,sz)===GILDED) && at(x+2,T.fy+5,z-7)===STARCEIL && pitOk && stairsIntact,
+             "hall="+hall+" door="+door+" wall="+wallBoth+" chest="+at(T.chest[0],T.chest[1],T.chest[2])+" pit="+pitOk+" stairs="+stairsIntact);
+        }
+      }
+      {
+        const mobsS=mobs.slice(); mobs.length=0; const bagS=new Map(bag), relS=npcState.relics, xpS=xp, lvlS=lvl, dmgS=dmgMul, maxS=maxHp, hpS=hp, keysS=arenaState.keys, doneS=trialState.done;
+        const cx=Math.floor(player.x)+2, cz=Math.floor(player.z)+2; let cy=H-4; while(cy>0 && getBlock(cx,cy,cz)!==AIR) cy--;
+        setBlock(cx,cy,cz,OSIRIS);
+        const T={x0:0,x1:0,z0:0,z1:0,fy:cy-1, chest:[cx,cy,cz], spawns:[[cx+3,cz],[cx-3,cz]], key:"Ttest"};
+        trialState.active=false;
+        updateTrial(0.1,T,true); const started=trialState.active && trialState.key==="Ttest";
+        const waves=[]; let guard=0;
+        while(trialState.active && guard++<40){ updateTrial(3,T,true); if(trialState.alive.length){ waves.push(trialState.alive.map(m=>m.type).join("+")); for(const m of trialState.alive) m.hp=0; } }
+        const done=!trialState.active && waves.length===3 && waves[2].indexOf("anubis")>=0 && getBlock(cx,cy,cz)===AIR && arenaState.keys===keysS+1 && trialState.done===doneS+1;
+        // 中断: 刷出第一波后离开 → 残余试炼怪消散
+        setBlock(cx,cy,cz,OSIRIS); updateTrial(0.1,T,true); updateTrial(3,T,true);
+        const w1=trialState.alive.slice(), n1=w1.length; updateTrial(0.1,T,false);
+        const aborted=n1>0 && !trialState.active && w1.every(m=>!mobs.includes(m));   // 只看这一波(前面清掉的尸体没走 updateMobs, 仍在数组里)
+        setBlock(cx,cy,cz,AIR);
+        mobs.length=0; for(const q of mobsS) mobs.push(q);
+        bag.clear(); for(const [k,v] of bagS) bag.set(k,v); npcState.relics=relS; xp=xpS; lvl=lvlS; dmgMul=dmgS; maxHp=maxS; hp=hpS; arenaState.keys=keysS; trialState.done=doneS;
+        updateHearts(); updateXPHUD();
+        ok("试炼流程: 进厅开试炼 → 三波依次刷出(末波阿努比斯) → 清完宝匣自开、宝库钥匙+1; 中途离开则中断且残余试炼怪消散",
+           started && done && aborted, "started="+started+" waves="+waves.join(" | ")+" done="+done+" aborted="+aborted);
       }
       // 沙漠药水(第五轮·云端): 酿造 +2 / 饮用生效与扣库存 / 迅捷与耐热与夜视效果 / 治疗 / 空瓶拒绝 / 存档往返与老档归零
       {
