@@ -416,7 +416,9 @@ const FURNACE=81, FURNACE_LIT=82;              // 第七轮·云端: 砂岩熔�
 // 地下密室(第六轮·本地, 图集 280-282): 卡之石——守墓石像的魂核, 打碎它, 与之相连的石像一起崩碎
 const KAHEART=74;
 const OSIRIS=75;
-const SLAB_SST=90, STAIR_N=91, STAIR_E=92, STAIR_S=93, STAIR_W=94, LAMPPOST=95, IRONPOST=96;   // 第七轮·本地: 方块形状系统(见 SHAPES)                              // 奥西里斯宝匣(第六轮·本地, 图集 283/284): 试炼厅三波清完自动开启
+const SLAB_SST=90, STAIR_N=91, STAIR_E=92, STAIR_S=93, STAIR_W=94, LAMPPOST=95, IRONPOST=96;
+// 更多材质(第七轮③·本地): 每种 = 半砖 + 四向楼梯[N,E,S,W]
+const SLAB_MARBLE=100, STAIR_MARBLE=[101,102,103,104], SLAB_PLANK=105, STAIR_PLANK=[106,107,108,109], SLAB_CLAY=110, STAIR_CLAY=[111,112,113,114];   // 第七轮·本地: 方块形状系统(见 SHAPES)                              // 奥西里斯宝匣(第六轮·本地, 图集 283/284): 试炼厅三波清完自动开启
 // t=顶面贴图 b=底面 s=侧面 (图集编号)
 const BLOCKS = {
   [GRASS]:  {name:"草方块",   t:0,  b:2,  s:1},
@@ -509,18 +511,34 @@ const BLOCKS = {
    非整格方块由若干盒子 b=[x0,y0,z0,x1,y1,z1](格内 0..1)拼成; skip = 不出面的位掩码(按 FACES 下标, 用于楼梯内部贴合面);
    tile 覆盖默认贴图; glow = 自发光部件。它们仍是 SOLID(可站立/可挖), 但不算 OPAQUE/OCCLUDE: 邻格照常出面、不压 AO、不挡光。
    楼梯按"朝哪边升高"分 4 个 ID(N=-z, E=+x, S=+z, W=-x), 背包/物品栏里统一记作 STAIR_N, 放置时按玩家朝向换成对应 ID。 */
+// 材质表: 加一行 = 一种新材质的半砖+四向楼梯(方块定义/形状/配方都从这里生成)。full = 两块半砖合成的整块
+const SHAPE_MATS=[
+  {n:"砂岩",   full:SANDSTONE, slab:SLAB_SST,    stairs:[STAIR_N,STAIR_E,STAIR_S,STAIR_W]},
+  {n:"大理石", full:MARBLE,    slab:SLAB_MARBLE, stairs:STAIR_MARBLE},
+  {n:"橡木",   full:PLANKS,    slab:SLAB_PLANK,  stairs:STAIR_PLANK},
+  {n:"陶土",   full:CLAY,      slab:SLAB_CLAY,   stairs:STAIR_CLAY},
+];
+const STAIR_BOXES=[                                    // 下标 = 朝向 N(-z) E(+x) S(+z) W(-x): 前低台阶(去掉贴合面) + 后高整高块
+  [{b:[0,0,0.5,1,0.5,1], skip:1<<5}, {b:[0,0,0,1,1,0.5]}],
+  [{b:[0,0,0,0.5,0.5,1], skip:1<<0}, {b:[0.5,0,0,1,1,1]}],
+  [{b:[0,0,0,1,0.5,0.5], skip:1<<4}, {b:[0,0,0.5,1,1,1]}],
+  [{b:[0.5,0,0,1,0.5,1], skip:1<<1}, {b:[0,0,0,0.5,1,1]}],
+];
 const SHAPES={
-  [SLAB_SST]:[{b:[0,0,0,1,0.5,1]}],
-  [STAIR_N]: [{b:[0,0,0.5,1,0.5,1], skip:1<<5}, {b:[0,0,0,1,1,0.5]}],
-  [STAIR_S]: [{b:[0,0,0,1,0.5,0.5], skip:1<<4}, {b:[0,0,0.5,1,1,1]}],
-  [STAIR_E]: [{b:[0,0,0,0.5,0.5,1], skip:1<<0}, {b:[0.5,0,0,1,1,1]}],
-  [STAIR_W]: [{b:[0.5,0,0,1,0.5,1], skip:1<<1}, {b:[0,0,0,0.5,1,1]}],
   [LAMPPOST]:[{b:[0.4375,0,0.4375,0.5625,0.72,0.5625]}, {b:[0.3,0.72,0.3,0.7,1,0.7], tile:{t:94,b:94,s:94}, glow:true}],
   [IRONPOST]:[{b:[0.4375,0,0.4375,0.5625,1,0.5625]}],
 };
-const STAIRS=[STAIR_N,STAIR_E,STAIR_S,STAIR_W];
-function shapeItem(id){ return STAIRS.indexOf(id)>=0 ? STAIR_N : id; }          // 挖下/选取时归到物品 ID
-function stairFacing(dx,dz){ return Math.abs(dx)>Math.abs(dz) ? (dx>0?STAIR_E:STAIR_W) : (dz>0?STAIR_S:STAIR_N); }   // 朝视线方向升高
+const STAIRS=[], STAIR_MAT={}, SLAB_MAT={};
+for(const M of SHAPE_MATS){
+  const F=BLOCKS[M.full];
+  if(!BLOCKS[M.slab]) BLOCKS[M.slab]={name:M.n+"半砖", t:F.t, b:F.b, s:F.s};
+  SHAPES[M.slab]=[{b:[0,0,0,1,0.5,1]}]; SLAB_MAT[M.slab]=M;
+  M.stairs.forEach((id,k)=>{ if(!BLOCKS[id]) BLOCKS[id]={name:M.n+"楼梯", t:F.t, b:F.b, s:F.s}; SHAPES[id]=STAIR_BOXES[k]; STAIRS.push(id); STAIR_MAT[id]=M; });
+}
+function stairIndex(dx,dz){ return Math.abs(dx)>Math.abs(dz) ? (dx>0?1:3) : (dz>0?2:0); }   // 朝视线方向升高: N/E/S/W
+function stairOf(item,dx,dz){ return STAIR_MAT[item].stairs[stairIndex(dx,dz)]; }
+function stairFacing(dx,dz){ return SHAPE_MATS[0].stairs[stairIndex(dx,dz)]; }   // 砂岩楼梯(旧接口)
+function shapeItem(id){ const M=STAIR_MAT[id]; return M ? M.stairs[0] : id; }        // 挖下/选取时四向楼梯归到该材质的物品 ID(N 向)
 /* 形状面片(格内坐标): cull(f) 为真时, 贴在整格边界上的 f 面被剔除。返回 [{f, pos:[[x,y,z]×4], uv:[[a,b]×4], tile, glow, edge}] */
 function shapeQuads(id, cull){
   const out=[], def=BLOCKS[id];
@@ -1349,6 +1367,9 @@ function drawStructure(s,put){
     box(x-W,h,z-D,x+W,h+1,z+D,MARBLE,false);                     // 三级基座
     box(x-W+2,h+2,z-D+2,x+W-2,h+2,z+D-2,MARBLE,false);
     box(x-W+4,h+3,z-D+4,x+W-4,h+3,z+D-4,MARBLE,false);
+    for(let X=x-2;X<=x+2;X++){                                   // 正面大理石大台阶(第七轮③): 三级基座各一级楼梯, 不用一级级跳
+      put(X,h+1,z+D+1,STAIR_MARBLE[0],true); put(X,h+2,z+D-1,STAIR_MARBLE[0],true); put(X,h+3,z+D-3,STAIR_MARBLE[0],true);
+    }
     // 环绕列柱(科林斯柱: 柱身+金柱头)
     for(let X=x-W+2;X<=x+W-2;X+=3) for(const Z of [z-D+2,z+D-2]){
       for(let y=h+3;y<=h+9;y++) put(X,y,Z,MARBLE,true);
@@ -2192,7 +2213,7 @@ function drawVillage(s,put){
 // 局部坐标 u 横向, v 进深(v=0 为朝水塘的正门墙)
 function drawVillageHouse(P,H,h,put){
   const Q=(u,v,y,id,f)=>{ const [X,Z]=P.toW(H,u,v); put(X,y,Z,id,f!==false); };
-  const stairToward=(du,dv)=>{ const [ax,az]=P.toW(H,0,0), [bx2,bz2]=P.toW(H,du,dv); return stairFacing(bx2-ax,bz2-az); };   // 房屋局部方向 → 世界朝向楼梯
+  const stairToward=(du,dv,item)=>{ const [ax,az]=P.toW(H,0,0), [bx2,bz2]=P.toW(H,du,dv); return stairOf(item||STAIR_N,bx2-ax,bz2-az); };   // 房屋局部方向 → 世界朝向楼梯(按材质)
   const hw=H.hw, D=H.D;
   const shell=(y,id,u0,u1,v0,v1)=>{ for(let u=u0;u<=u1;u++) for(let v=v0;v<=v1;v++) if(u===u0||u===u1||v===v0||v===v1) Q(u,v,y,id); };
   const slab=(y,id,u0,u1,v0,v1)=>{ for(let u=u0;u<=u1;u++) for(let v=v0;v<=v1;v++) Q(u,v,y,id); };
@@ -2229,7 +2250,7 @@ function drawVillageHouse(P,H,h,put){
       Q(-2,2,h+6,LEAVES); Q(2,D-2,h+6,LANTERN);
       Q(0,D-2,h+6,H.v2<0.5?BRICK:HAY); Q(0,D-2,h+7,H.v2<0.5?BRICK:HAY);   // 屋顶小烟囱/草垛
     }
-    for(let k=1;k<=4;k++) Q(hw+1,D-1-k,h+k,stairToward(0,-1));          // 侧墙外一列真楼梯通屋顶(朝门口方向升高, 不用一格格跳)
+    for(let k=1;k<=4;k++) Q(hw+1,D-1-k,h+k,stairToward(0,-1,trim===CLAY?STAIR_CLAY[0]:STAIR_N));   // 侧墙外一列真楼梯通屋顶(材质随屋檐: 陶土/砂岩)
   } else {
     const PL=[PLASTER,PLASTER_ROSE,PLASTER_WHITE,PLASTER][Math.floor(H.v1*4)];   // 灰泥色: 赭黄/玫瑰/石灰白/赭黄
     const ROOF=H.v2<0.7?ROOFTILE:DARKPLANK;
@@ -2245,7 +2266,7 @@ function drawVillageHouse(P,H,h,put){
     for(let y=h+2;y<=h+6;y++){ Q(-hw,mid,y,DARKPLANK); Q(hw,mid,y,DARKPLANK); }                 // 侧墙中柱
     for(let y=h+5;y<=h+6;y++) Q(0,0,y,DARKPLANK);                                               // 正面二层中柱
     Q(-2,D-1,h+5,DARKPLANK); Q(-1,D-1,h+6,DARKPLANK); Q(2,D-1,h+5,DARKPLANK); Q(1,D-1,h+6,DARKPLANK);   // 背面人字斜撑
-    Q(0,0,h+2,AIR); Q(0,0,h+3,AIR); Q(0,-1,h+1,stairToward(0,1));      // 门 + 朝屋门升高的楼梯台阶(原圆石整块要跳)
+    Q(0,0,h+2,AIR); Q(0,0,h+3,AIR); Q(0,-1,h+1,stairToward(0,1,STAIR_PLANK[0]));   // 门 + 朝屋门升高的木楼梯台阶(原圆石整块要跳)
     for(const u of [-2,2]){ Q(u,0,h+3,WINDOW_WOOD); Q(u,D-1,h+3,WINDOW_WOOD); Q(u,0,h+5,WINDOW_WOOD); Q(u,0,h+6,WINDOW_WOOD); }   // 一层小窗 + 二层高窗
     for(const v of [1,D-2]) for(const u of [-hw,hw]){ Q(u,v,h+3,WINDOW_WOOD); Q(u,v,h+5,WINDOW_WOOD); Q(u,v,h+6,WINDOW_WOOD); }
     for(const u of [-2,2]){ Q(u,-1,h+1,LEAVES); Q(u,-1,h+2,(u<0)===(H.v1<0.5)?ROSE:DAISY,false); }   // 窗下落地花丛(贴地, 不再悬空)
@@ -4834,6 +4855,12 @@ const RECIPES=[
   // 第七轮·云端: 砂岩熔炉
   {name:"🔥 砂岩熔炉", desc:"砂岩垒的炉子：放下后右键，烧玻璃/石头/红砖/钢板/鎏金，还能烤鱼", cost:[[SANDSTONE,8]], run(){ giveBlock(FURNACE,1); return "获得 砂岩熔炉 x1（放下后右键打开）"; }},
 ];
+// 第七轮③·本地: 其余材质的半砖/楼梯配方由材质表生成(砂岩的两条在上面手写)
+for(const M of SHAPE_MATS.slice(1)){
+  const fn=BLOCKS[M.full].name;
+  RECIPES.push({name:M.n+"半砖", desc:fn+"切成半格：两块叠放合回整块", cost:[[M.full,3]], run(){ giveBlock(M.slab,6); return "获得 "+M.n+"半砖 x6"; }});
+  RECIPES.push({name:M.n+"楼梯", desc:"放下时朝你面对的方向升高", cost:[[M.full,6]], run(){ giveBlock(M.stairs[0],4); return "获得 "+M.n+"楼梯 x4"; }});
+}
 /* 把方块塞进物品栏: 优先合并同类, 否则占用一个方块格 */
 function giveBlock(id,n){
   bagAdd(id,n);
@@ -6345,8 +6372,8 @@ function doPlace(){
   }
   const hit=raycast(5.5, currentAim());
   if(!hit) return;
-  if(it===SLAB_SST && hit.id===SLAB_SST && hit.face[1]===1 && !hitBoxAt(hit.x,hit.y,hit.z,SANDSTONE,player.x,player.y,player.z,PW,PH)){   // 半砖叠半砖 → 合成整块砂岩(人站在上面时不合, 免得卡进方块)
-    setBlock(hit.x,hit.y,hit.z,SANDSTONE); bagTake(it,1); sfxPlace(); return;
+  if(SLAB_MAT[it] && hit.id===it && hit.face[1]===1 && !hitBoxAt(hit.x,hit.y,hit.z,SANDSTONE,player.x,player.y,player.z,PW,PH)){   // 同材质半砖叠放 → 合成整块(人站在上面时不合, 免得卡进方块)
+    setBlock(hit.x,hit.y,hit.z,SLAB_MAT[it].full); bagTake(it,1); sfxPlace(); return;
   }
   const px=hit.x+hit.face[0], py=hit.y+hit.face[1], pz=hit.z+hit.face[2];
   const cur=getBlock(px,py,pz);
@@ -6355,7 +6382,7 @@ function doPlace(){
   if(px+1>player.x-PW && px<player.x+PW && pz+1>player.z-PW && pz<player.z+PW &&
      py+1>player.y && py<player.y+PH) return;
   const d=lookDir();
-  setBlock(px,py,pz, it===STAIR_N ? stairFacing(d[0],d[2]) : it);   // 楼梯: 朝视线方向升高
+  setBlock(px,py,pz, STAIR_MAT[it] ? stairOf(it,d[0],d[2]) : it);   // 楼梯: 朝视线方向升高
   bagTake(it,1);                                       // 放置消耗背包库存(没有也不阻挡, 保持沙盒手感)
   sfxPlace();
 }
@@ -8956,7 +8983,27 @@ function shadedTileCanvas(tile,dark){
   if(dark>0){ cx.globalCompositeOperation="source-atop"; cx.fillStyle=`rgba(0,0,0,${dark})`; cx.fillRect(0,0,16,16); }
   return c;
 }
+/* 非整格方块的物品图标: 按盒子画等轴测小体块(与整格图标同一投影), 后面的盒子先画 */
+function shapeIcon(id){
+  const def=BLOCKS[id], c=document.createElement("canvas"); c.width=c.height=64;
+  const x=c.getContext("2d"); x.imageSmoothingEnabled=false;
+  const iso=(X,Y,Z)=>[32+16*X-16*Z, 10+8*X+8*Z+16*(1-Y)];
+  const face=(tile,dark,O,U,V,sx,sy,sw,sh)=>{          // 把贴图子区(sx,sy,sw,sh; 16px 格)贴到以 O 为原点、U/V 为边的平行四边形
+    const o=iso(...O), u=iso(O[0]+U[0],O[1]+U[1],O[2]+U[2]), v=iso(O[0]+V[0],O[1]+V[1],O[2]+V[2]);
+    x.setTransform((u[0]-o[0])/16,(u[1]-o[1])/16,(v[0]-o[0])/16,(v[1]-o[1])/16,o[0],o[1]);
+    x.drawImage(shadedTileCanvas(tile,dark),sx,sy,Math.max(sw,0.01),Math.max(sh,0.01),0,0,16,16);
+  };
+  const boxes=SHAPES[id].map(P=>P).sort((A,B)=>(A.b[0]+A.b[2]+A.b[1]*0.01)-(B.b[0]+B.b[2]+B.b[1]*0.01));
+  for(const P of boxes){
+    const [x0,y0,z0,x1,y1,z1]=P.b, T=P.tile||def;
+    face(T.t,0,   [x0,y1,z0],[x1-x0,0,0],[0,0,z1-z0], x0*16,z0*16,(x1-x0)*16,(z1-z0)*16);        // 顶
+    face(T.s,0.22,[x0,y1,z1],[x1-x0,0,0],[0,y0-y1,0], x0*16,(1-y1)*16,(x1-x0)*16,(y1-y0)*16);   // 前(+z)
+    face(T.s,0.42,[x1,y1,z1],[0,0,z0-z1],[0,y0-y1,0], (1-z1)*16,(1-y1)*16,(z1-z0)*16,(y1-y0)*16); // 右(+x)
+  }
+  return c;
+}
 function blockIcon(id){
+  if(SHAPES[id]) return shapeIcon(id);
   const def=BLOCKS[id];
   const c=document.createElement("canvas"); c.width=c.height=64;
   const x=c.getContext("2d"); x.imageSmoothingEnabled=false;
@@ -12305,10 +12352,10 @@ function selftest(){
           }
           ok("拱门口 3×3 通畅且拱顶不再塞发光灯笼", archBad.length===0, archBad.join(" ")||"ok");
           // 第七轮·本地: 木筋屋门口楼梯朝屋门升高; 泥砖屋侧梯是真楼梯; 路灯 = 细铁柱×2 + 铁灯柱
-          const SD={[STAIR_N]:[0,-1],[STAIR_E]:[1,0],[STAIR_S]:[0,1],[STAIR_W]:[-1,0]};
+          const DIRS=[[0,-1],[1,0],[0,1],[-1,0]], SD={}; for(const id of STAIRS) SD[id]=DIRS[STAIR_MAT[id].stairs.indexOf(id)];
           const stBad=[];
           for(const H of P.houses){
-            if(H.kind==="timber"){ const [sx,sz]=P.toW(H,0,-1), [dx,dz]=P.toW(H,0,0), id=at2(sx,hv+1,sz), d=SD[id]; if(!d || d[0]!==dx-sx || d[1]!==dz-sz) stBad.push("门"+sx+","+sz+"="+id); }
+            if(H.kind==="timber"){ const [sx,sz]=P.toW(H,0,-1), [dx,dz]=P.toW(H,0,0), id=at2(sx,hv+1,sz), d=SD[id]; if(!d || d[0]!==dx-sx || d[1]!==dz-sz || STAIR_MAT[id].full!==PLANKS) stBad.push("门"+sx+","+sz+"="+id); }
             else for(let k=1;k<=4;k++){ const [sx,sz]=P.toW(H,H.hw+1,H.D-1-k), id=at2(sx,hv+k,sz); if(STAIRS.indexOf(id)<0) stBad.push("侧梯"+k+"@"+sx+","+sz+"="+id); }
           }
           const lampBad=P.lamps.filter(([X,Z])=>!(at2(X,hv+2,Z)===IRONPOST && at2(X,hv+3,Z)===IRONPOST && at2(X,hv+4,Z)===LAMPPOST));
@@ -13401,7 +13448,7 @@ function selftest(){
       {
         const ids=[SLAB_SST,STAIR_N,STAIR_E,STAIR_S,STAIR_W,LAMPPOST];
         const defs=ids.every((id,k)=>id===90+k && !!BLOCKS[id] && !!SHAPES[id] && SOLID(id) && !OPAQUE(id) && !OCCLUDE(id) && !BL_OPQ[id]) && EMIT_LV[LAMPPOST]===13;
-        const items=STAIRS.every(id=>shapeItem(id)===STAIR_N) && shapeItem(SLAB_SST)===SLAB_SST
+        const items=SHAPE_MATS[0].stairs.every(id=>shapeItem(id)===STAIR_N) && shapeItem(SLAB_SST)===SLAB_SST
           && stairFacing(1,0.2)===STAIR_E && stairFacing(-1,0)===STAIR_W && stairFacing(0.1,1)===STAIR_S && stairFacing(0,-1)===STAIR_N;
         const all=()=>true, none=()=>false;
         const slab=shapeQuads(SLAB_SST,none), slabMaxY=Math.max(...slab.flatMap(q=>q.pos.map(v=>v[1])));
@@ -13437,6 +13484,31 @@ function selftest(){
         Object.assign(player,{x:S.x,y:S.y,z:S.z,vx:S.vx,vy:S.vy,vz:S.vz,onGround:S.og});
         ok("形状碰撞: 站地面自动迈上半砖(0.5 格)、从上方落在半砖顶停在 +0.5、整格墙迈不上去、生物也能走上半砖",
            stepped && landed && wall && mobStep, "stepped="+stepped+" landed="+landed+" wall="+wall+" mob="+mobStep+" y="+m.y.toFixed(2));
+      }
+      // ---- 第七轮③·本地: 更多材质 + 宫殿大台阶 + 形状图标 ----
+      {
+        const mats=SHAPE_MATS.length===4 && SHAPE_MATS.every(M=>SHAPES[M.slab] && M.stairs.length===4 && M.stairs.every((id,k)=>SHAPES[id]===STAIR_BOXES[k] && STAIR_MAT[id]===M && shapeItem(id)===M.stairs[0] && BLOCKS[id].s===BLOCKS[M.full].s)
+          && SLAB_MAT[M.slab]===M && BLOCKS[M.slab].name.indexOf("半砖")>0 && SOLID(M.slab) && !OPAQUE(M.slab));
+        const ids=[SLAB_MARBLE,...STAIR_MARBLE,SLAB_PLANK,...STAIR_PLANK,SLAB_CLAY,...STAIR_CLAY];
+        const range=ids.every((id,k)=>id===100+k) && STAIRS.length===16 && stairOf(STAIR_MARBLE[0],1,0)===STAIR_MARBLE[1] && stairOf(STAIR_PLANK[0],0,1)===STAIR_PLANK[2] && stairOf(STAIR_CLAY[0],-1,0)===STAIR_CLAY[3];
+        const recs=SHAPE_MATS.every(M=>RECIPES.some(r=>r.name===M.n+"半砖") && RECIPES.some(r=>r.name===M.n+"楼梯"));
+        const ic=shapeIcon(SLAB_MARBLE).getContext("2d").getImageData(0,0,64,64).data, icS=shapeIcon(STAIR_N).getContext("2d").getImageData(0,0,64,64).data;
+        let aSlab=0,aStair=0; for(let i=3;i<ic.length;i+=4){ if(ic[i]>8) aSlab++; if(icS[i]>8) aStair++; }
+        const full=blockIcon(MARBLE).getContext("2d").getImageData(0,0,64,64).data; let aFull=0; for(let i=3;i<full.length;i+=4) if(full[i]>8) aFull++;
+        const icons=aSlab>200 && aSlab<aFull*0.85 && aStair>aSlab && aStair<=aFull+40;
+        ok("更多材质: 大理石/橡木/陶土半砖+四向楼梯(100-114)从材质表生成, 贴图随整块、挖下归一、配方齐全; 物品图标按形状画(半砖明显矮于整块)",
+           mats && range && recs && icons, "mats="+mats+" range="+range+" recs="+recs+" icon px 半砖/楼梯/整块="+aSlab+"/"+aStair+"/"+aFull);
+      }
+      {
+        let pal=null; for(let sx=-60;sx<=60&&!pal;sx++) for(let sz=-60;sz<=60&&!pal;sz++){ const s2=structureAt(sx,sz); if(s2&&s2.type==="palace") pal=s2; }
+        if(!pal) ok("宫殿大台阶: 附近找到宫殿", true, "本种子 121×121 格内无宫殿, 跳过");
+        else {
+          const cache=new Map(), at=(X,Y,Z)=>{ const cx=Math.floor(X/CS), cz=Math.floor(Z/CS), k=cx+","+cz;
+            if(!cache.has(k)) cache.set(k,genChunk(cx,cz)); return cache.get(k)[((X-cx*CS)*CS+(Z-cz*CS))*H+Y]; };
+          const {x,z,h}=pal, D=13, S0=STAIR_MARBLE[0];
+          let okS=true; for(let X=x-2;X<=x+2;X++) if(at(X,h+1,z+D+1)!==S0 || at(X,h+2,z+D-1)!==S0 || at(X,h+3,z+D-3)!==S0) okS=false;
+          ok("宫殿大台阶: 三级大理石基座正面各一级大理石楼梯(朝宫门升高)", okS, "palace="+x+","+z);
+        }
       }
       { // 守墓石像被盯住时要有常驻提示, 否则玩家以为怪物卡死(用户报 bug: "僵尸突然不动了")
         const mobsP=mobs.slice(); mobs.length=0;
