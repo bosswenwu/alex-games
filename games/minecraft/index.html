@@ -9445,16 +9445,35 @@ function applySkyUniforms(L){
 const meshQueue=[];
 const queued=new Set();
 let pcx=1e9, pcz=1e9;
+/* 区块数据分帧生成(第八轮·本地性能复核): 跨区块边界时原先在一帧里同步 genChunk 外圈 17 个区块(每个约 4ms → 70~80ms 卡顿)。
+   现在只同步生成玩家周围 3×3(传送/自测依赖"脚下区块立刻存在"), 更远的排进 genQueue, 由 processGenQueue 按每帧时间预算由近到远补齐;
+   区块要等周围 8 格数据都在才排进网格队列(否则边界会冒出朝向"空气"的多余面)。 */
+const genQueue=[], genQueued=new Set();
+function neighborsReady(cx,cz){ for(let dx=-1;dx<=1;dx++) for(let dz=-1;dz<=1;dz++) if(!world.has(key(cx+dx,cz+dz))) return false; return true; }
+function queueMeshIfReady(cx,cz,pcx0,pcz0){
+  const k=key(cx,cz), c=world.get(k);
+  if(c && !c.mesh && !queued.has(k) && Math.max(Math.abs(cx-pcx0),Math.abs(cz-pcz0))<=RENDER && neighborsReady(cx,cz)){ queued.add(k); meshQueue.push(c); }
+}
+function processGenQueue(budgetMs){
+  const t0=performance.now(), cx=Math.floor(player.x/CS), cz=Math.floor(player.z/CS);
+  while(genQueue.length && performance.now()-t0<budgetMs){
+    const [gx,gz]=genQueue.shift(); genQueued.delete(key(gx,gz));
+    if(Math.max(Math.abs(gx-cx),Math.abs(gz-cz))>RENDER+1 || world.has(key(gx,gz))) continue;   // 已走远 / 已被别处生成
+    ensureData(gx,gz);
+    for(let dx=-1;dx<=1;dx++) for(let dz=-1;dz<=1;dz++) queueMeshIfReady(gx+dx,gz+dz,cx,cz);
+  }
+}
 function refreshChunks(){
   const cx=Math.floor(player.x/CS), cz=Math.floor(player.z/CS);
   if(cx===pcx && cz===pcz) return;
   pcx=cx; pcz=cz;
-  for(let dx=-RENDER-1;dx<=RENDER+1;dx++) for(let dz=-RENDER-1;dz<=RENDER+1;dz++)
-    ensureData(cx+dx,cz+dz);
-  for(let dx=-RENDER;dx<=RENDER;dx++) for(let dz=-RENDER;dz<=RENDER;dz++){
-    const k=key(cx+dx,cz+dz), c=world.get(k);
-    if(c && !c.mesh && !queued.has(k)){ queued.add(k); meshQueue.push(c); }
+  for(let dx=-RENDER-1;dx<=RENDER+1;dx++) for(let dz=-RENDER-1;dz<=RENDER+1;dz++){
+    const k=key(cx+dx,cz+dz); if(world.has(k)) continue;
+    if(Math.max(Math.abs(dx),Math.abs(dz))<=1) ensureData(cx+dx,cz+dz);
+    else if(!genQueued.has(k)){ genQueued.add(k); genQueue.push([cx+dx,cz+dz]); }
   }
+  genQueue.sort((a,b)=>Math.max(Math.abs(a[0]-cx),Math.abs(a[1]-cz))-Math.max(Math.abs(b[0]-cx),Math.abs(b[1]-cz)));
+  for(let dx=-RENDER;dx<=RENDER;dx++) for(let dz=-RENDER;dz<=RENDER;dz++) queueMeshIfReady(cx+dx,cz+dz,cx,cz);
   meshQueue.sort((a,b)=>{
     const da=Math.max(Math.abs(a.cx-cx),Math.abs(a.cz-cz));
     const db=Math.max(Math.abs(b.cx-cx),Math.abs(b.cz-cz));
@@ -10722,13 +10741,18 @@ let lastT=0, fps=0, fpsC=0, fpsT=0;
 /* ---------- 低端设备自动降级: 连续低帧就下调渲染距离 ---------- */
 let lowFpsStreak=0, perfDowngrades=0;
 function autoScalePerf(){
-  if(!playing() || perfDowngrades>=3) return;
+  if(!playing() || perfDowngrades>=5 || document.hidden) return;   // 后台/被遮挡时浏览器会限帧, 不据此降级
   if(fps>0 && fps<30){
-    if(++lowFpsStreak>=6){                 // 连续约 3 秒低于 30fps 才降, 避免误判瞬时卡顿
+    if(++lowFpsStreak>=10){                // 连续约 5 秒低于 30fps 才降, 避免把加载/战斗的瞬时卡顿当成设备弱
       lowFpsStreak=0; perfDowngrades++;
-      RENDER=Math.max(3, RENDER-2);
-      pcx=1e9; pcz=1e9; refreshChunks();   // 立即按新距离重算可见区块
-      showName("⚙ 设备性能较弱，已自动降低渲染距离到 "+RENDER+" 区块（当前 "+fps+" fps）");
+      if(gfxLevel>1){                      // 先降画质档(极致→高→中): 阴影/后处理/多重采样才是显卡大头
+        const g=setGfx(gfxLevel-1);
+        showName("⚙ 帧率偏低，已自动把画质降到「"+GFX_NAMES[g]+"」（当前 "+fps+" fps · 按 O 可手动调整）");
+      } else {                             // 画质已到「中」或更低: 再缩渲染距离
+        RENDER=Math.max(3, RENDER-2);
+        pcx=1e9; pcz=1e9; refreshChunks(); // 立即按新距离重算可见区块
+        showName("⚙ 设备性能较弱，已自动降低渲染距离到 "+RENDER+" 区块（当前 "+fps+" fps）");
+      }
     }
   } else lowFpsStreak=0;
 }
@@ -10859,7 +10883,9 @@ function frame(now){
     updateWeather(dt);
     updateParticles(dt);
     refreshChunks();
-    processQueue(6);
+    { const tq=performance.now();                // 区块流式加载共用每帧 ~8ms 预算: 先建网格, 余下的时间再生成新区块数据
+      processQueue(5);                           // (单个区块建网格约 5~7ms、生成约 4~5ms, 一帧通常只做其中一件, 不叠成卡顿)
+      processGenQueue(8-(performance.now()-tq)); }
 
     // 生物 & 生存
     updateMobs(dt);
@@ -13671,6 +13697,32 @@ function selftest(){
         Object.assign(player,P0); selectSlot(slot0); xp=st0.xp; lvl=st0.lvl; maxHp=st0.maxHp; dmgMul=st0.dmgMul; hp=st0.hp; questIdx=q0; updateHearts(); updateXPHUD(); renderTut();
         ok("新手引导: 新档且没看过才弹、老档/看过不弹; 8 步按真实操作依次推进(切剑时对应格闪烁)、完成 +经验并记住; 可跳过",
            g1 && g2 && g3 && shown && flow && pulseOK && skip, "gate="+[g1,g2,g3]+" shown="+shown+" steps="+seen.join(",")+" flow="+flow+" pulse="+pulseOK+" skip="+skip);
+      }
+      // ---- 第八轮·本地: 性能复核(区块分帧生成 + 自动降级先降画质) ----
+      {
+        const P0={x:player.x,z:player.z}, R0=RENDER;
+        player.x+=CS*40; pcx=1e9; refreshChunks();                                    // 传送到 40 个区块外
+        const cx=Math.floor(player.x/CS), cz=Math.floor(player.z/CS);
+        let near=true; for(let dx=-1;dx<=1;dx++) for(let dz=-1;dz<=1;dz++) if(!world.has(key(cx+dx,cz+dz))) near=false;
+        const deferred=genQueue.length>0 && !world.has(key(cx+RENDER,cz));            // 外圈没有在这一帧同步生成
+        let g=0; while((genQueue.length||meshQueue.length) && g++<5000){ const tq=performance.now(); processQueue(5); processGenQueue(8-(performance.now()-tq)); }   // 同主循环的分帧方式补齐(耗时受后台显卡限流影响, 不作断言)
+        let missing=0, noMesh=0; for(let dx=-RENDER-1;dx<=RENDER+1;dx++) for(let dz=-RENDER-1;dz<=RENDER+1;dz++){ const c=world.get(key(cx+dx,cz+dz)); if(!c) missing++; else if(Math.max(Math.abs(dx),Math.abs(dz))<=RENDER && !c.mesh) noMesh++; }
+        player.x=P0.x; player.z=P0.z; pcx=1e9; refreshChunks(); RENDER=R0;
+        ok("区块流式加载: 传送后脚下 3×3 立刻就有、外圈排队分帧生成(不再一帧同步 17 块); 补齐后渲染范围内无缺块/漏网格",
+           near && deferred && missing===0 && noMesh===0, "near="+near+" deferred="+deferred+" missing="+missing+" noMesh="+noMesh+" 补齐用了 "+g+" 帧");
+      }
+      {
+        const g0=gfxLevel, R0=RENDER, pd0=perfDowngrades, fps0=fps, hidDesc=Object.getOwnPropertyDescriptor(document,"hidden");
+        Object.defineProperty(document,"hidden",{get:()=>false,configurable:true});
+        const sl0=softLock; softLock=true;                                        // playing() = locked||softLock: 自测不在游戏中, 临时视为在玩
+        setGfx(3); RENDER=9; perfDowngrades=0; lowFpsStreak=0; fps=20;
+        const steps=[]; for(let k=0;k<60;k++){ const d0=perfDowngrades; autoScalePerf(); if(perfDowngrades>d0) steps.push(gfxLevel+"/"+RENDER); }
+        const order=steps.slice(0,4).join(" "), stopped=perfDowngrades===5;
+        fps=55; autoScalePerf(); const reset=lowFpsStreak===0;
+        softLock=sl0; if(hidDesc) Object.defineProperty(document,"hidden",hidDesc); else delete document.hidden;
+        setGfx(g0); RENDER=R0; perfDowngrades=pd0; fps=fps0; lowFpsStreak=0; pcx=1e9; refreshChunks();
+        ok("自动降级: 连续低帧先降画质(极致→高→中), 到「中」后才缩渲染距离, 最多 5 次; 帧率回升则清零计数",
+           order==="2/9 1/9 1/7 1/5" && stopped && reset, "序列="+steps.join(" ")+" 次数="+perfDowngrades+" reset="+reset);
       }
       { // 守墓石像被盯住时要有常驻提示, 否则玩家以为怪物卡死(用户报 bug: "僵尸突然不动了")
         const mobsP=mobs.slice(); mobs.length=0;
