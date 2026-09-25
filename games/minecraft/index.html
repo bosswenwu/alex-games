@@ -19,7 +19,7 @@
   #cross::before, #cross::after { content:""; position:absolute; background:#ddd; }
   #cross::before { left:50%; top:0; width:2px; height:100%; transform:translateX(-50%); }
   #cross::after  { top:50%; left:0; height:2px; width:100%; transform:translateY(-50%); }
-  #craftPanel, #enchPanel, #potionPanel { position:absolute; inset:0; margin:auto; width:min(760px,92vw); max-height:82vh;
+  #craftPanel, #enchPanel, #potionPanel, #chestPanel { position:absolute; inset:0; margin:auto; width:min(760px,92vw); max-height:82vh;
     display:none; flex-direction:column; gap:10px; padding:16px 18px; z-index:40;
     background:rgba(18,16,26,.95); border:2px solid #6b5a3a; border-radius:10px;
     color:#f0e6d2; font-size:13px; overflow:auto; box-shadow:0 12px 48px rgba(0,0,0,.6); }
@@ -34,6 +34,9 @@
   .bagEmpty { color:#7d7264; font-style:italic; }
   #enchInfo { color:#c9b184; line-height:1.7; }
   #potionInfo { color:#c9b184; line-height:1.7; }
+  #chestCols { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .chestGrid { display:flex; flex-wrap:wrap; gap:6px; min-height:40px; align-content:flex-start; }
+  .chestGrid .bagCell { cursor:pointer; } .chestGrid .bagCell:hover { outline:1px solid #e8bb6a; }
   #recipeList, #enchList, #potionList { display:flex; flex-direction:column; gap:6px; }
   .recipe { display:flex; justify-content:space-between; align-items:center; gap:12px;
     padding:8px 10px; border-radius:6px; background:rgba(255,255,255,.05);
@@ -240,6 +243,11 @@
   <div id="potionInfo"></div>
   <div id="potionList"></div>
 </div>
+<div id="chestPanel">
+  <div id="craftHead"><span id="chestTitle">📦 储物箱</span><span id="craftHint">点击物品在背包/箱子间搬运 · Shift+点击只搬 1 个 · 右键 / Esc 关闭</span></div>
+  <div id="chestCols"><div><div id="bagTitle">背包</div><div id="chestBag" class="chestGrid"></div></div>
+  <div><div id="bagTitle" id2="t2">箱内</div><div id="chestIn" class="chestGrid"></div></div></div>
+</div>
 <div id="npcPanel">
   <div id="npcHead"><span id="npcTitle">NPC</span><span id="craftHint">按 F / Esc 关闭</span></div>
   <div id="npcGreet"></div>
@@ -346,7 +354,7 @@
     <b>W A S D</b> 移动　<b>空格</b> 跳跃(双击飞行)　<b>Shift</b> 潜行/下降　<b>E</b> 上车/骑乘<br>
     <b>左键</b> 挖掘/攻击　<b>右键</b> 放置/使用道具　<b>1–9 / 滚轮</b> 切换物品栏<br>
     <b>探索</b>：右上角<b>指南针</b>指向最近地标——朝它走，寻访金字塔·绿洲·奇观群系<br>
-    <span style="opacity:.7">走进不同群系会有天色与怪物变化，进游戏后随时会有提示 · <b>H</b> 查看完整帮助 · <b>O</b> 切换画质 · <b>V</b> 药水 · <b>X</b> 钓鱼 · 喂仙人掌驯服骆驼(E)</span>
+    <span style="opacity:.7">走进不同群系会有天色与怪物变化，进游戏后随时会有提示 · <b>H</b> 查看完整帮助 · <b>O</b> 切换画质 · <b>V</b> 药水 · <b>X</b> 钓鱼 · 喂仙人掌驯服骆驼(E) · 右键储物箱</span>
   </div>
   <div id="legal">
     《沙海奇境 Sandsea》是一个独立的开源体素游戏，向 Minecraft 致敬。<br>
@@ -397,6 +405,7 @@ const LOOSESAND=62;                           // 松沙陷坑: 外观与沙子�
 const PLASTER=63, PLASTER_ROSE=64, PLASTER_WHITE=65, WINDOW_WOOD=66, PALM_LOG=67, PALM_LEAF=68, REEDS=69, GILDED=70;
 // 金字塔墓室(第四轮, 图集 275/276): 象形文字砖(侧面彩绘经文, 可左右镜像——古埃及文字本就可左右书写) · 星空墓顶(底面青金石蓝 + 金色五角星)
 const HIERO=71, STARCEIL=72;
+const CHEST=80;                                // 第六轮·云端: 储物箱(图集 290 顶 / 291 侧)
 // t=顶面贴图 b=底面 s=侧面 (图集编号)
 const BLOCKS = {
   [GRASS]:  {name:"草方块",   t:0,  b:2,  s:1},
@@ -471,6 +480,7 @@ const BLOCKS = {
   [GILDED]: {name:"鎏金饰面",   t:269,b:269,s:269},   // 装饰金(替代建筑外立面上的金矿石); 挖下得金矿石
   [HIERO]:  {name:"象形文字砖", t:71, b:71, s:275},   // 墓室/走廊墙面: 侧面刻彩绘经文, 顶底仍是砂岩
   [STARCEIL]:{name:"星空墓顶",  t:71, b:276,s:71},    // 只有底面(抬头看见的那面)是星空, 从外面挖开仍像砂岩
+  [CHEST]:  {name:"储物箱",   t:290,b:290,s:291},   // 第六轮·云端: 右键打开储物面板
 };
 // 植物可以直接走过去; 冰/玻璃/树叶不完全遮挡; 岩浆会陷进去
 const SOLID   = id => id!==AIR && id!==WATER && id!==LAVA && !PLANT(id);   // 碰撞
@@ -2185,6 +2195,7 @@ function setBlock(x,y,z,id){
   if(y<0||y>=H) return;
   const cx=x>>4, cz=z>>4, c=world.get(key(cx,cz));
   if(!c) return;
+  if(id!==CHEST && typeof chests!=="undefined" && chests[x+","+y+","+z]) chestSpill(x,y,z);   // 第六轮·云端: 拆掉储物箱时倒回背包
   if(worldGenReady) blockDiff.set(x+","+y+","+z, id);
   const bi=((x&15)*CS+(z&15))*H+y, old=c.blocks[bi];
   c.blocks[bi]=id;
@@ -3732,6 +3743,21 @@ txPut(276,(x,y)=>{                                                        // 星
   }
   return base;
 });
+// 第六轮·云端: 储物箱 顶(290: 木箱盖 + 铁包角 + 中缝) / 侧(291: 竖木板 + 横铁箍 + 正中铜扣)
+txPut(290,(x,y)=>{
+  const e=Math.min(x,y,29-x,29-y);
+  if(e<2) return txMul([58,56,54],0.9+txH(x,y,2901)*0.15);                 // 铁包边
+  if((x<5||x>24)&&(y<5||y>24)) return txMul([70,68,64],0.9+txH(x,y,2902)*0.2);   // 包角
+  if(Math.abs(y-14.5)<1) return [60,40,24];                                  // 中缝
+  return txMul([150,104,58],0.85+txFbm(x,y,2,8,2,2903)*0.25+(Math.floor(x/7)%2?0.04:-0.02));
+});
+txPut(291,(x,y)=>{
+  if(y<2||y>27||x<2||x>27) return txMul([58,56,54],0.9+txH(x,y,2911)*0.15);
+  if(Math.abs(y-9.5)<1.2) return txMul([70,68,64],0.95);                     // 横铁箍
+  if(x>=12&&x<=17&&y>=8&&y<=14) return (x===12||x===17||y===8||y===14)?[92,66,24]:[214,168,62];   // 铜扣
+  if(x%7===0) return [88,58,32];                                             // 竖板缝
+  return txMul([158,110,62],0.85+txFbm(x,y,8,2,2,2912)*0.25);
+});
 let ATLAS_MIPS=0;                                                         // 手工 mip 级数(自测用: 512×1024 → 1×1 共 10 级)
 const atlasTex = gl.createTexture();
 gl.bindTexture(gl.TEXTURE_2D, atlasTex);
@@ -4564,6 +4590,11 @@ const RECIPES=[
   {name:"🧪 酿造·迅捷药水", desc:"仙人掌汁 + 金：90 秒移动速度 +35%", cost:[[CACTUS,2],[GOLD_ORE,1]], run(){ return brewPotion("swift"); }},
   {name:"🧪 酿造·夜视药水", desc:"仙人掌汁 + 发光矿脉：3 分钟夜里看得清", cost:[[CACTUS,2],[GLOWVEIN,1]], run(){ return brewPotion("night"); }},
   {name:"🧪 酿造·治疗药水", desc:"仙人掌汁 + 芦苇：立即回复 8 点生命", cost:[[CACTUS,2],[REEDS,2]], run(){ return brewPotion("heal"); }},
+  // 第六轮·云端: 储物箱 / 收纳袋
+  {name:"📦 储物箱", desc:"木板钉成的箱子：放下后右键打开，存放方块材料", cost:[[PLANKS,8]], run(){ giveBlock(CHEST,1); return "获得 储物箱 x1（放下后右键打开）"; }},
+  {name:"👜 收纳袋", desc:"羊毛缝的随身袋：在合成台面板里随时打开，额外存放 12 种材料", cost:[[WOOL,4],[HAY,1]],
+   ok(){ return !bundleState.owned; }, lockMsg:"已拥有收纳袋",
+   run(){ bundleState.owned=true; renderCraft(); return "👜 收纳袋缝好了 — 合成台(B)面板里点「打开收纳袋」"; }},
 ];
 /* 把方块塞进物品栏: 优先合并同类, 否则占用一个方块格 */
 function giveBlock(id,n){
@@ -4603,7 +4634,8 @@ function renderCraft(){
   const items=[...bag.entries()].filter(([id,n])=>n>0 && BLOCKS[id]);
   items.sort((a,b)=>b[1]-a[1]);
   const coreCell='<div class="bagCell" style="color:#ffd27a">⚡ 能量核心 <b>x'+cores+'</b></div>';
-  g.innerHTML = coreCell + (items.length
+  const bundleBtn=(typeof bundleState!=="undefined" && bundleState.owned)?'<div class="bagCell" id="openBundleBtn" style="cursor:pointer;color:#e8bb6a">👜 打开收纳袋 ('+storeTypes(bundleState.items)+'/'+BUNDLE_SLOTS+')</div>':'';   // 第六轮·云端
+  g.innerHTML = coreCell + bundleBtn + (items.length
     ? items.map(([id,n])=>'<div class="bagCell">'+BLOCKS[id].name+' <b>x'+n+'</b></div>').join("")
     : '<div class="bagCell bagEmpty">方块空空——去挖点方块吧</div>');
   document.getElementById("recipeList").innerHTML = RECIPES.map((r,i)=>{
@@ -4621,6 +4653,7 @@ function renderCraft(){
   }).join("");
   for(const el of document.querySelectorAll("#recipeList .recipe"))
     el.onclick=()=>doCraft(+el.dataset.i);
+  const bb=document.getElementById("openBundleBtn"); if(bb) bb.onclick=()=>openBundle();
 }
 /* ---- ✨ 神庙附魔祭坛 (第五轮·本地) ----
    按 J 打开。向神庙献祭文物碎片(考古出土) + 金矿石, 给近战武器(剑/锤)加永久词条。
@@ -4827,6 +4860,117 @@ function eatFish(){
   eatCd=1.2; fishState.fish--; hp=Math.min(maxHp,hp+5); updateHearts(); sfxEat();
   showName("🐟 烤鱼真香，恢复 5 点生命（剩 "+fishState.fish+" 条）"); if(potionOpen) renderPotions();
   return true;
+}
+
+/* =========================================================
+   📦 储物箱 / 👜 收纳袋 (第六轮·云端)
+   储物箱: 方块 CHEST, 右键打开面板, 按世界坐标记账 chests["x,y,z"]={id:n}; 被挖掉/炸掉时箱内物品倒回背包
+   收纳袋: 合成台配方解锁, 在合成台面板里打开的随身储物(最多 12 种材料), 与储物箱共用同一面板
+   ========================================================= */
+const chests={};                          // "x,y,z" -> {blockId: count}
+const bundleState={owned:false, items:{}};
+const BUNDLE_SLOTS=12;
+let chestOpen=null;                       // 当前打开的: {key, store, title, cap}
+const chestKey=(x,y,z)=>x+","+y+","+z;
+function storeTypes(st){ return Object.keys(st).filter(k=>st[k]>0).length; }
+function openStore(key, store, title, cap){
+  if(craftOpen) toggleCraft(); if(enchOpen) toggleEnch(); if(potionOpen) togglePotions();
+  chestOpen={key, store, title, cap};
+  document.getElementById("chestTitle").textContent=title;
+  document.getElementById("chestPanel").style.display="flex";
+  renderChest();
+  if(document.pointerLockElement) document.exitPointerLock();
+}
+function openChest(x,y,z){
+  const k=chestKey(x,y,z);
+  if(!chests[k]) chests[k]={};
+  openStore(k, chests[k], "📦 储物箱", 27);
+}
+function openBundle(){ if(!bundleState.owned) return false; openStore("bundle", bundleState.items, "👜 收纳袋", BUNDLE_SLOTS); return true; }
+function closeChest(){ chestOpen=null; document.getElementById("chestPanel").style.display="none"; if(!softLock) enterPointerLock(); }
+function storeMove(id, toStore, n){       // 在背包与当前储物之间搬运; 返回搬了多少
+  const C=chestOpen; if(!C) return 0;
+  id=+id; const st=C.store;
+  if(toStore){
+    const have=bagCount(id); if(!have) return 0;
+    if(!(st[id]>0) && storeTypes(st)>=C.cap){ showName("⚠ "+C.title+"满了（最多 "+C.cap+" 种）"); return 0; }
+    const m=Math.min(have,n||have); bagTake(id,m); st[id]=(st[id]|0)+m; return m;
+  } else {
+    const have=st[id]|0; if(!have) return 0;
+    const m=Math.min(have,n||have); st[id]=have-m; if(!st[id]) delete st[id]; bagAdd(id,m); return m;
+  }
+}
+function renderChest(){
+  const C=chestOpen; if(!C) return;
+  const cell=(id,n,side)=>'<div class="bagCell" data-id="'+id+'" data-side="'+side+'">'+(BLOCKS[id]?BLOCKS[id].name:id)+' <b>x'+n+'</b></div>';
+  const bagItems=[...bag.entries()].filter(([id,n])=>n>0 && BLOCKS[id]).sort((a,b)=>b[1]-a[1]);
+  const inItems=Object.keys(C.store).filter(k=>C.store[k]>0).map(k=>[+k,C.store[k]]).sort((a,b)=>b[1]-a[1]);
+  document.getElementById("chestBag").innerHTML=bagItems.length?bagItems.map(([id,n])=>cell(id,n,"bag")).join(""):'<div class="bagCell bagEmpty">背包空空</div>';
+  document.getElementById("chestIn").innerHTML=(inItems.length?inItems.map(([id,n])=>cell(id,n,"in")).join(""):'<div class="bagCell bagEmpty">空箱子</div>')
+    +'<div style="width:100%;color:#9b8a6a;font-size:11px">'+storeTypes(C.store)+' / '+C.cap+' 种</div>';
+  for(const el of document.querySelectorAll("#chestPanel .chestGrid .bagCell[data-id]"))
+    el.onclick=(ev)=>{ storeMove(el.dataset.id, el.dataset.side==="bag", ev.shiftKey?1:0); renderChest(); };
+}
+function chestSpill(x,y,z){               // 储物箱被挖掉/炸掉: 箱内全部倒回背包, 不吞物品
+  const k=chestKey(x,y,z), st=chests[k]; if(!st) return 0;
+  let n=0; for(const id in st){ if(st[id]>0){ bagAdd(+id,st[id]); n+=st[id]; } }
+  delete chests[k];
+  if(chestOpen && chestOpen.key===k) closeChest();
+  if(n) showName("📦 储物箱拆了，箱内 "+n+" 件物品收回背包");
+  return n;
+}
+
+/* =========================================================
+   🌿 氛围小生物(第六轮·云端): 黄昏/夜里的萤火虫、村落烟囱炊烟、水面跃鱼 —— 纯粒子, 不占生物上限、不影响刷怪
+   ========================================================= */
+const ambientState={t:0, fireflies:0, smoke:0, jumps:0};
+const fireflyAmount=h=>clamp((0.25-h)/0.35,0,1);        // 太阳越低萤火虫越多: 正午 0 → 黄昏起 → 深夜 1
+function villageChimneys(vs){            // 村屋烟囱顶的世界坐标(木筋屋砖烟囱 / 平顶屋砖砌小烟囱)
+  const P=villagePlan(vs), out=[];
+  for(const H of P.houses){
+    if(H.kind==="timber"){ const [X,Z]=P.toW(H,2,H.D-2); out.push([X+0.5,vs.h+14,Z+0.5]); }
+    else if(!H.tall && H.v2<0.5){ const [X,Z]=P.toW(H,0,H.D-2); out.push([X+0.5,vs.h+8,Z+0.5]); }
+  }
+  return out;
+}
+let _chimCache={key:"", list:[]};
+function tickAmbient(dt){
+  if(typeof playing==="function" && !playing()) return;
+  ambientState.t+=dt;
+  const scale=(typeof MOBILE_PARTICLE_SCALE==="number"?MOBILE_PARTICLE_SCALE:1)*(gfxLevel<1?0.5:1);
+  // 萤火虫: 绿洲/河边/草地, 随机一闪一闪地漂
+  const ff=fireflyAmount(sunH)*(weather==="clear"?1:0.3);
+  if(ff>0 && Math.random()<dt*14*ff*scale){
+    const a=Math.random()*6.283, d=3+Math.random()*16, x=player.x+Math.cos(a)*d, z=player.z+Math.sin(a)*d;
+    const gy=groundY(Math.floor(x),Math.floor(z)), top=getBlock(Math.floor(x),gy-1,Math.floor(z));
+    const lush=top===GRASS||top===WATER||top===REEDS||riverInfluence(Math.floor(x),Math.floor(z))>0||!!nearStructure(["village","oasis"],40);
+    if(gy>0 && lush){
+      particles.push({x, y:gy+0.6+Math.random()*1.8, z, vx:(Math.random()-.5)*0.5, vy:(Math.random()-.5)*0.25+0.15, vz:(Math.random()-.5)*0.5,
+        life:2.5+Math.random()*2, size:0.07, u:(BLOCKS[LANTERN].s%16)*TS+TS*0.45, v:Math.floor(BLOCKS[LANTERN].s/16)*TV+TV*0.5, l:2.4, firefly:true});
+      ambientState.fireflies++;
+    }
+  }
+  // 村落炊烟: 最近的村子里每根烟囱冒灰白烟柱(早晚更浓)
+  const vs=typeof nearVillageStruct==="function"?nearVillageStruct(90):null;
+  if(vs){
+    const k=vs.x+","+vs.z; if(_chimCache.key!==k) _chimCache={key:k, list:villageChimneys(vs)};
+    const rate=(sunH<0.35?5:2.5)*scale;
+    for(const [cx,cy,cz] of _chimCache.list) if(Math.random()<dt*rate){
+      particles.push({x:cx+(Math.random()-.5)*.3, y:cy, z:cz+(Math.random()-.5)*.3, vx:0.25+(Math.random()-.5)*.2, vy:0.9+Math.random()*0.4, vz:(Math.random()-.5)*.2,
+        life:2.2+Math.random(), size:0.16+Math.random()*0.08, u:(BLOCKS[GRAVEL].s%16)*TS+TS*0.3, v:Math.floor(BLOCKS[GRAVEL].s/16)*TV+TV*0.3, l:1.25, smoke:true});
+      ambientState.smoke++;
+    }
+  }
+  // 水面跃鱼: 偶尔在附近开阔水面溅起一道弧线水花
+  if(Math.random()<dt*0.35*scale){
+    const a=Math.random()*6.283, d=5+Math.random()*14, x=Math.floor(player.x+Math.cos(a)*d), z=Math.floor(player.z+Math.sin(a)*d);
+    if(getBlock(x,WATER_Y,z)===WATER && getBlock(x,WATER_Y+1,z)===AIR){
+      const wt=BLOCKS[WATER].s, dir=Math.random()*6.283;
+      for(let i=0;i<9;i++) particles.push({x:x+0.5, y:WATER_Y+0.9, z:z+0.5, vx:Math.cos(dir)*1.4+(Math.random()-.5)*.6, vy:3.2+Math.random()*1.2, vz:Math.sin(dir)*1.4+(Math.random()-.5)*.6,
+        life:0.55, size:0.06, u:(wt%16)*TS+TS*0.4, v:Math.floor(wt/16)*TV+TV*0.4, l:1.3});
+      ambientState.jumps++;
+    }
+  }
 }
 
 /* =========================================================
@@ -5565,6 +5709,7 @@ document.addEventListener("keydown",e=>{
   if(e.code==="Escape" && craftOpen){ toggleCraft(); return; }
   if(e.code==="Escape" && enchOpen){ toggleEnch(); return; }
   if(e.code==="Escape" && potionOpen){ togglePotions(); return; }                 // 第五轮·云端
+  if(e.code==="Escape" && chestOpen){ closeChest(); return; }                      // 第六轮·云端
   if(potionOpen && !e.repeat && e.code>="Digit1" && e.code<="Digit4"){ e.preventDefault(); drinkPotion(POTIONS[+e.code.slice(5)-1].k); return; }
   if(potionOpen && !e.repeat && e.code==="Digit5"){ e.preventDefault(); eatFish(); return; }
   if(e.code==="KeyV" && !e.repeat){ e.preventDefault(); if(potionOpen || (playing() && !dead)) togglePotions(); return; }   // 第五轮·云端: 药水面板
@@ -5665,6 +5810,7 @@ newworldbtn.addEventListener("click",()=>{
   hp=maxHp=20; lvl=1; xp=0; armor=0; cores=0; kills=0; dayCount=1; dmgMul=1; dead=false; setSunblade(false); setMace(false); for(const k in enchState) enchState[k]=0;
   for(const k in potions) potions[k]=0; for(const k in potionFx) potionFx[k]=0;   // 第五轮·云端
   fishState.on=false; fishState.fish=0; fishState.caught=0;
+  for(const k in chests) delete chests[k]; bundleState.owned=false; bundleState.items={};   // 第六轮·云端
   questIdx=0; questProg=0; questDone=false; _qWalkX=null; _qDriveX=null; bag.clear(); updateQuestHUD();
   document.getElementById("victory").style.display="none";
   _gcx=1e9; pcx=1e9; pcz=1e9;
@@ -5829,6 +5975,7 @@ function awakenPharaoh(bx,by,bz){
   applyCurse();                                          // 唤醒即缠上法老诅咒
 }
 function doPlace(){
+  { const h0=raycast(5.5, currentAim()); if(h0 && h0.id===CHEST){ openChest(h0.x,h0.y,h0.z); return; } }   // 第六轮·云端: 右键储物箱 → 打开
   swingT=0.3; triggerViewSwing();
   const it=HOTBAR_ITEMS[selSlot];
   if(typeof it==="string"){          // 手持物品而非方块
@@ -5890,7 +6037,9 @@ function updateParticles(dt){
     const p=particles[i];
     p.life-=dt;
     if(p.life<=0){ particles.splice(i,1); continue; }
-    p.vy-=18*dt;
+    if(p.firefly){ p.vx+=(Math.random()-.5)*dt*2; p.vz+=(Math.random()-.5)*dt*2; p.vy=(p.vy+(Math.random()-.5)*dt*1.5)*0.98; p.l=Math.sin((p.life*5.3+p.x)*2)>-0.2?2.4:0.9; }   // 萤火虫: 无重力乱飘, 一闪一闪
+    else if(p.smoke){ p.vy*=0.995; p.vx+=dt*0.08; p.size+=dt*0.07; }                    // 炊烟: 缓升、顺风、渐散
+    else p.vy-=18*dt;
     p.x+=p.vx*dt; p.z+=p.vz*dt;
     const ny=p.y+p.vy*dt;
     if(SOLID(getBlock(Math.floor(p.x),Math.floor(ny),Math.floor(p.z)))){ p.vy=0; p.vx*=0.7; p.vz*=0.7; }
@@ -10107,6 +10256,7 @@ function frame(now){
     tickPotions(dt);                              // 第五轮·云端
     tickFishing(dt);                              // 第五轮·云端
     tickCamel(dt);                                // 第五轮·云端
+    tickAmbient(dt);                              // 第六轮·云端: 萤火虫/炊烟/跃鱼
     tickTitle();
     arrowCd=Math.max(0,arrowCd-dt);
     gunCd=Math.max(0,gunCd-dt);
@@ -10182,6 +10332,7 @@ function collectSave(){
     ench:Object.assign({},enchState),            // 第五轮·本地: 附魔词条(老存档无此字段 → 全 0)
     potions:Object.assign({},potions),           // 第五轮·云端: 药水库存(老存档无此字段 → 全 0; 生效中的效果不存档)
     fish:{ n:fishState.fish, caught:fishState.caught },   // 第五轮·云端: 钓鱼(老存档无此字段 → 0)
+    chests:JSON.parse(JSON.stringify(chests)), bundle:{ owned:bundleState.owned, items:Object.assign({},bundleState.items) },   // 第六轮·云端: 储物箱/收纳袋(老存档无 → 空)
     questIdx, questId:(QUESTS[questIdx]||{}).id||null,
     questProg:+questProg.toFixed(1), questDone,
     bounty:{ idx:bountyIdx, prog:bountyProg, done:bountyDone },
@@ -10272,6 +10423,10 @@ function loadGame(){
   for(const D of ENCH_DEFS) enchState[D.k]=Math.max(0,Math.min(D.max,(s.ench&&s.ench[D.k])|0));
   for(const P of POTIONS){ potions[P.k]=Math.max(0,(s.potions&&s.potions[P.k])|0); if(P.k in potionFx) potionFx[P.k]=0; }   // 第五轮·云端: 老存档无 potions → 全 0
   fishState.on=false; fishState.fish=Math.max(0,(s.fish&&s.fish.n)|0); fishState.caught=Math.max(0,(s.fish&&s.fish.caught)|0);   // 第五轮·云端
+  for(const k in chests) delete chests[k];                                                              // 第六轮·云端: 储物箱/收纳袋
+  if(s.chests && typeof s.chests==="object") for(const k in s.chests){ const st=s.chests[k], o={}; if(st&&typeof st==="object") for(const id in st){ const n=st[id]|0; if(n>0 && BLOCKS[id]) o[id]=n; } chests[k]=o; }
+  bundleState.owned=!!(s.bundle&&s.bundle.owned); bundleState.items={};
+  if(s.bundle && s.bundle.items) for(const id in s.bundle.items){ const n=s.bundle.items[id]|0; if(n>0 && BLOCKS[id]) bundleState.items[id]=n; }
   bag.clear(); if(s.bag) for(const k in s.bag) bag.set(+k, s.bag[k]);
   // 优先用 id 定位关卡(抗关卡表变动), 没有 id 的老存档才退回下标
   const qById = s.questId ? QUESTS.findIndex(q=>q.id===s.questId) : -1;
@@ -11438,6 +11593,8 @@ window.__game = {
   drinkPotion:(k)=>drinkPotion(k), brewPotion:(k)=>brewPotion(k),
   get fishing(){ return Object.assign({},fishState); }, fishKey:()=>fishKey(),
   get camel(){ return Object.assign({},camelState); }, feedCamel:(m)=>feedCamel(m), camelDash:()=>camelDash(),
+  get storage(){ return { chests:JSON.parse(JSON.stringify(chests)), bundle:JSON.parse(JSON.stringify(bundleState)) }; }, openChest:(x,y,z)=>openChest(x,y,z),   // 第六轮·云端
+  get ambient(){ return Object.assign({},ambientState); },
   grantTrophy:(t)=>grantTrophy(t),
   claimLandmark(type,sx,sz){ const key=type+":"+(sx|0)+":"+(sz|0); landSeen.add(key); return [...landSeen]; },
   getBlock, setBlock, groundY, heightAt, biomeAt,
@@ -12632,6 +12789,32 @@ function selftest(){
         riding=rideC; mobs.length=n0; Object.assign(camelState,cS); bag.clear(); for(const [k,v] of bagC) bag.set(k,v); particles.length=0;
         ok("骆驼驯服: 没仙人掌拒绝, 喂食最多 4 口必驯服并变坐骑, 骑乘空格冲刺(加速+弧线跳跃+冷却)",
            noFood && tamed && dashOk && MOB_DEFS.camel.mount!==true, "noFood="+noFood+" tamed="+tamed+" dash="+d1+"/"+d2+" hop="+hopMid.toFixed(2));
+      }
+      // 储物箱/收纳袋(第六轮·云端): 方块已注册 / 存取搬运 / 容量上限 / 拆箱倒回背包 / 收纳袋解锁 / 存档往返
+      {
+        const bagS=new Map(bag), chS=JSON.stringify(chests), bdS=JSON.stringify(bundleState), open0=chestOpen;
+        for(const k in chests) delete chests[k]; bundleState.owned=false; bundleState.items={};
+        const reg=BLOCKS[CHEST] && BLOCKS[CHEST].t===290 && BLOCKS[CHEST].s===291 && RECIPES.some(r=>/储物箱/.test(r.name)) && RECIPES.some(r=>/收纳袋/.test(r.name));
+        bag.set(SAND,30); bag.set(STONE,5);
+        const k="9001,40,9001"; chests[k]={}; chestOpen={key:k, store:chests[k], title:"t", cap:2};
+        const m1=storeMove(SAND,true,0), m2=storeMove(STONE,true,1);
+        bag.set(DIRT,3); const full=storeMove(DIRT,true,0)===0;        // 2 种已满
+        const back=storeMove(SAND,false,10);
+        const moveOk=m1===30 && m2===1 && full && back===10 && chests[k][SAND]===20 && bagCount(SAND)===10 && bagCount(STONE)===4;
+        const spilled=(chestOpen=null, chestSpill(9001,40,9001));
+        const spillOk=spilled===21 && !chests[k] && bagCount(SAND)===30;
+        bundleState.owned=true; bundleState.items[GOLD_ORE]=3; chests["1,2,3"]={[SAND]:5};
+        const sv=collectSave(); const saved=sv.chests && sv.chests["1,2,3"] && sv.chests["1,2,3"][SAND]===5 && sv.bundle.owned && sv.bundle.items[GOLD_ORE]===3;
+        for(const kk in chests) delete chests[kk]; Object.assign(chests,JSON.parse(chS)); Object.assign(bundleState,JSON.parse(bdS)); chestOpen=open0;
+        bag.clear(); for(const [a,b] of bagS) bag.set(a,b);
+        ok("储物箱/收纳袋: 方块与配方已注册, 背包⇄箱子搬运(Shift 搬 1), 种类上限, 拆箱物品倒回背包, 进存档",
+           reg && moveOk && spillOk && saved, "reg="+reg+" move="+moveOk+" spill="+spilled+" saved="+saved);
+        // 氛围: 萤火虫只在黄昏/夜里, 村落烟囱坐标落在村子范围内
+        let vs=null; for(let sx=-40;sx<=40&&!vs;sx++) for(let sz=-40;sz<=40&&!vs;sz++){ const st=structureAt(sx,sz); if(st&&st.type==="village") vs=st; }
+        const ch=vs?villageChimneys(vs):[];
+        ok("氛围小生物: 萤火虫正午为 0、深夜为 1; 村落烟囱坐标都在村内且高于地面",
+           fireflyAmount(1)===0 && fireflyAmount(-0.1)===1 && fireflyAmount(0.1)>0 && (!vs || (ch.length>0 && ch.every(([x,y,z])=>Math.hypot(x-vs.x,z-vs.z)<VIL_N && y>vs.h+6))),
+           "chim="+ch.length);
       }
       ok("材质: 逐块旋转——松沙陷坑与沙子同模式(伪装不露馅), 沙纹只转180°, 草地四向", UV_ROT[LOOSESAND*2]===UV_ROT[SAND*2] && UV_ROT[LOOSESAND*2+1]===UV_ROT[SAND*2+1] && UV_ROT[SAND*2]===1 && UV_ROT[GRASS*2]===2,
          "sand="+UV_ROT[SAND*2]+" loose="+UV_ROT[LOOSESAND*2]);
