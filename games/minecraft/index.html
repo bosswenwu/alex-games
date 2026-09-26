@@ -432,6 +432,8 @@ const FURNACE=81, FURNACE_LIT=82;              // 第七轮·云端: 砂岩熔�
 // 地下密室(第六轮·本地, 图集 280-282): 卡之石——守墓石像的魂核, 打碎它, 与之相连的石像一起崩碎
 const KAHEART=74;
 const OSIRIS=75;
+const VAULT=121, VAULT_OPEN=122, OMEN_VAULT=123, OMEN_VAULT_OPEN=124;   // 试炼宝库/不祥宝库(第九轮·本地, 图集 301-305): 用试炼钥匙/不祥钥匙开一次
+const GEYSER=120;                             // 地热喷口(第九轮·本地, 图集 300): 黑沙火山/盐湖里周期喷发, 把人和怪顶上天
 const SLAB_SST=90, STAIR_N=91, STAIR_E=92, STAIR_S=93, STAIR_W=94, LAMPPOST=95, IRONPOST=96;
 // 更多材质(第七轮③·本地): 每种 = 半砖 + 四向楼梯[N,E,S,W]
 const SLAB_MARBLE=100, STAIR_MARBLE=[101,102,103,104], SLAB_PLANK=105, STAIR_PLANK=[106,107,108,109], SLAB_CLAY=110, STAIR_CLAY=[111,112,113,114];   // 第七轮·本地: 方块形状系统(见 SHAPES)                              // 奥西里斯宝匣(第六轮·本地, 图集 283/284): 试炼厅三波清完自动开启
@@ -514,6 +516,11 @@ const BLOCKS = {
   [FURNACE_LIT]:{name:"砂岩熔炉(燃烧中)", t:292,b:71, s:294},   // 第七轮·云端: 烧火时自动换成这块(自发光), 熄火换回
   [KAHEART]:{name:"卡之石",    t:282,b:282,s:282},   // 石像回廊尽头的魂核(自发光), 挖碎 → 连接的守墓石像全部崩碎
   [OSIRIS]: {name:"奥西里斯宝匣", t:284,b:71, s:283}, // 试炼完成前挖不开
+  [GEYSER]: {name:"地热喷口",   t:300,b:254,s:255},
+  [VAULT]:  {name:"试炼宝库",   t:302,b:71, s:301},   // 右键用试炼钥匙开启
+  [VAULT_OPEN]:{name:"试炼宝库(已开)", t:302,b:71, s:303},
+  [OMEN_VAULT]:{name:"不祥宝库", t:302,b:71, s:304},  // 右键用不祥钥匙开启
+  [OMEN_VAULT_OPEN]:{name:"不祥宝库(已开)", t:302,b:71, s:305},   // 顶面发光裂口, 侧面玄武岩; 挖下只得玄武岩
   // 第七轮·本地: 方块形状系统(非整格, 形状见 SHAPES)
   [SLAB_SST]:{name:"砂岩半砖", t:71, b:71, s:71},
   [STAIR_N]: {name:"砂岩楼梯", t:71, b:71, s:71},
@@ -952,6 +959,7 @@ function genChunk(cx, cz){
     const th=4+((hash2(tx,tz)*3)|0), lr=hash2(tx*5-1,tz*3+2);
     drawPalm(put,tx,h,tz,th, lr<0.25?1:(lr<0.5?-1:0), lr>=0.5&&lr<0.75?1:(lr>=0.75?-1:0));   // 随机朝一侧歪
   }
+  placeGeysers(cx,cz,put);                              // 第九轮·本地: 地热喷口(先放, 大型建筑随后清场时会盖掉)
   buildSkyIslands(bx,bz,put);
   buildStructures(bx,bz,put);
   return b;
@@ -1236,6 +1244,8 @@ function drawStructure(s,put){
       for(let X=T.x0+2;X<=T.x1-2;X+=5){ put(X,T.fy+3,T.z0,LANTERN,true); put(X,T.fy+3,T.z1,LANTERN,true); }
       for(let Y=T.fy+1;Y<=T.fy+5;Y++) for(let Z=T.z0-1;Z<=T.z1+1;Z++) put(T.x0-1,Y,Z,HIERO,true);   // 共用墙: 两面都是经文(外壳会盖成素砂岩)
       put(T.chest[0],T.chest[1],T.chest[2],OSIRIS,true);
+      for(const [vx,vz] of T.vaults) put(vx,T.fy+1,vz,VAULT,true);               // 第九轮·本地: 北墙下两座试炼宝库
+      put(T.omen[0],T.fy+1,T.omen[1],OMEN_VAULT,true);                          // 南侧一座不祥宝库
       put(T.door[0],T.fy+1,T.door[1],AIR,true); put(T.door[0],T.fy+2,T.door[1],AIR,true); put(T.door[0],T.fy+3,T.door[1],GILDED,true);   // 回廊东墙开门
     }
     // --- 上层藏宝室(需要挖进去) ---
@@ -4025,6 +4035,28 @@ const ANIMAL_VARIANT_TILES=[295,296,297,298,299,300,301];
     return txMul([226,180,64],0.9+txFbm(x,y,4,4,2,2841)*0.2);
   });
 }
+txPut(300,(x,y)=>{                                                        // 地热喷口顶(第九轮·本地): 玄武岩底 + 中央发光裂口 + 白色硫华结壳
+  const cx=x-14.5, cy=y-14.5, r=Math.hypot(cx,cy), a=Math.atan2(cy,cx);
+  if(r<3.2) return txMix([255,214,120],[255,120,40],r/3.2);               // 喷口(灼热)
+  const crack=r<11 && Math.abs(Math.sin(a*3+r*0.35))<0.12;
+  if(crack) return txMix([255,150,60],[120,40,20],(r-3)/8);                // 放射裂纹
+  if(r<5.5) return txMix([226,222,196],[168,160,130],(r-3.2)/2.3);        // 硫华结壳
+  return txLerp(txPal("#1a1a1f #26262d #34343c"),txFbm(x,y,4,4,2,3001)*0.9+(txH(x,y,3002)-0.5)*0.1);
+});
+{ // 宝库(第九轮·本地): 301 试炼宝库侧(砂岩框 + 金色锁孔 + 发光钥匙槽) · 302 顶 · 303 已开(灰暗) · 304 不祥宝库侧(黑曜 + 绯红锁孔) · 305 不祥已开
+  const vault=(frame,body,glow,dim)=>(x,y)=>{
+    const e=Math.min(x,y,29-x,29-y), cx=x-14.5, cy=y-13.5;
+    if(e<3) return txMul(txLerp(frame,txFbm(x,y,3,3,2,3011)),e===0?0.7:1);
+    const hole=Math.hypot(cx,cy)<3.2 || (Math.abs(cx)<1.3 && cy>0 && cy<8);
+    if(hole) return dim?txMul(glow,0.35):txMix(glow,[255,255,230],Math.max(0,1-Math.hypot(cx,cy)/3));
+    if(e===3||e===4) return txMul(glow,dim?0.35:0.8);                    // 内圈发光饰线
+    return txMul(txLerp(body,txFbm(x,y,4,4,2,3012)*0.9),dim?0.62:1);
+  };
+  const SF=txPal("#8f7757 #b8a07a #dccaa8"), SB=txPal("#3a2f22 #4a3c2b #5a4a36"), OF=txPal("#141019 #221a2a #2e2438"), OB=txPal("#1c1622 #281e30 #33283c");
+  txPut(301,vault(SF,SB,[240,200,90],false)); txPut(303,vault(SF,SB,[240,200,90],true));
+  txPut(304,vault(OF,OB,[230,60,70],false));  txPut(305,vault(OF,OB,[230,60,70],true));
+  txPut(302,(x,y)=>{ const e=Math.min(x,y,29-x,29-y); return e<2?[120,100,70]:txMul(txLerp(SF,txFbm(x,y,3,3,2,3021)),(x+y)%6===0?0.85:1); });
+}
 let ATLAS_MIPS=0;                                                         // 手工 mip 级数(自测用: 512×1024 → 1×1 共 10 级)
 const atlasTex = gl.createTexture();
 gl.bindTexture(gl.TEXTURE_2D, atlasTex);
@@ -4125,9 +4157,12 @@ function cellSky(bx,bz,x,y,z){
 const EMIT_LV=new Uint8Array(256);                    // 光源等级
 EMIT_LV[LANTERN]=14; EMIT_LV[LAVA]=13; EMIT_LV[MAGMA]=11; EMIT_LV[NEON]=11; EMIT_LV[WINDOW]=11;
 EMIT_LV[CRYSTAL]=9; EMIT_LV[GLOWVEIN]=9; EMIT_LV[SALTCRYSTAL]=9; EMIT_LV[AMETHYST]=9;
-EMIT_LV[KAHEART]=10; EMIT_LV[LAMPPOST]=13; EMIT_LV[FURNACE_LIT]=12;                                  // 第六轮·本地: 卡之石
+EMIT_LV[KAHEART]=10; EMIT_LV[GEYSER]=7; EMIT_LV[VAULT]=8; EMIT_LV[OMEN_VAULT]=8; EMIT_LV[LAMPPOST]=13; EMIT_LV[FURNACE_LIT]=12;                                  // 第六轮·本地: 卡之石
 const BL_OPQ=new Uint8Array(256);                     // 挡光(= OPAQUE)
 for(let i=0;i<256;i++) BL_OPQ[i]=OPAQUE(i)?1:0;
+// 建网格热路径用的查表(第九轮·本地性能): 每顶点 AO 要判 3 次 OCCLUDE(层层调 SOLID/PLANT/查形状表), 换成一次下标
+const OCC_T=new Uint8Array(256), SKY_T=new Uint8Array(256), EMI_T=new Uint8Array(256);
+for(let i=0;i<256;i++){ OCC_T[i]=OCCLUDE(i)?1:0; SKY_T[i]=SKY_OCC(i)?1:0; EMI_T[i]=EMISSIVE(i)?1:0; }
 const BL_R=13;                                        // 最远传播格数(14 级光源 13 格外还剩 1 级)
 const BL_W=CS+2+2*BL_R+2;                             // 区域边长(含外圈墙) = 46
 const _blL=new Uint8Array(BL_W*BL_W*(H+2)), _blO=new Uint8Array(BL_W*BL_W*(H+2));
@@ -4272,9 +4307,37 @@ function swayClass(id, topVert){
 }
 // 水面角点深度: 共享该角点的 4 列水深取平均(非水列记 0), 再减去水面下沉的 0.14 → 岸边角点趋近 0, 供泡沫/深浅色
 const waterCornerDepth=(a,b,c,d)=>Math.max(0,(a+b+c+d)/4-0.14);
+const _pad=new Uint8Array((CS+2)*(CS+2)*H);           // buildChunkMesh 的本地取块数组(本区块 + 外扩一圈)
+/* 建网格的顶点/索引缓冲(第九轮·本地性能): 预分配、每次复用的定长类型数组, 满了翻倍; 上传时直接截取一段交给 GL。
+   原先 push 进普通数组(每块约 4 万个数)再整体 new Float32Array/Uint32Array, 既慢又制造大量垃圾。
+   push 参数个数固定(顶点 7 个、索引 6 个), 调用处不用改。 */
+class MeshVBuf{ constructor(n){ this.a=new Float32Array(n); this.n=0; } reset(){ this.n=0; return this; }
+  grow(){ const b=new Float32Array(this.a.length*2); b.set(this.a); this.a=b; }
+  push(a,b,c,d,e,f,g){ if(this.n+7>this.a.length) this.grow(); const A=this.a, n=this.n; A[n]=a; A[n+1]=b; A[n+2]=c; A[n+3]=d; A[n+4]=e; A[n+5]=f; A[n+6]=g; this.n=n+7; }
+  view(){ return this.a.subarray(0,this.n); } }
+class MeshIBuf{ constructor(n){ this.a=new Uint32Array(n); this.n=0; } reset(){ this.n=0; return this; }
+  grow(){ const b=new Uint32Array(this.a.length*2); b.set(this.a); this.a=b; }
+  push(a,b,c,d,e,f){ if(this.n+6>this.a.length) this.grow(); const A=this.a, n=this.n; A[n]=a; A[n+1]=b; A[n+2]=c; A[n+3]=d; A[n+4]=e; A[n+5]=f; this.n=n+6; }
+  view(){ return this.a.subarray(0,this.n); } }
+const _mB={oV:new MeshVBuf(1<<16), oI:new MeshIBuf(1<<15), wV:new MeshVBuf(1<<13), wI:new MeshIBuf(1<<12), pV:new MeshVBuf(1<<13), pI:new MeshIBuf(1<<12)};
+let _meshPad=true, _meshCapture=null;
 function buildChunkMesh(c){
   const bx=c.cx*CS, bz=c.cz*CS;
-  // gb() 缓存"上次访问的区块", 连"不存在"(null)也会缓存; 邻区块之后才生成时缓存仍是 null →
+  // 取块走本地连续数组(第九轮·本地性能): 本区块 + 外扩一圈共 18×18 列按列整段拷进 _pad, 之后每次取块只是一次下标运算。
+  // 原先每格都调 gb(): 算所在区块、拼 "cx,cz" 字符串查 Map; AO 取样在区块边上两块之间来回跳, 缓存反复失效(每区块约 7 万次)。
+  // 网格只会查 [-1, CS] 范围内的列(面前方格 ±1), 数组足够; 缺失的邻区块与 gb() 一样当空气。_meshPad=false 可切回 gb()(自测对照用)。
+  let G=gb;
+  if(_meshPad){
+    _pad.fill(0);
+    for(let px=-1;px<=CS;px++) for(let pz=-1;pz<=CS;pz++){
+      const wx=bx+px, wz=bz+pz, nc=(px>=0&&px<CS&&pz>=0&&pz<CS)?c:world.get(key(wx>>4,wz>>4));
+      if(!nc) continue;
+      const src=((wx&15)*CS+(wz&15))*H;
+      _pad.set(nc.blocks.subarray(src,src+H), ((px+1)*(CS+2)+(pz+1))*H);
+    }
+    G=(x,y,z)=>(y<0||y>=H)?AIR:_pad[((x-bx+1)*(CS+2)+(z-bz+1))*H+y];
+  }
+  // G() 缓存"上次访问的区块", 连"不存在"(null)也会缓存; 邻区块之后才生成时缓存仍是 null →
   // 区块边界上会冒出朝向"空气"的多余面(水里表现为一道道亮线)。每次建网格前先让缓存失效。
   _gcx=1e9;
   // 水深缓存: 某格往下连续的水格数(最多 8), 非水 = 0; 键用区块局部坐标(含外扩 1 格)
@@ -4282,17 +4345,17 @@ function buildChunkMesh(c){
   const wcol=(x,y,z)=>{
     const k=((x-bx+1)*(CS+2)+(z-bz+1))*H+y;
     let v=_wd.get(k); if(v!==undefined) return v;
-    v=0; for(let yy=y; yy>=0 && yy>y-8 && gb(x,yy,z)===WATER; yy--) v++;
+    v=0; for(let yy=y; yy>=0 && yy>y-8 && G(x,yy,z)===WATER; yy--) v++;
     _wd.set(k,v); return v;
   };
-  const oV=[], oI=[], wV=[], wI=[], pV=[], pI=[];   // p*: 十字植物单独成层, 在 disable(CULL_FACE) 后绘制
+  const oV=_mB.oV.reset(), oI=_mB.oI.reset(), wV=_mB.wV.reset(), wI=_mB.wI.reset(), pV=_mB.pV.reset(), pI=_mB.pI.reset();   // p*: 十字植物单独成层, 在 disable(CULL_FACE) 后绘制
   let oN=0, wN=0, pN=0;
   const ao=[0,0,0,0];
   // 顶点格式: x,y,z, u,v, aL(AO 或自发光强度; 水层=水深), aF(面朝向 + 8*天光0..15 + 128*高位类别), 见 mainProg 注释
   for(let ix=-1; ix<=CS; ix++) for(let iz=-1; iz<=CS; iz++){
     let y=H-1;
-    if(ix>=0 && ix<CS && iz>=0 && iz<CS){ const col=(ix*CS+iz)*H; while(y>=0 && !SKY_OCC(c.blocks[col+y])) y--; }
-    else { const wx=bx+ix, wz=bz+iz; while(y>=0 && !SKY_OCC(gb(wx,y,wz))) y--; }
+    if(ix>=0 && ix<CS && iz>=0 && iz<CS){ const col=(ix*CS+iz)*H; while(y>=0 && !SKY_T[c.blocks[col+y]]) y--; }
+    else { const wx=bx+ix, wz=bz+iz; while(y>=0 && !SKY_T[G(wx,y,wz)]) y--; }
     _hm[(ix+1)*(CS+2)+(iz+1)]=y;
   }
   const blOn=blBuild(bx,bz);                        // 方块光场(区域内没有光源/照不到本区块 → false, 下面全部跳过)
@@ -4325,7 +4388,7 @@ function buildChunkMesh(c){
       }
       if(SHAPES[id]){                                   // 方块形状系统: 逐盒出面, 只剔除贴在整格边界且邻格不透明的面; 无 AO
         const sky0=cellSky(bx,bz,wx,y,wz), bl0=(blOn&&y>=blLo&&y<=blHi)?blAt(wx,y,wz):0;
-        for(const Q of shapeQuads(id, f=>{ const d=FACES[f].d, n=gb(wx+d[0],y+d[1],wz+d[2]); return n!==AIR && OPAQUE(n); })){
+        for(const Q of shapeQuads(id, f=>{ const d=FACES[f].d, n=G(wx+d[0],y+d[1],wz+d[2]); return n!==AIR && BL_OPQ[n]; })){
           const d=FACES[Q.f].d, u0=(Q.tile%16)*TS, v0=Math.floor(Q.tile/16)*TV;
           let sky=sky0, bl=bl0;
           if(Q.edge){ sky=cellSky(bx,bz,wx+d[0],y+d[1],wz+d[2]); if(blOn&&y+d[1]>=blLo&&y+d[1]<=blHi) bl=blAt(wx+d[0],y+d[1],wz+d[2]); }
@@ -4339,13 +4402,13 @@ function buildChunkMesh(c){
         }
         continue;
       }
-      const wTop = isW && gb(wx,y+1,wz)!==WATER;
+      const wTop = isW && G(wx,y+1,wz)!==WATER;
       // 高位附加码: 树叶 = 风摆类别 2; 水 = 水色类别(1 = 沼泽)
       const hiF = isW ? (biomeAt(wx,wz)===BIO_SWAMP ? 128 : 0) : 128*swayClass(id,false);
       for(let f=0; f<6; f++){
         const F=FACES[f], d=F.d;
-        const nid=gb(wx+d[0], y+d[1], wz+d[2]);
-        if(nid!==AIR && OPAQUE(nid)) continue;
+        const nid=G(wx+d[0], y+d[1], wz+d[2]);
+        if(nid!==AIR && BL_OPQ[nid]) continue;
         if(nid===id && id!==LEAVES && id!==PALM_LEAF) continue;
         // 岩层按世界 y 取片, 再按列加 0~2 格的噪声偏移(恶地式): 条纹沿崖壁起伏, 不是一圈圈死板的环
         const bandOff=(f!==2 && f!==3 && (id===CLAY||id===WINDROCK)) ? Math.min(2,Math.max(0,Math.floor(fbm2(wx*0.021+313.3, wz*0.021-71.9, 2)*3))) : 0;
@@ -4367,7 +4430,7 @@ function buildChunkMesh(c){
           if(rot===1){ const t=ta; ta=tb; tb=1-t; } else if(rot===2){ ta=1-ta; tb=1-tb; } else if(rot===3){ const t=ta; ta=1-tb; tb=t; }
           _uvA[k]=ta; _uvB[k]=tb;
         }
-        const skyB = (f===3 && !isW && !EMISSIVE(id)) ? openBelowSky(wx,y-1,wz) : 0;   // 底面: 下方空旷 → 地面反光
+        const skyB = (f===3 && !isW && !EMI_T[id]) ? openBelowSky(wx,y-1,wz) : 0;   // 底面: 下方空旷 → 地面反光
         for(let k=0;k<4;k++){
           const i=CORNERS[k][0], j=CORNERS[k][1];
           let px = (d[0]===1?1:0) + i*F.u[0] + j*F.v[0];
@@ -4376,14 +4439,14 @@ function buildChunkMesh(c){
           if(wTop && py===1) py=0.86;
           let light=1, sky, vhi=hiF, bl=0;
           const fx=wx+d[0], fy=y+d[1], fz=wz+d[2];   // 面前方那一格
-          if(EMISSIVE(id)){ light=2.2; ao[k]=3; sky=1; }  // 灯笼自发光, 夜里也亮
+          if(EMI_T[id]){ light=2.2; ao[k]=3; sky=1; }  // 灯笼自发光, 夜里也亮
           else if(!isW){
             const si=i?1:-1, sj=j?1:-1;
             const s1x=wx+d[0]+si*F.u[0], s1y=y+d[1]+si*F.u[1], s1z=wz+d[2]+si*F.u[2];
             const s2x=wx+d[0]+sj*F.v[0], s2y=y+d[1]+sj*F.v[1], s2z=wz+d[2]+sj*F.v[2];
-            const o1=OCCLUDE(gb(s1x,s1y,s1z))?1:0;
-            const o2=OCCLUDE(gb(s2x,s2y,s2z))?1:0;
-            const oc=OCCLUDE(gb(s1x+sj*F.v[0], s1y+sj*F.v[1], s1z+sj*F.v[2]))?1:0;
+            const o1=OCC_T[G(s1x,s1y,s1z)];
+            const o2=OCC_T[G(s2x,s2y,s2z)];
+            const oc=OCC_T[G(s1x+sj*F.v[0], s1y+sj*F.v[1], s1z+sj*F.v[2])];
             const a=(o1&&o2)?0:3-(o1+o2+oc);
             ao[k]=a; light*=AOL[a];
             // 天光: 与 AO 同一组邻格取平均(被实心块占据的格不计), 相邻顶点间自然渐变
@@ -4407,8 +4470,8 @@ function buildChunkMesh(c){
               const ax=fx+si*F.u[0], ay=fy+si*F.u[1], az=fz+si*F.u[2];
               const cx2=fx+sj*F.v[0], cy2=fy+sj*F.v[1], cz2=fz+sj*F.v[2];
               let bs=blAt(fx,fy,fz), bn=1;
-              if(!BL_OPQ[gb(ax,ay,az)]){ bs+=blAt(ax,ay,az); bn++; }
-              if(!BL_OPQ[gb(cx2,cy2,cz2)]){ bs+=blAt(cx2,cy2,cz2); bn++; }
+              if(!BL_OPQ[G(ax,ay,az)]){ bs+=blAt(ax,ay,az); bn++; }
+              if(!BL_OPQ[G(cx2,cy2,cz2)]){ bs+=blAt(cx2,cy2,cz2); bn++; }
               bl=Math.round(bs/bn);
             }
             // 水: aL 改存水深。顶面按角点取 4 列平均(岸边→0); 其余面取本格水深
@@ -4437,14 +4500,15 @@ function buildChunkMesh(c){
   // 上传 GPU
   if(c.mesh) destroyMesh(c.mesh);
   const up=(verts,inds)=>{
-    if(!inds.length) return null;
+    if(!inds.n) return null;
     const vbo=gl.createBuffer(), ibo=gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER,vbo);
-    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(verts),gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER,verts.view(),gl.STATIC_DRAW);      // GL 会拷贝, 缓冲随后即可复用
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ibo);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint32Array(inds),gl.STATIC_DRAW);
-    return {vbo,ibo,n:inds.length};
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,inds.view(),gl.STATIC_DRAW);
+    return {vbo,ibo,n:inds.n};
   };
+  if(_meshCapture) _meshCapture.push({cx:c.cx,cz:c.cz,oV:oV.view().slice(),oI:oI.view().slice(),wV:wV.view().slice(),wI:wI.view().slice(),pV:pV.view().slice(),pI:pI.view().slice()});   // 自测: 抓顶点/索引副本做逐元素对照
   c.mesh={opaque:up(oV,oI), water:up(wV,wI), plant:up(pV,pI)};
   blStoreChunk(c,bx,bz); c.blOn=blOn; blF.on=false;
   // 阴影范围内的区块变了(挖/放方块、新加载) → 下一帧重画阴影贴图
@@ -4939,7 +5003,8 @@ function renderCraft(){
   const g=document.getElementById("bagGrid"); if(!g) return;
   const items=[...bag.entries()].filter(([id,n])=>n>0 && BLOCKS[id]);
   items.sort((a,b)=>b[1]-a[1]);
-  const coreCell='<div class="bagCell" style="color:#ffd27a">⚡ 能量核心 <b>x'+cores+'</b></div>';
+  const coreCell='<div class="bagCell" style="color:#ffd27a">⚡ 能量核心 <b>x'+cores+'</b></div>'
+    +((vaultKeys.trial||vaultKeys.omen)?'<div class="bagCell" style="color:#f0d38a">🗝 试炼钥匙 <b>x'+vaultKeys.trial+'</b> · 不祥钥匙 <b>x'+vaultKeys.omen+'</b></div>':'');
   const bundleBtn=(typeof bundleState!=="undefined" && bundleState.owned)?'<div class="bagCell" id="openBundleBtn" style="cursor:pointer;color:#e8bb6a">👜 打开收纳袋 ('+storeTypes(bundleState.items)+'/'+BUNDLE_SLOTS+')</div>':'';   // 第六轮·云端
   g.innerHTML = coreCell + bundleBtn + (items.length
     ? items.map(([id,n])=>'<div class="bagCell">'+BLOCKS[id].name+' <b>x'+n+'</b></div>').join("")
@@ -6295,7 +6360,7 @@ newworldbtn.addEventListener("click",()=>{
   for(const [,c] of world) if(c.mesh) destroyMesh(c.mesh);
   world.clear(); meshQueue.length=0; queued.clear();
   mobs.length=0; arrows.length=0; drops.length=0; particles.length=0;
-  hp=maxHp=20; lvl=1; xp=0; armor=0; cores=0; kills=0; dayCount=1; dmgMul=1; dead=false; setSunblade(false); setMace(false); for(const k in enchState) enchState[k]=0;
+  hp=maxHp=20; lvl=1; xp=0; armor=0; cores=0; kills=0; dayCount=1; dmgMul=1; dead=false; setSunblade(false); setMace(false); for(const k in enchState) enchState[k]=0; vaultKeys.trial=0; vaultKeys.omen=0; vaultKeys.omenDay={};
   for(const k in potions) potions[k]=0; for(const k in potionFx) potionFx[k]=0;   // 第五轮·云端
   fishState.on=false; fishState.fish=0; fishState.caught=0;
   for(const k in chests) delete chests[k]; bundleState.owned=false; bundleState.items={};   // 第六轮·云端
@@ -6413,6 +6478,8 @@ function doBreak(){
   if(!hit || hit.id===BEDROCK) return;
   if(hit.id===TNT){ igniteTNT(hit.x,hit.y,hit.z); showName("嘶嘶嘶……快跑！"); return; }
   if(hit.id===SUSGRAVEL){ brushPoke(hit); return; }
+  if(hit.id===VAULT||hit.id===OMEN_VAULT||hit.id===VAULT_OPEN||hit.id===OMEN_VAULT_OPEN){ showName("🗝 宝库挖不动——对它按右键，用钥匙开启"); return; }   // 第九轮·本地
+  if(hit.id===GEYSER){ spawnParticles(hit.x,hit.y,hit.z,BASALT); setBlock(hit.x,hit.y,hit.z,AIR); sfxBreak(); bagAdd(BASALT,1); showName("♨ 喷口被凿开，只剩一块玄武岩"); return; }   // 第九轮·本地
   if(hit.id===OSIRIS){ showName("🔒 奥西里斯宝匣被封印——在试炼厅撑过三波试炼，宝匣自会开启"); return; }   // 第六轮·本地   // 考古刷点: 按住慢慢刷(见 updateBrush), 不再一镐刨开
   const brokeId=hit.id;
   spawnParticles(hit.x,hit.y,hit.z,hit.id);
@@ -6468,7 +6535,8 @@ function awakenPharaoh(bx,by,bz){
 }
 function doPlace(){
   { const h0=raycast(5.5, currentAim()); if(h0 && h0.id===CHEST){ openChest(h0.x,h0.y,h0.z); return; }   // 第六轮·云端: 右键储物箱 → 打开
-    if(h0 && (h0.id===FURNACE||h0.id===FURNACE_LIT)){ openFurnace(h0.x,h0.y,h0.z); return; } }   // 第七轮·云端: 右键熔炉 → 打开
+    if(h0 && (h0.id===FURNACE||h0.id===FURNACE_LIT)){ openFurnace(h0.x,h0.y,h0.z); return; }    // 第七轮·云端: 右键熔炉 → 打开
+    if(h0 && (h0.id===VAULT||h0.id===OMEN_VAULT||h0.id===VAULT_OPEN||h0.id===OMEN_VAULT_OPEN)){ useVaultBlock(h0.x,h0.y,h0.z); return; } }   // 第九轮·本地: 右键宝库 → 用钥匙开启
   swingT=0.3; triggerViewSwing();
   const it=HOTBAR_ITEMS[selSlot];
   if(typeof it==="string"){          // 手持物品而非方块
@@ -8608,25 +8676,60 @@ function sfxStoneGrind(dist){                           // 石像挪动: 低沉�
 function trialHall(s){
   const x=s.x, z=s.z, h=s.h;
   return {x0:x-3, x1:x+9, z0:z-11, z1:z-4, fy:h-9, door:[x-4,z-7], chest:[x+3,h-8,z-11],
-          spawns:[[x-1,z-9],[x+7,z-9],[x-1,z-6],[x+7,z-6]], key:"T"+x+","+z};
+          spawns:[[x-1,z-9],[x+7,z-9],[x-1,z-6],[x+7,z-6]], key:"T"+x+","+z,
+          vaults:[[x-1,z-11],[x+7,z-11]], omen:[x+3,z-4]};
 }
 const TRIAL_WAVES=[["mummy","scarab","scarab","mummy"],["serqet","mummy","scarab","serqet"],["anubis","mummy","serqet"]];
-const trialState={active:false, key:null, wave:0, alive:[], nextT:0, done:0, T:null};
+const trialState={active:false, key:null, wave:0, alive:[], nextT:0, done:0, T:null, omen:false, keysGiven:0};
+/* ---- 🗝 试炼钥匙 · 试炼宝库 / 不祥宝库 (第九轮·本地, 对标 Minecraft Tricky Trials 的试炼钥匙与宝库) ----
+   试炼每清一波掉 1 把试炼钥匙(一轮 3 把)。首次通关(宝匣已开)后, 试炼厅变成「不祥试炼」, 每个游戏日可挑战一次:
+   怪物血量 ×1.5 且全是精英, 第三波两只阿努比斯守卫; 每清一波掉 1 把不祥钥匙。
+   厅内北墙两座试炼宝库、南侧一座不祥宝库, 右键用对应钥匙开启, 每座只开一次(变暗, 随 blockDiff 存档)。
+   不祥宝库更丰厚, 另有 35% 给武器随机升一级附魔(接附魔祭坛)。 */
+const TRIAL_WAVES_OMEN=[["mummy","serqet","serqet","mummy"],["anubis","serqet","mummy","scarab"],["anubis","anubis","serqet"]];
+const vaultKeys={trial:0, omen:0, omenDay:{}};         // 钥匙数 + 每座试炼厅最近一次不祥试炼通关的游戏日
+function giveTrialKey(omen){
+  if(omen) vaultKeys.omen++; else vaultKeys.trial++;
+  sfxPickup && sfxPickup();
+  showName(omen?"🗝 获得 不祥钥匙（现有 "+vaultKeys.omen+"）— 去开南侧的不祥宝库":"🗝 获得 试炼钥匙（现有 "+vaultKeys.trial+"）— 右键北墙下的试炼宝库");
+}
+function omenReady(T){ return vaultKeys.omenDay[T.key]!==dayCount; }
+function useVaultBlock(x,y,z){                           // 右键宝库: 有钥匙就开, 返回获得的战利品描述或 null
+  const id=getBlock(x,y,z), omen=id===OMEN_VAULT;
+  if(id===VAULT_OPEN||id===OMEN_VAULT_OPEN){ showName("🔓 这座宝库已经开过了"); return null; }
+  if(id!==VAULT && id!==OMEN_VAULT) return null;
+  if(omen ? vaultKeys.omen<1 : vaultKeys.trial<1){ showName(omen?"🔒 需要不祥钥匙——首通后每天可挑战一次不祥试炼":"🔒 需要试炼钥匙——在试炼厅每清一波掉一把"); return null; }
+  if(omen) vaultKeys.omen--; else vaultKeys.trial--;
+  setBlock(x,y,z, omen?OMEN_VAULT_OPEN:VAULT_OPEN);
+  const R=(a,b)=>a+Math.floor(Math.random()*(b-a+1)), got=[];
+  const gold=omen?R(6,10):R(3,6), gem=omen?R(3,5):R(1,2), rel=omen?5:2, core=omen?3:1;
+  giveBlock(GOLD_ORE,gold); giveBlock(GEM_ORE,gem); npcState.relics+=rel; cores+=core; addXP(omen?60:25);
+  got.push("金x"+gold,"钻x"+gem,"文物x"+rel,"⚡核心x"+core);
+  if(omen && Math.random()<0.35){
+    const open=ENCH_DEFS.filter(D=>enchState[D.k]<D.max);
+    if(open.length){ const D=open[Math.floor(Math.random()*open.length)]; enchState[D.k]++; got.push("✨"+D.n+" "+ROMAN[enchState[D.k]]); }
+  }
+  for(let i=0;i<36;i++) particles.push({x:x+0.5,y:y+0.9,z:z+0.5, vx:(Math.random()-.5)*4, vy:2+Math.random()*4, vz:(Math.random()-.5)*4,
+    life:.6+Math.random()*.4, size:.09, u:15*TS+Math.random()*TS*.6, v:Math.random()*TV*.6, l:2.4});
+  sfxLevel && sfxLevel();
+  showName((omen?"🩸 不祥宝库":"🗝 试炼宝库")+"开启：" + got.join(" "));
+  return got;
+}
 function inTrialHall(T,margin){ const m=margin||0;
   return player.x>=T.x0-m && player.x<=T.x1+1+m && player.z>=T.z0-m && player.z<=T.z1+1+m && player.y>=T.fy-m && player.y<=T.fy+5+m; }
-function spawnTrialMob(type,x,y,z){
-  const def=MOB_DEFS[type], hp=def.boss?def.hp:Math.max(1,Math.round(def.hp*foeHpMul()));
+function spawnTrialMob(type,x,y,z,omen){
+  const def=MOB_DEFS[type], hp=Math.round((def.boss?def.hp:Math.max(1,Math.round(def.hp*foeHpMul())))*(omen?1.5:1));
   const m={type, def, x:x+0.5, y, z:z+0.5, vx:0,vy:0,vz:0, kbx:0,kbz:0, yaw:Math.random()*6.283, tgtYaw:0, hp, maxHp:hp,
     hurtT:0, animT:0, t:0, atkCd:1, burnT:0, swingT:0, groanT:2, fleeT:0, onGround:false, pause:false, burning:false,
-    held:def.weapon?heldFor(def.weapon,def.handP):null, trial:true};
+    held:def.weapon?heldFor(def.weapon,def.handP):null, trial:true, elite:!!omen&&!def.boss};
   mobs.push(m);
   for(let i=0;i<14;i++) particles.push({x:x+0.5+(Math.random()-.5), y:y+Math.random()*1.5, z:z+0.5+(Math.random()-.5), vx:0, vy:1.5+Math.random()*2, vz:0,
     life:.5, size:.09, u:15*TS+Math.random()*TS*.6, v:Math.random()*TV*.6, l:2.2});
   return m;
 }
-function startTrial(T){
-  Object.assign(trialState,{active:true, key:T.key, wave:0, alive:[], nextT:1.5, T});
-  showName("⚔ 奥西里斯试炼开始！撑过三波，宝匣自会开启（离开大厅则中断）");
+function startTrial(T,omen){
+  Object.assign(trialState,{active:true, key:T.key, wave:0, alive:[], nextT:1.5, T, omen:!!omen, keysGiven:0});
+  showName(omen?"🩸 不祥试炼开始！守卫更强，每清一波掉一把不祥钥匙（今天只此一次）":"⚔ 奥西里斯试炼开始！撑过三波，宝匣自会开启，每清一波掉一把试炼钥匙（离开大厅则中断）");
 }
 function abortTrial(msg){
   for(const m of trialState.alive){ const i=mobs.indexOf(m); if(i>=0){ deathPoof(m); mobs.splice(i,1); } }
@@ -8635,6 +8738,11 @@ function abortTrial(msg){
 }
 function completeTrial(T){
   trialState.active=false; trialState.done++;
+  if(trialState.omen){                                   // 不祥试炼: 不再有宝匣, 记下今天已通关
+    vaultKeys.omenDay[T.key]=dayCount; addXP(120); sfxLevel && sfxLevel();
+    showName("🩸 不祥试炼通关（+120 经验）！明天可以再来 · 现有不祥钥匙 "+vaultKeys.omen);
+    return;
+  }
   const [cx,cy,cz]=T.chest;
   if(getBlock(cx,cy,cz)===OSIRIS) setBlock(cx,cy,cz,AIR);
   for(let i=0;i<50;i++) particles.push({x:cx+0.5,y:cy+0.6,z:cz+0.5, vx:(Math.random()-.5)*6, vy:2+Math.random()*6, vz:(Math.random()-.5)*6,
@@ -8648,20 +8756,113 @@ function updateTrial(dt,Tover,insideOver){             // Tover/insideOver: 自�
   if(!T){ const s=nearStructure(["pyramid"],30); T=s?trialHall(s):null; }
   if(!trialState.active){
     const inside=insideOver!==undefined?insideOver:(T && inTrialHall(T));
-    if(T && inside && !dead && getBlock(T.chest[0],T.chest[1],T.chest[2])===OSIRIS) startTrial(T);
+    if(T && inside && !dead){
+      if(getBlock(T.chest[0],T.chest[1],T.chest[2])===OSIRIS) startTrial(T);
+      else if(omenReady(T)) startTrial(T,true);          // 首通后: 每个游戏日一次不祥试炼
+    }
     return;
   }
   const stay=insideOver!==undefined?insideOver:(T && T.key===trialState.key && inTrialHall(T,6));
   if(dead || !stay){ abortTrial(dead?"":"⚔ 离开了试炼厅——试炼中断，残余的守卫化作沙尘"); return; }
   trialState.alive=trialState.alive.filter(m=>m.hp>0 && mobs.includes(m));
   if(trialState.alive.length) return;
+  if(trialState.wave>trialState.keysGiven){ trialState.keysGiven++; giveTrialKey(trialState.omen); }   // 每清一波掉一把钥匙
   trialState.nextT-=dt; if(trialState.nextT>0) return;
-  const TT=trialState.T||T;
-  if(trialState.wave>=TRIAL_WAVES.length){ completeTrial(TT); return; }
-  const list=TRIAL_WAVES[trialState.wave++];
-  list.forEach((type,i)=>{ const [sx,sz]=TT.spawns[i%TT.spawns.length]; trialState.alive.push(spawnTrialMob(type,sx,TT.fy+1,sz)); });
+  const TT=trialState.T||T, WAVES=trialState.omen?TRIAL_WAVES_OMEN:TRIAL_WAVES;
+  if(trialState.wave>=WAVES.length){ completeTrial(TT); return; }
+  const list=WAVES[trialState.wave++];
+  list.forEach((type,i)=>{ const [sx,sz]=TT.spawns[i%TT.spawns.length]; trialState.alive.push(spawnTrialMob(type,sx,TT.fy+1,sz,trialState.omen)); });
   trialState.nextT=2.5;
-  showName("⚔ 试炼第 "+trialState.wave+"/"+TRIAL_WAVES.length+" 波"+(trialState.wave===TRIAL_WAVES.length?"：阿努比斯守卫亲临！":""));
+  showName((trialState.omen?"🩸 不祥试炼":"⚔ 试炼")+"第 "+trialState.wave+"/"+WAVES.length+" 波"+(trialState.wave===WAVES.length?"：阿努比斯守卫亲临！":""));
+}
+/* ---- ♨ 地热间歇泉 (第九轮·本地, 对标 Minecraft Chaos Cubed 的间歇泉) ----
+   黑沙火山/枯骨盐湖的区块按哈希生成 1~3 个喷口(周围一圈玄武岩/盐壳)。每个喷口约 7 秒一轮:
+   平时冒细烟 → 喷发前 0.4 秒冒火星+低鸣预警 → 1.4 秒蒸汽柱冲天, 站在喷口上的玩家/生物被顶起约 8~9 格。
+   被蒸汽托起后落地的摔伤只剩 1/4; 但下落高度照常累计 —— 拿塞特之锤从空中砸下去仍是满额高空伤害。
+   喷口位置由 geyserSites(区块) 确定性算出(生成与运行时共用), 运行时只看玩家附近的区块, 不扫方块。 */
+const GEY_PERIOD=7, GEY_WARN=5.0, GEY_ERUPT=5.4, GEY_END=6.8, GEY_LIFT=22;
+const _geyCache=new Map();
+function geyserSites(cx,cz){
+  const k=cx+","+cz; let v=_geyCache.get(k); if(v) return v; v=[];
+  const bx=cx*CS, bz=cz*CS, bio=biomeAt(bx+8,bz+8);
+  if((bio===BIO_VOLCANO||bio===BIO_SALTLAKE) && hash2(cx*131+7, cz*197-3)<0.35){
+    const n=1+Math.floor(hash2(cx*7+1,cz*11+5)*3);
+    for(let i=0;i<n;i++){
+      const x=bx+2+Math.floor(hash2(cx*17+i*31, cz*13-i*7)*12), z=bz+2+Math.floor(hash2(cx*29-i*5, cz*23+i*11)*12);
+      const h=heightAt(x,z), b2=biomeAt(x,z);
+      if(h<=WATER_Y+1 || (b2!==BIO_VOLCANO && b2!==BIO_SALTLAKE) || v.some(q=>Math.abs(q.x-x)+Math.abs(q.z-z)<3)) continue;
+      v.push({x, y:h, z, bio:b2, ph:hash2(x*3+1,z*5-2)*GEY_PERIOD});
+    }
+  }
+  if(_geyCache.size>6000) _geyCache.clear();
+  _geyCache.set(k,v); return v;
+}
+function placeGeysers(cx,cz,put){
+  for(const G of geyserSites(cx,cz)){
+    const ring=G.bio===BIO_VOLCANO?BASALT:SALTCRUST;
+    for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]) put(G.x+dx,G.y,G.z+dz,ring,true);
+    put(G.x,G.y,G.z,GEYSER,true);
+    for(let y=G.y+1;y<=G.y+3;y++) put(G.x,y,G.z,AIR,true);                 // 喷口上方留空, 不被植物/石块盖住
+  }
+}
+let geyClock=0, geyScanT=0, steamLift=false;
+const geyNear=[];
+function geyserPhase(G,t){ return (t+G.ph)%GEY_PERIOD; }
+function steamParticles(G,n,vy,spread){
+  for(let i=0;i<n;i++) particles.push({x:G.x+0.5+(Math.random()-.5)*spread, y:G.y+1.05, z:G.z+0.5+(Math.random()-.5)*spread,
+    vx:(Math.random()-.5)*1.2, vy:vy*(0.7+Math.random()*0.6), vz:(Math.random()-.5)*1.2, life:.6+Math.random()*.5, size:.12+Math.random()*.08,
+    u:(78%16)*TS+Math.random()*TS*.6, v:Math.floor(78/16)*TV+Math.random()*TV*.6, l:1.5});
+}
+function geyserLiftAt(G,e,isPlayer){                     // e 在喷口正上方的蒸汽柱里 → 顶起; 返回是否顶起
+  if(Math.abs(e.x-(G.x+0.5))>0.8 || Math.abs(e.z-(G.z+0.5))>0.8 || e.y<G.y+0.9 || e.y>G.y+11) return false;
+  e.vy=Math.max(e.vy, isPlayer?GEY_LIFT:18); e.onGround=false;
+  if(isPlayer){ steamLift=true; jumpPadGrace=false; }
+  return true;
+}
+function geyserStep(G,t,dt){                             // 单个喷口的一帧(自测可直接调用)
+  const p=geyserPhase(G,t), p0=geyserPhase(G,t-dt), d=Math.hypot(player.x-G.x-0.5,player.z-G.z-0.5);
+  if(p>=GEY_ERUPT && p<GEY_END){
+    if(d<48) steamParticles(G,4,10,0.6);
+    if(p0<GEY_ERUPT) sfxGeyser(d);
+    let n=geyserLiftAt(G,player,true)?1:0;
+    for(const m of mobs) if(!m.def.fly && !m.def.plane && geyserLiftAt(G,m,false)) n++;
+    return n;
+  }
+  if(p>=GEY_WARN && p<GEY_ERUPT){ if(d<48 && Math.random()<dt*20) particles.push({x:G.x+0.5+(Math.random()-.5)*.8, y:G.y+1.05, z:G.z+0.5+(Math.random()-.5)*.8, vx:0, vy:2+Math.random()*2, vz:0, life:.3, size:.07, u:15*TS+Math.random()*TS*.6, v:Math.random()*TV*.6, l:2.2}); if(p0<GEY_WARN && d<24) sfxGeyserRumble(d); }
+  else if(d<32 && Math.random()<dt*2.5) steamParticles(G,1,2.5,0.3);    // 平时的细烟
+  return 0;
+}
+function updateGeysers(dt){
+  geyClock+=dt;
+  geyScanT-=dt;
+  if(geyScanT<=0){                                       // 每秒重扫一次玩家附近 7×7 区块的喷口(确认方块还在, 被挖掉的不再喷)
+    geyScanT=1; geyNear.length=0;
+    const cx=Math.floor(player.x/CS), cz=Math.floor(player.z/CS);
+    for(let dx=-3;dx<=3;dx++) for(let dz=-3;dz<=3;dz++) for(const G of geyserSites(cx+dx,cz+dz)) if(getBlock(G.x,G.y,G.z)===GEYSER) geyNear.push(G);
+  }
+  for(const G of geyNear) geyserStep(G,geyClock,dt);
+}
+function sfxGeyser(dist){                                // 喷发: 由低到高的长嘶声
+  if(!actx2 || dist>40) return;
+  const t=actx2.currentTime, len=1.3;
+  const buf=actx2.createBuffer(1,actx2.sampleRate*len,actx2.sampleRate), d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++){ const f=i/d.length; d[i]=(Math.random()*2-1)*Math.min(1,f*8)*(1-f); }
+  const src=actx2.createBufferSource(); src.buffer=buf;
+  const fl=actx2.createBiquadFilter(); fl.type="lowpass"; fl.frequency.setValueAtTime(300,t); fl.frequency.exponentialRampToValueAtTime(2200,t+0.5);
+  const g=actx2.createGain(); g.gain.value=0.45*Math.max(0.08,1-dist/40);
+  src.connect(fl).connect(g).connect(actx2.destination); src.start(t);
+}
+function sfxGeyserRumble(dist){                          // 预警: 地下低鸣
+  if(!actx2) return;
+  const t=actx2.currentTime, o=actx2.createOscillator(), g=actx2.createGain();
+  o.type="sawtooth"; o.frequency.setValueAtTime(48,t); o.frequency.linearRampToValueAtTime(70,t+0.4);
+  const fl=actx2.createBiquadFilter(); fl.type="lowpass"; fl.frequency.value=160;
+  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.25*Math.max(0.1,1-dist/24),t+0.08); g.gain.exponentialRampToValueAtTime(0.0001,t+0.45);
+  o.connect(fl).connect(g).connect(actx2.destination); o.start(t); o.stop(t+0.5);
+}
+function fallDamage(drop){                               // 落地摔伤(从主循环抽出, 便于自测): 虹之碎片 -25%; 蒸汽托起后只剩 1/4
+  if(drop<=3.5 || (typeof mythicFallImmune==="function" && mythicFallImmune())) return 0;
+  return Math.floor(Math.min(15,Math.floor(drop-3))*trophyFallMul()*(steamLift?0.25:1));
 }
 function tickSunburn(dt){                              // 在 updateMobs 之后调用: AI 每帧先清 burning, 这里再点亮火色
   for(let i=mobs.length-1;i>=0;i--){
@@ -10875,11 +11076,9 @@ function frame(now){
     else if(!player.onGround) fallStart = fallStart===null ? player.y : Math.max(fallStart,player.y);
     else if(fallStart!==null){
       const drop=fallStart-player.y;
-      if(drop>3.5 && !(typeof mythicFallImmune==="function" && mythicFallImmune())){
-        const fd=Math.floor(Math.min(15,Math.floor(drop-3))*trophyFallMul());   // 虹之碎片: 摔落伤害 -25%
-        if(fd>0) damagePlayer(fd,0,0);
-      }
-      fallStart=null;
+      const fd=fallDamage(drop);                   // 虹之碎片 -25% / 间歇泉蒸汽托起后 ×1/4
+      if(fd>0) damagePlayer(fd,0,0);
+      fallStart=null; steamLift=false;
     }
     if(player.flying && player.onGround) player.flying=false;
     if(player.y<-10){ player.y=H; player.vy=0; }
@@ -11004,6 +11203,7 @@ function frame(now){
     questTick(dt);
     updateNPC(dt);
     updateArch(dt);
+    updateGeysers(dt);
     updateTutorial(dt);
     updateArena(dt);
     updateCurse(dt);
@@ -11065,6 +11265,7 @@ function collectSave(){
     sunblade,                                    // 第五轮·本地: 拉之烈阳剑(老存档无此字段 → 铁剑)
     mace:maceOwned,                              // 第五轮·本地: 塞特之锤(老存档无此字段 → 没有)
     ench:Object.assign({},enchState),            // 第五轮·本地: 附魔词条(老存档无此字段 → 全 0)
+    trialVault:{trial:vaultKeys.trial, omen:vaultKeys.omen, omenDay:vaultKeys.omenDay},   // 第九轮·本地: 试炼/不祥钥匙 + 各厅不祥试炼通关日
     potions:Object.assign({},potions),           // 第五轮·云端: 药水库存(老存档无此字段 → 全 0; 生效中的效果不存档)
     fish:{ n:fishState.fish, caught:fishState.caught, cooked:fishState.cooked|0 },   // 第五轮·云端: 钓鱼(老存档无此字段 → 0); 第七轮·云端: 烤鱼
     chests:JSON.parse(JSON.stringify(chests)), bundle:{ owned:bundleState.owned, items:Object.assign({},bundleState.items) },   // 第六轮·云端: 储物箱/收纳袋(老存档无 → 空)
@@ -11157,6 +11358,7 @@ function loadGame(){
   setSunblade(!!s.sunblade);
   setMace(!!s.mace);
   for(const D of ENCH_DEFS) enchState[D.k]=Math.max(0,Math.min(D.max,(s.ench&&s.ench[D.k])|0));
+  { const V=s.trialVault||{}; vaultKeys.trial=Math.max(0,V.trial|0); vaultKeys.omen=Math.max(0,V.omen|0); vaultKeys.omenDay=(V.omenDay&&typeof V.omenDay==="object")?V.omenDay:{}; }
   for(const P of POTIONS){ potions[P.k]=Math.max(0,(s.potions&&s.potions[P.k])|0); if(P.k in potionFx) potionFx[P.k]=0; }   // 第五轮·云端: 老存档无 potions → 全 0
   fishState.on=false; fishState.fish=Math.max(0,(s.fish&&s.fish.n)|0); fishState.caught=Math.max(0,(s.fish&&s.fish.caught)|0);   // 第五轮·云端
   for(const k in chests) delete chests[k];                                                              // 第六轮·云端: 储物箱/收纳袋
@@ -13593,7 +13795,8 @@ function selftest(){
           const cache=new Map(), at=(X,Y,Z)=>{ const cx=Math.floor(X/CS), cz=Math.floor(Z/CS), k=cx+","+cz;
             if(!cache.has(k)) cache.set(k,genChunk(cx,cz)); return cache.get(k)[((X-cx*CS)*CS+(Z-cz*CS))*H+Y]; };
           const {x,z,h}=pyr, T=trialHall(pyr), G=tombGallery(pyr);
-          let hall=true; for(let X=T.x0;X<=T.x1;X++) for(let Z=T.z0;Z<=T.z1;Z++){ if(X===T.chest[0]&&Z===T.chest[2]) continue; if(!SOLID(at(X,T.fy,Z)) || at(X,T.fy+1,Z)!==AIR || at(X,T.fy+2,Z)!==AIR || at(X,T.fy+4,Z)!==AIR) hall=false; }
+          const skip=[[T.chest[0],T.chest[2]],...T.vaults,T.omen];               // 宝匣与三座宝库(第九轮②)占着的格子
+          let hall=true; for(let X=T.x0;X<=T.x1;X++) for(let Z=T.z0;Z<=T.z1;Z++){ if(skip.some(q=>q[0]===X&&q[1]===Z)) continue; if(!SOLID(at(X,T.fy,Z)) || at(X,T.fy+1,Z)!==AIR || at(X,T.fy+2,Z)!==AIR || at(X,T.fy+4,Z)!==AIR) hall=false; }
           const door=at(T.door[0],T.fy+1,T.door[1])===AIR && at(T.door[0],T.fy+2,T.door[1])===AIR && at(T.door[0]-1,T.fy+1,T.door[1])===AIR;
           const wallBoth=at(T.x0-1,T.fy+3,T.z0+2)===HIERO && at(G.x1+1,G.fy+5,T.z0+2)===HIERO;
           let pitOk=true; for(let dz=9;dz<=10;dz++) if(at(x,h-3,z-dz)===AIR && at(x,h-4,z-dz)!==STARCEIL) pitOk=false;   // 塌陷坑底下是试炼厅顶, 没被打穿
@@ -13749,6 +13952,92 @@ function selftest(){
         ok("自动降级: 连续低帧先降画质(极致→高→中), 到「中」后才缩渲染距离, 最多 5 次; 帧率回升则清零计数",
            order==="2/9 1/9 1/7 1/5" && stopped && reset, "序列="+steps.join(" ")+" 次数="+perfDowngrades+" reset="+reset);
       }
+      // ---- 第九轮·本地: 地热间歇泉 ----
+      {
+        // 1) 生成: 找一个有喷口的火山/盐湖区块, 真实区块里喷口+一圈玄武岩/盐壳+上方留空
+        let site=null, scanned=0;
+        for(let r=0;r<120 && !site;r++) for(let a=-r;a<=r && !site;a++) for(const [cx,cz] of [[a,-r],[a,r],[-r,a],[r,a]]){ scanned++; const L=geyserSites(cx,cz); if(L.length){ site={cx,cz,G:L[0]}; break; } }
+        let gen=false, other=true;
+        if(site){ const G=site.G, arr=genChunk(site.cx,site.cz), at=(X,Y,Z)=>arr[((X-site.cx*CS)*CS+(Z-site.cz*CS))*H+Y];
+          const ring=G.bio===BIO_VOLCANO?BASALT:SALTCRUST;
+          gen=at(G.x,G.y,G.z)===GEYSER && [[1,0],[-1,0],[0,1],[0,-1]].every(([dx,dz])=>at(G.x+dx,G.y,G.z+dz)===ring) && at(G.x,G.y+1,G.z)===AIR;
+          for(let k=0;k<200;k++){ const cx=site.cx+300+k, cz=site.cz-50; const b=biomeAt(cx*CS+8,cz*CS+8); if(b!==BIO_VOLCANO && b!==BIO_SALTLAKE && geyserSites(cx,cz).length) other=false; }
+        }
+        ok("间歇泉: 地热喷口(120)只在黑沙火山/盐湖生成, 真实区块里喷口+一圈玄武岩或盐壳、上方留空; 其它群系没有",
+           !!site && gen && other && BLOCKS[GEYSER].t===300 && EMIT_LV[GEYSER]===7, "site="+(site?site.G.x+","+site.G.z+" bio="+site.G.bio:"none")+" 扫描区块="+scanned+" gen="+gen+" other="+other);
+      }
+      {
+        // 2) 喷发把人/怪顶起; 喷口外不顶; 蒸汽托起后摔伤 ×1/4
+        const S={x:player.x,y:player.y,z:player.z,vx:player.vx,vy:player.vy,vz:player.vz,og:player.onGround}, sl0=steamLift, mobsS=mobs.slice(); mobs.length=0;
+        const G={x:Math.floor(player.x)+40, y:150, z:Math.floor(player.z)+40, ph:0, bio:BIO_VOLCANO};
+        const tE=GEY_ERUPT+0.2;
+        Object.assign(player,{x:G.x+0.5,y:G.y+1,z:G.z+0.5,vx:0,vy:0,vz:0,onGround:true}); steamLift=false;
+        const m={type:"zombie",def:MOB_DEFS.zombie,x:G.x+0.6,y:G.y+1,z:G.z+0.4,vx:0,vy:0,vz:0,kbx:0,kbz:0,onGround:true,hp:20}; mobs.push(m);
+        const idle=geyserStep(G,1.0,0.016)===0 && player.vy===0;
+        const n=geyserStep(G,tE,0.016), lifted=n===2 && player.vy>=GEY_LIFT && m.vy>=18 && steamLift;
+        mobs.length=0; Object.assign(player,{x:G.x+2.5,vy:0}); const miss=geyserStep(G,tE,0.016)===0 && player.vy===0;
+        const md0=mythicState.done.slice(); mythicState.done=[];                    // 前面的自测可能集齐了「地中海」遗物(免摔伤), 这里临时排除
+        steamLift=true; const soft=fallDamage(10); steamLift=false; const hard=fallDamage(10); mythicState.done=md0;
+        const fall=hard>=4 && soft===Math.floor(hard/4) && fallDamage(3)===0;
+        mobs.length=0; for(const q of mobsS) mobs.push(q); Object.assign(player,{x:S.x,y:S.y,z:S.z,vx:S.vx,vy:S.vy,vz:S.vz,onGround:S.og}); steamLift=sl0;
+        ok("间歇泉: 平时不顶人; 喷发时站在喷口上的玩家与生物被蒸汽顶起, 旁边 2 格外不受影响; 蒸汽托起后落地摔伤只剩 1/4",
+           idle && lifted && miss && fall, "idle="+idle+" lifted="+lifted+" n="+n+" miss="+miss+" 摔伤 硬/软="+hard+"/"+soft);
+      }
+      // ---- 第九轮②·本地: 试炼钥匙 + 试炼宝库 / 不祥宝库 ----
+      {
+        let pyr=null; for(let sx=-40;sx<=40&&!pyr;sx++) for(let sz=-40;sz<=40&&!pyr;sz++){ const s2=structureAt(sx,sz); if(s2&&s2.type==="pyramid"&&s2.h>=14) pyr=s2; }
+        let genOK=false;
+        if(pyr){ const T=trialHall(pyr), cache=new Map(), at=(X,Y,Z)=>{ const cx=Math.floor(X/CS), cz=Math.floor(Z/CS), k=cx+","+cz; if(!cache.has(k)) cache.set(k,genChunk(cx,cz)); return cache.get(k)[((X-cx*CS)*CS+(Z-cz*CS))*H+Y]; };
+          genOK=T.vaults.every(([vx,vz])=>at(vx,T.fy+1,vz)===VAULT) && at(T.omen[0],T.fy+1,T.omen[1])===OMEN_VAULT; }
+        ok("宝库生成: 试炼厅北墙下两座试炼宝库、南侧一座不祥宝库(121/123, 自发光)", genOK && EMIT_LV[VAULT]===8 && BLOCKS[OMEN_VAULT].s===304, "pyr="+(pyr?pyr.x+","+pyr.z:"none"));
+      }
+      {
+        const VK=JSON.stringify(vaultKeys), mobsS=mobs.slice(), bagS=new Map(bag), relS=npcState.relics, coreS=cores, st={xp,lvl,maxHp,dmgMul,hp}, eS=Object.assign({},enchState), akS=arenaState.keys, dS=trialState.done, dayS=dayCount;
+        vaultKeys.trial=0; vaultKeys.omen=0; vaultKeys.omenDay={}; mobs.length=0;
+        const cx=Math.floor(player.x)+2, cz=Math.floor(player.z)+2; let cy=H-4; while(cy>0 && getBlock(cx,cy,cz)!==AIR) cy--;
+        const T={x0:0,x1:0,z0:0,z1:0,fy:cy-1, chest:[cx,cy,cz], spawns:[[cx+3,cz],[cx-3,cz]], key:"Tvault", vaults:[], omen:[0,0]};
+        const run=()=>{ const w=[]; let g=0; while(trialState.active && g++<40){ updateTrial(3,T,true); if(trialState.alive.length){ w.push(trialState.alive.map(m=>m.type+(m.elite?"*":"")).join("+")); for(const m of trialState.alive) m.hp=0; } } return w; };
+        // 普通试炼: 每清一波一把试炼钥匙
+        setBlock(cx,cy,cz,OSIRIS); trialState.active=false; updateTrial(0.1,T,true); const w1=run();
+        const normal=w1.length===3 && vaultKeys.trial===3 && vaultKeys.omen===0 && getBlock(cx,cy,cz)===AIR;
+        // 首通后: 不祥试炼(每日一次), 精英 + 血量 ×1.5, 每清一波一把不祥钥匙
+        updateTrial(0.1,T,true); const omenStart=trialState.active && trialState.omen;
+        updateTrial(3,T,true); const hpOK=trialState.alive.length>0 && trialState.alive.every(m=>m.hp>=Math.round(m.def.hp*1.5)-1 || m.def.boss);
+        for(const m of trialState.alive) m.hp=0;
+        const w2=run();
+        const omen=omenStart && hpOK && vaultKeys.omen===3 && vaultKeys.omenDay.Tvault===dayCount && w2.length===2 && w2[1].split("+").filter(t=>t.startsWith("anubis")).length===2;
+        updateTrial(0.1,T,true); const sameDay=!trialState.active;
+        dayCount++; updateTrial(0.1,T,true); const nextDay=trialState.active && trialState.omen; abortTrial(); dayCount=dayS;
+        ok("试炼钥匙: 普通试炼每清一波掉 1 把(共 3); 首通后每个游戏日可打一次不祥试炼(精英、血 ×1.5、末波双阿努比斯), 每波掉 1 把不祥钥匙; 同日不能重打、次日可以",
+           normal && omen && sameDay && nextDay, "normal="+normal+" waves="+w1.join(" | ")+" omen="+omen+" 不祥波="+w2.join(" | ")+" sameDay="+sameDay+" nextDay="+nextDay);
+        // 宝库开启规则
+        setBlock(cx,cy,cz,VAULT); vaultKeys.trial=0; vaultKeys.omen=0;
+        const noKey=useVaultBlock(cx,cy,cz)===null && getBlock(cx,cy,cz)===VAULT;
+        vaultKeys.trial=1; const g0=bagCount(GOLD_ORE), got=useVaultBlock(cx,cy,cz);
+        const opened=!!got && getBlock(cx,cy,cz)===VAULT_OPEN && vaultKeys.trial===0 && bagCount(GOLD_ORE)>=g0+3 && useVaultBlock(cx,cy,cz)===null;
+        setBlock(cx,cy,cz,OMEN_VAULT); vaultKeys.trial=2;
+        const wrongKey=useVaultBlock(cx,cy,cz)===null && vaultKeys.trial===2;
+        vaultKeys.omen=1; const got2=useVaultBlock(cx,cy,cz); const omenOpen=!!got2 && getBlock(cx,cy,cz)===OMEN_VAULT_OPEN && vaultKeys.omen===0;
+        vaultKeys.trial=4; vaultKeys.omen=2; vaultKeys.omenDay={T1:7};
+        const sv=collectSave().trialVault, saved=sv.trial===4 && sv.omen===2 && sv.omenDay.T1===7;
+        setBlock(cx,cy,cz,AIR);
+        mobs.length=0; for(const q of mobsS) mobs.push(q); bag.clear(); for(const [k,v] of bagS) bag.set(k,v); npcState.relics=relS; cores=coreS;
+        xp=st.xp; lvl=st.lvl; maxHp=st.maxHp; dmgMul=st.dmgMul; hp=st.hp; Object.assign(enchState,eS); arenaState.keys=akS; trialState.done=dS;
+        Object.assign(vaultKeys, JSON.parse(VK)); updateHearts(); updateXPHUD();
+        ok("宝库: 没钥匙打不开; 试炼钥匙开试炼宝库(变暗、只开一次、给金钻文物核心); 不祥宝库只认不祥钥匙; 钥匙与通关日进存档",
+           noKey && opened && wrongKey && omenOpen && saved, "noKey="+noKey+" opened="+opened+" got="+(got||[]).join(",")+" wrongKey="+wrongKey+" omenOpen="+omenOpen+" 不祥="+(got2||[]).join(",")+" saved="+saved);
+      }
+      // ---- 第九轮③·本地: 区块网格优化(本地取块数组 + 复用类型数组 + 判定查表)的等价性 ----
+      {
+        const cx0=Math.floor(player.x/CS), cz0=Math.floor(player.z/CS), cs=[];
+        for(let dx=-2;dx<=2;dx++) for(let dz=-2;dz<=2;dz++){ const c=world.get(key(cx0+dx,cz0+dz)); if(c && c.mesh) cs.push(c); }
+        const cap=flag=>{ const p0=_meshPad; _meshPad=flag; _meshCapture=[]; for(const c of cs) buildChunkMesh(c); const r=_meshCapture; _meshCapture=null; _meshPad=p0; return r; };
+        const A=cap(false), B=cap(true); let diff=0, elems=0;
+        for(let k=0;k<A.length;k++) for(const f of ["oV","oI","wV","wI","pV","pI"]){ const a=A[k][f], b=B[k][f]; elems+=a.length; if(a.length!==b.length){ diff++; continue; } for(let i=0;i<a.length;i++) if(a[i]!==b[i]){ diff++; break; } }
+        const tabs=[...Array(256).keys()].every(i=>OCC_T[i]===(OCCLUDE(i)?1:0) && SKY_T[i]===(SKY_OCC(i)?1:0) && EMI_T[i]===(EMISSIVE(i)?1:0) && BL_OPQ[i]===(OPAQUE(i)?1:0));
+        ok("网格优化等价: 本地取块数组与逐格 gb() 生成的顶点/索引逐元素一致; 判定查表与原判定函数 256 个 ID 全部一致",
+           cs.length>0 && diff===0 && tabs, "区块="+cs.length+" 元素="+elems+" 不一致="+diff+" 查表="+tabs);
+      }
       { // 守墓石像被盯住时要有常驻提示, 否则玩家以为怪物卡死(用户报 bug: "僵尸突然不动了")
         const mobsP=mobs.slice(); mobs.length=0;
         const el=document.getElementById("sphinxPrompt");
@@ -13798,17 +14087,19 @@ function selftest(){
       { // 第九轮·云端: 参考图画面 —— 绿色群系成片草丛/小花、荒漠群系不长; 主着色器带草地深浅变化
         const mulOk=GREEN_TUFT_MUL[BIO_PLAIN]>0 && GREEN_TUFT_MUL[BIO_SAVANNA]>0 && GREEN_TUFT_MUL[BIO_DESERT]===0 && GREEN_TUFT_MUL[BIO_MESA]===0
           && GREEN_TUFT_MUL[BIO_SALTLAKE]===0 && GREEN_TUFT_MUL[BIO_VOLCANO]===0;
-        let tufts=0, grassTop=0, found=false;
-        for(let cx=-60; cx<=60 && !found; cx+=3) for(let cz=-60; cz<=60 && !found; cz+=3){
+        // 草丛按噪声成片长, 单个区块可能整块落在空地上 → 统计前 8 个平原区块的合计覆盖率
+        let tufts=0, grassTop=0, chunks=0;
+        for(let cx=-60; cx<=60 && chunks<8; cx+=3) for(let cz=-60; cz<=60 && chunks<8; cz+=3){
           if(biomeAt(cx*16+8,cz*16+8)!==BIO_PLAIN || structureAt(cx*16+8,cz*16+8)) continue;
-          const B=genChunk(cx,cz); tufts=0; grassTop=0;
+          const B=genChunk(cx,cz); let t=0, g=0;
           for(let lx=0;lx<16;lx++) for(let lz=0;lz<16;lz++){ const col=(lx*CS+lz)*H; let y=H-1; while(y>0 && (B[col+y]===AIR||PLANT(B[col+y]))) y--;
-            if(B[col+y]===GRASS){ grassTop++; if(B[col+y+1]===TALLGRASS||B[col+y+1]===ROSE||B[col+y+1]===DAISY) tufts++; } }
-          if(grassTop>150) found=true;
+            if(B[col+y]===GRASS){ g++; if(B[col+y+1]===TALLGRASS||B[col+y+1]===ROSE||B[col+y+1]===DAISY) t++; } }
+          if(g>150){ chunks++; tufts+=t; grassTop+=g; }
         }
+        const found=chunks>=3;
         const shaderOk=/gNoise/.test(_mainSrc[1]) && /草地深浅/.test(_mainSrc[1]);
-        ok("第九轮画面: 平原草地长出成片草丛与小花(覆盖 2%~40%), 荒漠群系倍率为 0; 主着色器带草地深浅变化",
-           mulOk && found && tufts>=grassTop*0.02 && tufts<=grassTop*0.4 && shaderOk, "mul="+mulOk+" found="+found+" tufts="+tufts+"/"+grassTop+" shader="+shaderOk);
+        ok("第九轮画面: 平原草地长出成片草丛与小花(8 个平原区块合计覆盖 2%~40%), 荒漠群系倍率为 0; 主着色器带草地深浅变化",
+           mulOk && found && tufts>=grassTop*0.02 && tufts<=grassTop*0.4 && shaderOk, "mul="+mulOk+" chunks="+chunks+" tufts="+tufts+"/"+grassTop+" shader="+shaderOk);
       }
       { // 第七轮·云端: 群系动物变种 —— 群系规则; 部件换贴图不改原版; 贴图已画且与原图不同; 生成时挂上
         const rule=animalVariantFor("camel",BIO_MESA,0.5)==="red" && animalVariantFor("camel",BIO_SALTLAKE,0.5)==="white" && animalVariantFor("camel",BIO_DESERT,0.5)===null
