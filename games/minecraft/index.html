@@ -432,6 +432,7 @@ const FURNACE=81, FURNACE_LIT=82;              // 第七轮·云端: 砂岩熔�
 // 地下密室(第六轮·本地, 图集 280-282): 卡之石——守墓石像的魂核, 打碎它, 与之相连的石像一起崩碎
 const KAHEART=74;
 const OSIRIS=75;
+const GEYSER=120;                             // 地热喷口(第九轮·本地, 图集 300): 黑沙火山/盐湖里周期喷发, 把人和怪顶上天
 const SLAB_SST=90, STAIR_N=91, STAIR_E=92, STAIR_S=93, STAIR_W=94, LAMPPOST=95, IRONPOST=96;
 // 更多材质(第七轮③·本地): 每种 = 半砖 + 四向楼梯[N,E,S,W]
 const SLAB_MARBLE=100, STAIR_MARBLE=[101,102,103,104], SLAB_PLANK=105, STAIR_PLANK=[106,107,108,109], SLAB_CLAY=110, STAIR_CLAY=[111,112,113,114];   // 第七轮·本地: 方块形状系统(见 SHAPES)                              // 奥西里斯宝匣(第六轮·本地, 图集 283/284): 试炼厅三波清完自动开启
@@ -514,6 +515,7 @@ const BLOCKS = {
   [FURNACE_LIT]:{name:"砂岩熔炉(燃烧中)", t:292,b:71, s:294},   // 第七轮·云端: 烧火时自动换成这块(自发光), 熄火换回
   [KAHEART]:{name:"卡之石",    t:282,b:282,s:282},   // 石像回廊尽头的魂核(自发光), 挖碎 → 连接的守墓石像全部崩碎
   [OSIRIS]: {name:"奥西里斯宝匣", t:284,b:71, s:283}, // 试炼完成前挖不开
+  [GEYSER]: {name:"地热喷口",   t:300,b:254,s:255},   // 顶面发光裂口, 侧面玄武岩; 挖下只得玄武岩
   // 第七轮·本地: 方块形状系统(非整格, 形状见 SHAPES)
   [SLAB_SST]:{name:"砂岩半砖", t:71, b:71, s:71},
   [STAIR_N]: {name:"砂岩楼梯", t:71, b:71, s:71},
@@ -943,6 +945,7 @@ function genChunk(cx, cz){
     const th=4+((hash2(tx,tz)*3)|0), lr=hash2(tx*5-1,tz*3+2);
     drawPalm(put,tx,h,tz,th, lr<0.25?1:(lr<0.5?-1:0), lr>=0.5&&lr<0.75?1:(lr>=0.75?-1:0));   // 随机朝一侧歪
   }
+  placeGeysers(cx,cz,put);                              // 第九轮·本地: 地热喷口(先放, 大型建筑随后清场时会盖掉)
   buildSkyIslands(bx,bz,put);
   buildStructures(bx,bz,put);
   return b;
@@ -4000,6 +4003,14 @@ const ANIMAL_VARIANT_TILES=[295,296,297,298,299,300,301];
     return txMul([226,180,64],0.9+txFbm(x,y,4,4,2,2841)*0.2);
   });
 }
+txPut(300,(x,y)=>{                                                        // 地热喷口顶(第九轮·本地): 玄武岩底 + 中央发光裂口 + 白色硫华结壳
+  const cx=x-14.5, cy=y-14.5, r=Math.hypot(cx,cy), a=Math.atan2(cy,cx);
+  if(r<3.2) return txMix([255,214,120],[255,120,40],r/3.2);               // 喷口(灼热)
+  const crack=r<11 && Math.abs(Math.sin(a*3+r*0.35))<0.12;
+  if(crack) return txMix([255,150,60],[120,40,20],(r-3)/8);                // 放射裂纹
+  if(r<5.5) return txMix([226,222,196],[168,160,130],(r-3.2)/2.3);        // 硫华结壳
+  return txLerp(txPal("#1a1a1f #26262d #34343c"),txFbm(x,y,4,4,2,3001)*0.9+(txH(x,y,3002)-0.5)*0.1);
+});
 let ATLAS_MIPS=0;                                                         // 手工 mip 级数(自测用: 512×1024 → 1×1 共 10 级)
 const atlasTex = gl.createTexture();
 gl.bindTexture(gl.TEXTURE_2D, atlasTex);
@@ -4100,7 +4111,7 @@ function cellSky(bx,bz,x,y,z){
 const EMIT_LV=new Uint8Array(256);                    // 光源等级
 EMIT_LV[LANTERN]=14; EMIT_LV[LAVA]=13; EMIT_LV[MAGMA]=11; EMIT_LV[NEON]=11; EMIT_LV[WINDOW]=11;
 EMIT_LV[CRYSTAL]=9; EMIT_LV[GLOWVEIN]=9; EMIT_LV[SALTCRYSTAL]=9; EMIT_LV[AMETHYST]=9;
-EMIT_LV[KAHEART]=10; EMIT_LV[LAMPPOST]=13; EMIT_LV[FURNACE_LIT]=12;                                  // 第六轮·本地: 卡之石
+EMIT_LV[KAHEART]=10; EMIT_LV[GEYSER]=7; EMIT_LV[LAMPPOST]=13; EMIT_LV[FURNACE_LIT]=12;                                  // 第六轮·本地: 卡之石
 const BL_OPQ=new Uint8Array(256);                     // 挡光(= OPAQUE)
 for(let i=0;i<256;i++) BL_OPQ[i]=OPAQUE(i)?1:0;
 const BL_R=13;                                        // 最远传播格数(14 级光源 13 格外还剩 1 级)
@@ -6388,6 +6399,7 @@ function doBreak(){
   if(!hit || hit.id===BEDROCK) return;
   if(hit.id===TNT){ igniteTNT(hit.x,hit.y,hit.z); showName("嘶嘶嘶……快跑！"); return; }
   if(hit.id===SUSGRAVEL){ brushPoke(hit); return; }
+  if(hit.id===GEYSER){ spawnParticles(hit.x,hit.y,hit.z,BASALT); setBlock(hit.x,hit.y,hit.z,AIR); sfxBreak(); bagAdd(BASALT,1); showName("♨ 喷口被凿开，只剩一块玄武岩"); return; }   // 第九轮·本地
   if(hit.id===OSIRIS){ showName("🔒 奥西里斯宝匣被封印——在试炼厅撑过三波试炼，宝匣自会开启"); return; }   // 第六轮·本地   // 考古刷点: 按住慢慢刷(见 updateBrush), 不再一镐刨开
   const brokeId=hit.id;
   spawnParticles(hit.x,hit.y,hit.z,hit.id);
@@ -8638,6 +8650,95 @@ function updateTrial(dt,Tover,insideOver){             // Tover/insideOver: 自�
   trialState.nextT=2.5;
   showName("⚔ 试炼第 "+trialState.wave+"/"+TRIAL_WAVES.length+" 波"+(trialState.wave===TRIAL_WAVES.length?"：阿努比斯守卫亲临！":""));
 }
+/* ---- ♨ 地热间歇泉 (第九轮·本地, 对标 Minecraft Chaos Cubed 的间歇泉) ----
+   黑沙火山/枯骨盐湖的区块按哈希生成 1~3 个喷口(周围一圈玄武岩/盐壳)。每个喷口约 7 秒一轮:
+   平时冒细烟 → 喷发前 0.4 秒冒火星+低鸣预警 → 1.4 秒蒸汽柱冲天, 站在喷口上的玩家/生物被顶起约 8~9 格。
+   被蒸汽托起后落地的摔伤只剩 1/4; 但下落高度照常累计 —— 拿塞特之锤从空中砸下去仍是满额高空伤害。
+   喷口位置由 geyserSites(区块) 确定性算出(生成与运行时共用), 运行时只看玩家附近的区块, 不扫方块。 */
+const GEY_PERIOD=7, GEY_WARN=5.0, GEY_ERUPT=5.4, GEY_END=6.8, GEY_LIFT=22;
+const _geyCache=new Map();
+function geyserSites(cx,cz){
+  const k=cx+","+cz; let v=_geyCache.get(k); if(v) return v; v=[];
+  const bx=cx*CS, bz=cz*CS, bio=biomeAt(bx+8,bz+8);
+  if((bio===BIO_VOLCANO||bio===BIO_SALTLAKE) && hash2(cx*131+7, cz*197-3)<0.35){
+    const n=1+Math.floor(hash2(cx*7+1,cz*11+5)*3);
+    for(let i=0;i<n;i++){
+      const x=bx+2+Math.floor(hash2(cx*17+i*31, cz*13-i*7)*12), z=bz+2+Math.floor(hash2(cx*29-i*5, cz*23+i*11)*12);
+      const h=heightAt(x,z), b2=biomeAt(x,z);
+      if(h<=WATER_Y+1 || (b2!==BIO_VOLCANO && b2!==BIO_SALTLAKE) || v.some(q=>Math.abs(q.x-x)+Math.abs(q.z-z)<3)) continue;
+      v.push({x, y:h, z, bio:b2, ph:hash2(x*3+1,z*5-2)*GEY_PERIOD});
+    }
+  }
+  if(_geyCache.size>6000) _geyCache.clear();
+  _geyCache.set(k,v); return v;
+}
+function placeGeysers(cx,cz,put){
+  for(const G of geyserSites(cx,cz)){
+    const ring=G.bio===BIO_VOLCANO?BASALT:SALTCRUST;
+    for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]) put(G.x+dx,G.y,G.z+dz,ring,true);
+    put(G.x,G.y,G.z,GEYSER,true);
+    for(let y=G.y+1;y<=G.y+3;y++) put(G.x,y,G.z,AIR,true);                 // 喷口上方留空, 不被植物/石块盖住
+  }
+}
+let geyClock=0, geyScanT=0, steamLift=false;
+const geyNear=[];
+function geyserPhase(G,t){ return (t+G.ph)%GEY_PERIOD; }
+function steamParticles(G,n,vy,spread){
+  for(let i=0;i<n;i++) particles.push({x:G.x+0.5+(Math.random()-.5)*spread, y:G.y+1.05, z:G.z+0.5+(Math.random()-.5)*spread,
+    vx:(Math.random()-.5)*1.2, vy:vy*(0.7+Math.random()*0.6), vz:(Math.random()-.5)*1.2, life:.6+Math.random()*.5, size:.12+Math.random()*.08,
+    u:(78%16)*TS+Math.random()*TS*.6, v:Math.floor(78/16)*TV+Math.random()*TV*.6, l:1.5});
+}
+function geyserLiftAt(G,e,isPlayer){                     // e 在喷口正上方的蒸汽柱里 → 顶起; 返回是否顶起
+  if(Math.abs(e.x-(G.x+0.5))>0.8 || Math.abs(e.z-(G.z+0.5))>0.8 || e.y<G.y+0.9 || e.y>G.y+11) return false;
+  e.vy=Math.max(e.vy, isPlayer?GEY_LIFT:18); e.onGround=false;
+  if(isPlayer){ steamLift=true; jumpPadGrace=false; }
+  return true;
+}
+function geyserStep(G,t,dt){                             // 单个喷口的一帧(自测可直接调用)
+  const p=geyserPhase(G,t), p0=geyserPhase(G,t-dt), d=Math.hypot(player.x-G.x-0.5,player.z-G.z-0.5);
+  if(p>=GEY_ERUPT && p<GEY_END){
+    if(d<48) steamParticles(G,4,10,0.6);
+    if(p0<GEY_ERUPT) sfxGeyser(d);
+    let n=geyserLiftAt(G,player,true)?1:0;
+    for(const m of mobs) if(!m.def.fly && !m.def.plane && geyserLiftAt(G,m,false)) n++;
+    return n;
+  }
+  if(p>=GEY_WARN && p<GEY_ERUPT){ if(d<48 && Math.random()<dt*20) particles.push({x:G.x+0.5+(Math.random()-.5)*.8, y:G.y+1.05, z:G.z+0.5+(Math.random()-.5)*.8, vx:0, vy:2+Math.random()*2, vz:0, life:.3, size:.07, u:15*TS+Math.random()*TS*.6, v:Math.random()*TV*.6, l:2.2}); if(p0<GEY_WARN && d<24) sfxGeyserRumble(d); }
+  else if(d<32 && Math.random()<dt*2.5) steamParticles(G,1,2.5,0.3);    // 平时的细烟
+  return 0;
+}
+function updateGeysers(dt){
+  geyClock+=dt;
+  geyScanT-=dt;
+  if(geyScanT<=0){                                       // 每秒重扫一次玩家附近 7×7 区块的喷口(确认方块还在, 被挖掉的不再喷)
+    geyScanT=1; geyNear.length=0;
+    const cx=Math.floor(player.x/CS), cz=Math.floor(player.z/CS);
+    for(let dx=-3;dx<=3;dx++) for(let dz=-3;dz<=3;dz++) for(const G of geyserSites(cx+dx,cz+dz)) if(getBlock(G.x,G.y,G.z)===GEYSER) geyNear.push(G);
+  }
+  for(const G of geyNear) geyserStep(G,geyClock,dt);
+}
+function sfxGeyser(dist){                                // 喷发: 由低到高的长嘶声
+  if(!actx2 || dist>40) return;
+  const t=actx2.currentTime, len=1.3;
+  const buf=actx2.createBuffer(1,actx2.sampleRate*len,actx2.sampleRate), d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++){ const f=i/d.length; d[i]=(Math.random()*2-1)*Math.min(1,f*8)*(1-f); }
+  const src=actx2.createBufferSource(); src.buffer=buf;
+  const fl=actx2.createBiquadFilter(); fl.type="lowpass"; fl.frequency.setValueAtTime(300,t); fl.frequency.exponentialRampToValueAtTime(2200,t+0.5);
+  const g=actx2.createGain(); g.gain.value=0.45*Math.max(0.08,1-dist/40);
+  src.connect(fl).connect(g).connect(actx2.destination); src.start(t);
+}
+function sfxGeyserRumble(dist){                          // 预警: 地下低鸣
+  if(!actx2) return;
+  const t=actx2.currentTime, o=actx2.createOscillator(), g=actx2.createGain();
+  o.type="sawtooth"; o.frequency.setValueAtTime(48,t); o.frequency.linearRampToValueAtTime(70,t+0.4);
+  const fl=actx2.createBiquadFilter(); fl.type="lowpass"; fl.frequency.value=160;
+  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.25*Math.max(0.1,1-dist/24),t+0.08); g.gain.exponentialRampToValueAtTime(0.0001,t+0.45);
+  o.connect(fl).connect(g).connect(actx2.destination); o.start(t); o.stop(t+0.5);
+}
+function fallDamage(drop){                               // 落地摔伤(从主循环抽出, 便于自测): 虹之碎片 -25%; 蒸汽托起后只剩 1/4
+  if(drop<=3.5 || (typeof mythicFallImmune==="function" && mythicFallImmune())) return 0;
+  return Math.floor(Math.min(15,Math.floor(drop-3))*trophyFallMul()*(steamLift?0.25:1));
+}
 function tickSunburn(dt){                              // 在 updateMobs 之后调用: AI 每帧先清 burning, 这里再点亮火色
   for(let i=mobs.length-1;i>=0;i--){
     const m=mobs[i];
@@ -10850,11 +10951,9 @@ function frame(now){
     else if(!player.onGround) fallStart = fallStart===null ? player.y : Math.max(fallStart,player.y);
     else if(fallStart!==null){
       const drop=fallStart-player.y;
-      if(drop>3.5 && !(typeof mythicFallImmune==="function" && mythicFallImmune())){
-        const fd=Math.floor(Math.min(15,Math.floor(drop-3))*trophyFallMul());   // 虹之碎片: 摔落伤害 -25%
-        if(fd>0) damagePlayer(fd,0,0);
-      }
-      fallStart=null;
+      const fd=fallDamage(drop);                   // 虹之碎片 -25% / 间歇泉蒸汽托起后 ×1/4
+      if(fd>0) damagePlayer(fd,0,0);
+      fallStart=null; steamLift=false;
     }
     if(player.flying && player.onGround) player.flying=false;
     if(player.y<-10){ player.y=H; player.vy=0; }
@@ -10979,6 +11078,7 @@ function frame(now){
     questTick(dt);
     updateNPC(dt);
     updateArch(dt);
+    updateGeysers(dt);
     updateTutorial(dt);
     updateArena(dt);
     updateCurse(dt);
@@ -13723,6 +13823,37 @@ function selftest(){
         setGfx(g0); RENDER=R0; perfDowngrades=pd0; fps=fps0; lowFpsStreak=0; pcx=1e9; refreshChunks();
         ok("自动降级: 连续低帧先降画质(极致→高→中), 到「中」后才缩渲染距离, 最多 5 次; 帧率回升则清零计数",
            order==="2/9 1/9 1/7 1/5" && stopped && reset, "序列="+steps.join(" ")+" 次数="+perfDowngrades+" reset="+reset);
+      }
+      // ---- 第九轮·本地: 地热间歇泉 ----
+      {
+        // 1) 生成: 找一个有喷口的火山/盐湖区块, 真实区块里喷口+一圈玄武岩/盐壳+上方留空
+        let site=null, scanned=0;
+        for(let r=0;r<120 && !site;r++) for(let a=-r;a<=r && !site;a++) for(const [cx,cz] of [[a,-r],[a,r],[-r,a],[r,a]]){ scanned++; const L=geyserSites(cx,cz); if(L.length){ site={cx,cz,G:L[0]}; break; } }
+        let gen=false, other=true;
+        if(site){ const G=site.G, arr=genChunk(site.cx,site.cz), at=(X,Y,Z)=>arr[((X-site.cx*CS)*CS+(Z-site.cz*CS))*H+Y];
+          const ring=G.bio===BIO_VOLCANO?BASALT:SALTCRUST;
+          gen=at(G.x,G.y,G.z)===GEYSER && [[1,0],[-1,0],[0,1],[0,-1]].every(([dx,dz])=>at(G.x+dx,G.y,G.z+dz)===ring) && at(G.x,G.y+1,G.z)===AIR;
+          for(let k=0;k<200;k++){ const cx=site.cx+300+k, cz=site.cz-50; const b=biomeAt(cx*CS+8,cz*CS+8); if(b!==BIO_VOLCANO && b!==BIO_SALTLAKE && geyserSites(cx,cz).length) other=false; }
+        }
+        ok("间歇泉: 地热喷口(120)只在黑沙火山/盐湖生成, 真实区块里喷口+一圈玄武岩或盐壳、上方留空; 其它群系没有",
+           !!site && gen && other && BLOCKS[GEYSER].t===300 && EMIT_LV[GEYSER]===7, "site="+(site?site.G.x+","+site.G.z+" bio="+site.G.bio:"none")+" 扫描区块="+scanned+" gen="+gen+" other="+other);
+      }
+      {
+        // 2) 喷发把人/怪顶起; 喷口外不顶; 蒸汽托起后摔伤 ×1/4
+        const S={x:player.x,y:player.y,z:player.z,vx:player.vx,vy:player.vy,vz:player.vz,og:player.onGround}, sl0=steamLift, mobsS=mobs.slice(); mobs.length=0;
+        const G={x:Math.floor(player.x)+40, y:150, z:Math.floor(player.z)+40, ph:0, bio:BIO_VOLCANO};
+        const tE=GEY_ERUPT+0.2;
+        Object.assign(player,{x:G.x+0.5,y:G.y+1,z:G.z+0.5,vx:0,vy:0,vz:0,onGround:true}); steamLift=false;
+        const m={type:"zombie",def:MOB_DEFS.zombie,x:G.x+0.6,y:G.y+1,z:G.z+0.4,vx:0,vy:0,vz:0,kbx:0,kbz:0,onGround:true,hp:20}; mobs.push(m);
+        const idle=geyserStep(G,1.0,0.016)===0 && player.vy===0;
+        const n=geyserStep(G,tE,0.016), lifted=n===2 && player.vy>=GEY_LIFT && m.vy>=18 && steamLift;
+        mobs.length=0; Object.assign(player,{x:G.x+2.5,vy:0}); const miss=geyserStep(G,tE,0.016)===0 && player.vy===0;
+        const md0=mythicState.done.slice(); mythicState.done=[];                    // 前面的自测可能集齐了「地中海」遗物(免摔伤), 这里临时排除
+        steamLift=true; const soft=fallDamage(10); steamLift=false; const hard=fallDamage(10); mythicState.done=md0;
+        const fall=hard>=4 && soft===Math.floor(hard/4) && fallDamage(3)===0;
+        mobs.length=0; for(const q of mobsS) mobs.push(q); Object.assign(player,{x:S.x,y:S.y,z:S.z,vx:S.vx,vy:S.vy,vz:S.vz,onGround:S.og}); steamLift=sl0;
+        ok("间歇泉: 平时不顶人; 喷发时站在喷口上的玩家与生物被蒸汽顶起, 旁边 2 格外不受影响; 蒸汽托起后落地摔伤只剩 1/4",
+           idle && lifted && miss && fall, "idle="+idle+" lifted="+lifted+" n="+n+" miss="+miss+" 摔伤 硬/软="+hard+"/"+soft);
       }
       { // 守墓石像被盯住时要有常驻提示, 否则玩家以为怪物卡死(用户报 bug: "僵尸突然不动了")
         const mobsP=mobs.slice(); mobs.length=0;
