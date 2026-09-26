@@ -432,6 +432,7 @@ const FURNACE=81, FURNACE_LIT=82;              // 第七轮·云端: 砂岩熔�
 // 地下密室(第六轮·本地, 图集 280-282): 卡之石——守墓石像的魂核, 打碎它, 与之相连的石像一起崩碎
 const KAHEART=74;
 const OSIRIS=75;
+const VAULT=121, VAULT_OPEN=122, OMEN_VAULT=123, OMEN_VAULT_OPEN=124;   // 试炼宝库/不祥宝库(第九轮·本地, 图集 301-305): 用试炼钥匙/不祥钥匙开一次
 const GEYSER=120;                             // 地热喷口(第九轮·本地, 图集 300): 黑沙火山/盐湖里周期喷发, 把人和怪顶上天
 const SLAB_SST=90, STAIR_N=91, STAIR_E=92, STAIR_S=93, STAIR_W=94, LAMPPOST=95, IRONPOST=96;
 // 更多材质(第七轮③·本地): 每种 = 半砖 + 四向楼梯[N,E,S,W]
@@ -515,7 +516,11 @@ const BLOCKS = {
   [FURNACE_LIT]:{name:"砂岩熔炉(燃烧中)", t:292,b:71, s:294},   // 第七轮·云端: 烧火时自动换成这块(自发光), 熄火换回
   [KAHEART]:{name:"卡之石",    t:282,b:282,s:282},   // 石像回廊尽头的魂核(自发光), 挖碎 → 连接的守墓石像全部崩碎
   [OSIRIS]: {name:"奥西里斯宝匣", t:284,b:71, s:283}, // 试炼完成前挖不开
-  [GEYSER]: {name:"地热喷口",   t:300,b:254,s:255},   // 顶面发光裂口, 侧面玄武岩; 挖下只得玄武岩
+  [GEYSER]: {name:"地热喷口",   t:300,b:254,s:255},
+  [VAULT]:  {name:"试炼宝库",   t:302,b:71, s:301},   // 右键用试炼钥匙开启
+  [VAULT_OPEN]:{name:"试炼宝库(已开)", t:302,b:71, s:303},
+  [OMEN_VAULT]:{name:"不祥宝库", t:302,b:71, s:304},  // 右键用不祥钥匙开启
+  [OMEN_VAULT_OPEN]:{name:"不祥宝库(已开)", t:302,b:71, s:305},   // 顶面发光裂口, 侧面玄武岩; 挖下只得玄武岩
   // 第七轮·本地: 方块形状系统(非整格, 形状见 SHAPES)
   [SLAB_SST]:{name:"砂岩半砖", t:71, b:71, s:71},
   [STAIR_N]: {name:"砂岩楼梯", t:71, b:71, s:71},
@@ -1230,6 +1235,8 @@ function drawStructure(s,put){
       for(let X=T.x0+2;X<=T.x1-2;X+=5){ put(X,T.fy+3,T.z0,LANTERN,true); put(X,T.fy+3,T.z1,LANTERN,true); }
       for(let Y=T.fy+1;Y<=T.fy+5;Y++) for(let Z=T.z0-1;Z<=T.z1+1;Z++) put(T.x0-1,Y,Z,HIERO,true);   // 共用墙: 两面都是经文(外壳会盖成素砂岩)
       put(T.chest[0],T.chest[1],T.chest[2],OSIRIS,true);
+      for(const [vx,vz] of T.vaults) put(vx,T.fy+1,vz,VAULT,true);               // 第九轮·本地: 北墙下两座试炼宝库
+      put(T.omen[0],T.fy+1,T.omen[1],OMEN_VAULT,true);                          // 南侧一座不祥宝库
       put(T.door[0],T.fy+1,T.door[1],AIR,true); put(T.door[0],T.fy+2,T.door[1],AIR,true); put(T.door[0],T.fy+3,T.door[1],GILDED,true);   // 回廊东墙开门
     }
     // --- 上层藏宝室(需要挖进去) ---
@@ -4011,6 +4018,20 @@ txPut(300,(x,y)=>{                                                        // 地
   if(r<5.5) return txMix([226,222,196],[168,160,130],(r-3.2)/2.3);        // 硫华结壳
   return txLerp(txPal("#1a1a1f #26262d #34343c"),txFbm(x,y,4,4,2,3001)*0.9+(txH(x,y,3002)-0.5)*0.1);
 });
+{ // 宝库(第九轮·本地): 301 试炼宝库侧(砂岩框 + 金色锁孔 + 发光钥匙槽) · 302 顶 · 303 已开(灰暗) · 304 不祥宝库侧(黑曜 + 绯红锁孔) · 305 不祥已开
+  const vault=(frame,body,glow,dim)=>(x,y)=>{
+    const e=Math.min(x,y,29-x,29-y), cx=x-14.5, cy=y-13.5;
+    if(e<3) return txMul(txLerp(frame,txFbm(x,y,3,3,2,3011)),e===0?0.7:1);
+    const hole=Math.hypot(cx,cy)<3.2 || (Math.abs(cx)<1.3 && cy>0 && cy<8);
+    if(hole) return dim?txMul(glow,0.35):txMix(glow,[255,255,230],Math.max(0,1-Math.hypot(cx,cy)/3));
+    if(e===3||e===4) return txMul(glow,dim?0.35:0.8);                    // 内圈发光饰线
+    return txMul(txLerp(body,txFbm(x,y,4,4,2,3012)*0.9),dim?0.62:1);
+  };
+  const SF=txPal("#8f7757 #b8a07a #dccaa8"), SB=txPal("#3a2f22 #4a3c2b #5a4a36"), OF=txPal("#141019 #221a2a #2e2438"), OB=txPal("#1c1622 #281e30 #33283c");
+  txPut(301,vault(SF,SB,[240,200,90],false)); txPut(303,vault(SF,SB,[240,200,90],true));
+  txPut(304,vault(OF,OB,[230,60,70],false));  txPut(305,vault(OF,OB,[230,60,70],true));
+  txPut(302,(x,y)=>{ const e=Math.min(x,y,29-x,29-y); return e<2?[120,100,70]:txMul(txLerp(SF,txFbm(x,y,3,3,2,3021)),(x+y)%6===0?0.85:1); });
+}
 let ATLAS_MIPS=0;                                                         // 手工 mip 级数(自测用: 512×1024 → 1×1 共 10 级)
 const atlasTex = gl.createTexture();
 gl.bindTexture(gl.TEXTURE_2D, atlasTex);
@@ -4111,7 +4132,7 @@ function cellSky(bx,bz,x,y,z){
 const EMIT_LV=new Uint8Array(256);                    // 光源等级
 EMIT_LV[LANTERN]=14; EMIT_LV[LAVA]=13; EMIT_LV[MAGMA]=11; EMIT_LV[NEON]=11; EMIT_LV[WINDOW]=11;
 EMIT_LV[CRYSTAL]=9; EMIT_LV[GLOWVEIN]=9; EMIT_LV[SALTCRYSTAL]=9; EMIT_LV[AMETHYST]=9;
-EMIT_LV[KAHEART]=10; EMIT_LV[GEYSER]=7; EMIT_LV[LAMPPOST]=13; EMIT_LV[FURNACE_LIT]=12;                                  // 第六轮·本地: 卡之石
+EMIT_LV[KAHEART]=10; EMIT_LV[GEYSER]=7; EMIT_LV[VAULT]=8; EMIT_LV[OMEN_VAULT]=8; EMIT_LV[LAMPPOST]=13; EMIT_LV[FURNACE_LIT]=12;                                  // 第六轮·本地: 卡之石
 const BL_OPQ=new Uint8Array(256);                     // 挡光(= OPAQUE)
 for(let i=0;i<256;i++) BL_OPQ[i]=OPAQUE(i)?1:0;
 const BL_R=13;                                        // 最远传播格数(14 级光源 13 格外还剩 1 级)
@@ -4925,7 +4946,8 @@ function renderCraft(){
   const g=document.getElementById("bagGrid"); if(!g) return;
   const items=[...bag.entries()].filter(([id,n])=>n>0 && BLOCKS[id]);
   items.sort((a,b)=>b[1]-a[1]);
-  const coreCell='<div class="bagCell" style="color:#ffd27a">⚡ 能量核心 <b>x'+cores+'</b></div>';
+  const coreCell='<div class="bagCell" style="color:#ffd27a">⚡ 能量核心 <b>x'+cores+'</b></div>'
+    +((vaultKeys.trial||vaultKeys.omen)?'<div class="bagCell" style="color:#f0d38a">🗝 试炼钥匙 <b>x'+vaultKeys.trial+'</b> · 不祥钥匙 <b>x'+vaultKeys.omen+'</b></div>':'');
   const bundleBtn=(typeof bundleState!=="undefined" && bundleState.owned)?'<div class="bagCell" id="openBundleBtn" style="cursor:pointer;color:#e8bb6a">👜 打开收纳袋 ('+storeTypes(bundleState.items)+'/'+BUNDLE_SLOTS+')</div>':'';   // 第六轮·云端
   g.innerHTML = coreCell + bundleBtn + (items.length
     ? items.map(([id,n])=>'<div class="bagCell">'+BLOCKS[id].name+' <b>x'+n+'</b></div>').join("")
@@ -6281,7 +6303,7 @@ newworldbtn.addEventListener("click",()=>{
   for(const [,c] of world) if(c.mesh) destroyMesh(c.mesh);
   world.clear(); meshQueue.length=0; queued.clear();
   mobs.length=0; arrows.length=0; drops.length=0; particles.length=0;
-  hp=maxHp=20; lvl=1; xp=0; armor=0; cores=0; kills=0; dayCount=1; dmgMul=1; dead=false; setSunblade(false); setMace(false); for(const k in enchState) enchState[k]=0;
+  hp=maxHp=20; lvl=1; xp=0; armor=0; cores=0; kills=0; dayCount=1; dmgMul=1; dead=false; setSunblade(false); setMace(false); for(const k in enchState) enchState[k]=0; vaultKeys.trial=0; vaultKeys.omen=0; vaultKeys.omenDay={};
   for(const k in potions) potions[k]=0; for(const k in potionFx) potionFx[k]=0;   // 第五轮·云端
   fishState.on=false; fishState.fish=0; fishState.caught=0;
   for(const k in chests) delete chests[k]; bundleState.owned=false; bundleState.items={};   // 第六轮·云端
@@ -6399,6 +6421,7 @@ function doBreak(){
   if(!hit || hit.id===BEDROCK) return;
   if(hit.id===TNT){ igniteTNT(hit.x,hit.y,hit.z); showName("嘶嘶嘶……快跑！"); return; }
   if(hit.id===SUSGRAVEL){ brushPoke(hit); return; }
+  if(hit.id===VAULT||hit.id===OMEN_VAULT||hit.id===VAULT_OPEN||hit.id===OMEN_VAULT_OPEN){ showName("🗝 宝库挖不动——对它按右键，用钥匙开启"); return; }   // 第九轮·本地
   if(hit.id===GEYSER){ spawnParticles(hit.x,hit.y,hit.z,BASALT); setBlock(hit.x,hit.y,hit.z,AIR); sfxBreak(); bagAdd(BASALT,1); showName("♨ 喷口被凿开，只剩一块玄武岩"); return; }   // 第九轮·本地
   if(hit.id===OSIRIS){ showName("🔒 奥西里斯宝匣被封印——在试炼厅撑过三波试炼，宝匣自会开启"); return; }   // 第六轮·本地   // 考古刷点: 按住慢慢刷(见 updateBrush), 不再一镐刨开
   const brokeId=hit.id;
@@ -6455,7 +6478,8 @@ function awakenPharaoh(bx,by,bz){
 }
 function doPlace(){
   { const h0=raycast(5.5, currentAim()); if(h0 && h0.id===CHEST){ openChest(h0.x,h0.y,h0.z); return; }   // 第六轮·云端: 右键储物箱 → 打开
-    if(h0 && (h0.id===FURNACE||h0.id===FURNACE_LIT)){ openFurnace(h0.x,h0.y,h0.z); return; } }   // 第七轮·云端: 右键熔炉 → 打开
+    if(h0 && (h0.id===FURNACE||h0.id===FURNACE_LIT)){ openFurnace(h0.x,h0.y,h0.z); return; }    // 第七轮·云端: 右键熔炉 → 打开
+    if(h0 && (h0.id===VAULT||h0.id===OMEN_VAULT||h0.id===VAULT_OPEN||h0.id===OMEN_VAULT_OPEN)){ useVaultBlock(h0.x,h0.y,h0.z); return; } }   // 第九轮·本地: 右键宝库 → 用钥匙开启
   swingT=0.3; triggerViewSwing();
   const it=HOTBAR_ITEMS[selSlot];
   if(typeof it==="string"){          // 手持物品而非方块
@@ -8595,25 +8619,60 @@ function sfxStoneGrind(dist){                           // 石像挪动: 低沉�
 function trialHall(s){
   const x=s.x, z=s.z, h=s.h;
   return {x0:x-3, x1:x+9, z0:z-11, z1:z-4, fy:h-9, door:[x-4,z-7], chest:[x+3,h-8,z-11],
-          spawns:[[x-1,z-9],[x+7,z-9],[x-1,z-6],[x+7,z-6]], key:"T"+x+","+z};
+          spawns:[[x-1,z-9],[x+7,z-9],[x-1,z-6],[x+7,z-6]], key:"T"+x+","+z,
+          vaults:[[x-1,z-11],[x+7,z-11]], omen:[x+3,z-4]};
 }
 const TRIAL_WAVES=[["mummy","scarab","scarab","mummy"],["serqet","mummy","scarab","serqet"],["anubis","mummy","serqet"]];
-const trialState={active:false, key:null, wave:0, alive:[], nextT:0, done:0, T:null};
+const trialState={active:false, key:null, wave:0, alive:[], nextT:0, done:0, T:null, omen:false, keysGiven:0};
+/* ---- 🗝 试炼钥匙 · 试炼宝库 / 不祥宝库 (第九轮·本地, 对标 Minecraft Tricky Trials 的试炼钥匙与宝库) ----
+   试炼每清一波掉 1 把试炼钥匙(一轮 3 把)。首次通关(宝匣已开)后, 试炼厅变成「不祥试炼」, 每个游戏日可挑战一次:
+   怪物血量 ×1.5 且全是精英, 第三波两只阿努比斯守卫; 每清一波掉 1 把不祥钥匙。
+   厅内北墙两座试炼宝库、南侧一座不祥宝库, 右键用对应钥匙开启, 每座只开一次(变暗, 随 blockDiff 存档)。
+   不祥宝库更丰厚, 另有 35% 给武器随机升一级附魔(接附魔祭坛)。 */
+const TRIAL_WAVES_OMEN=[["mummy","serqet","serqet","mummy"],["anubis","serqet","mummy","scarab"],["anubis","anubis","serqet"]];
+const vaultKeys={trial:0, omen:0, omenDay:{}};         // 钥匙数 + 每座试炼厅最近一次不祥试炼通关的游戏日
+function giveTrialKey(omen){
+  if(omen) vaultKeys.omen++; else vaultKeys.trial++;
+  sfxPickup && sfxPickup();
+  showName(omen?"🗝 获得 不祥钥匙（现有 "+vaultKeys.omen+"）— 去开南侧的不祥宝库":"🗝 获得 试炼钥匙（现有 "+vaultKeys.trial+"）— 右键北墙下的试炼宝库");
+}
+function omenReady(T){ return vaultKeys.omenDay[T.key]!==dayCount; }
+function useVaultBlock(x,y,z){                           // 右键宝库: 有钥匙就开, 返回获得的战利品描述或 null
+  const id=getBlock(x,y,z), omen=id===OMEN_VAULT;
+  if(id===VAULT_OPEN||id===OMEN_VAULT_OPEN){ showName("🔓 这座宝库已经开过了"); return null; }
+  if(id!==VAULT && id!==OMEN_VAULT) return null;
+  if(omen ? vaultKeys.omen<1 : vaultKeys.trial<1){ showName(omen?"🔒 需要不祥钥匙——首通后每天可挑战一次不祥试炼":"🔒 需要试炼钥匙——在试炼厅每清一波掉一把"); return null; }
+  if(omen) vaultKeys.omen--; else vaultKeys.trial--;
+  setBlock(x,y,z, omen?OMEN_VAULT_OPEN:VAULT_OPEN);
+  const R=(a,b)=>a+Math.floor(Math.random()*(b-a+1)), got=[];
+  const gold=omen?R(6,10):R(3,6), gem=omen?R(3,5):R(1,2), rel=omen?5:2, core=omen?3:1;
+  giveBlock(GOLD_ORE,gold); giveBlock(GEM_ORE,gem); npcState.relics+=rel; cores+=core; addXP(omen?60:25);
+  got.push("金x"+gold,"钻x"+gem,"文物x"+rel,"⚡核心x"+core);
+  if(omen && Math.random()<0.35){
+    const open=ENCH_DEFS.filter(D=>enchState[D.k]<D.max);
+    if(open.length){ const D=open[Math.floor(Math.random()*open.length)]; enchState[D.k]++; got.push("✨"+D.n+" "+ROMAN[enchState[D.k]]); }
+  }
+  for(let i=0;i<36;i++) particles.push({x:x+0.5,y:y+0.9,z:z+0.5, vx:(Math.random()-.5)*4, vy:2+Math.random()*4, vz:(Math.random()-.5)*4,
+    life:.6+Math.random()*.4, size:.09, u:15*TS+Math.random()*TS*.6, v:Math.random()*TV*.6, l:2.4});
+  sfxLevel && sfxLevel();
+  showName((omen?"🩸 不祥宝库":"🗝 试炼宝库")+"开启：" + got.join(" "));
+  return got;
+}
 function inTrialHall(T,margin){ const m=margin||0;
   return player.x>=T.x0-m && player.x<=T.x1+1+m && player.z>=T.z0-m && player.z<=T.z1+1+m && player.y>=T.fy-m && player.y<=T.fy+5+m; }
-function spawnTrialMob(type,x,y,z){
-  const def=MOB_DEFS[type], hp=def.boss?def.hp:Math.max(1,Math.round(def.hp*foeHpMul()));
+function spawnTrialMob(type,x,y,z,omen){
+  const def=MOB_DEFS[type], hp=Math.round((def.boss?def.hp:Math.max(1,Math.round(def.hp*foeHpMul())))*(omen?1.5:1));
   const m={type, def, x:x+0.5, y, z:z+0.5, vx:0,vy:0,vz:0, kbx:0,kbz:0, yaw:Math.random()*6.283, tgtYaw:0, hp, maxHp:hp,
     hurtT:0, animT:0, t:0, atkCd:1, burnT:0, swingT:0, groanT:2, fleeT:0, onGround:false, pause:false, burning:false,
-    held:def.weapon?heldFor(def.weapon,def.handP):null, trial:true};
+    held:def.weapon?heldFor(def.weapon,def.handP):null, trial:true, elite:!!omen&&!def.boss};
   mobs.push(m);
   for(let i=0;i<14;i++) particles.push({x:x+0.5+(Math.random()-.5), y:y+Math.random()*1.5, z:z+0.5+(Math.random()-.5), vx:0, vy:1.5+Math.random()*2, vz:0,
     life:.5, size:.09, u:15*TS+Math.random()*TS*.6, v:Math.random()*TV*.6, l:2.2});
   return m;
 }
-function startTrial(T){
-  Object.assign(trialState,{active:true, key:T.key, wave:0, alive:[], nextT:1.5, T});
-  showName("⚔ 奥西里斯试炼开始！撑过三波，宝匣自会开启（离开大厅则中断）");
+function startTrial(T,omen){
+  Object.assign(trialState,{active:true, key:T.key, wave:0, alive:[], nextT:1.5, T, omen:!!omen, keysGiven:0});
+  showName(omen?"🩸 不祥试炼开始！守卫更强，每清一波掉一把不祥钥匙（今天只此一次）":"⚔ 奥西里斯试炼开始！撑过三波，宝匣自会开启，每清一波掉一把试炼钥匙（离开大厅则中断）");
 }
 function abortTrial(msg){
   for(const m of trialState.alive){ const i=mobs.indexOf(m); if(i>=0){ deathPoof(m); mobs.splice(i,1); } }
@@ -8622,6 +8681,11 @@ function abortTrial(msg){
 }
 function completeTrial(T){
   trialState.active=false; trialState.done++;
+  if(trialState.omen){                                   // 不祥试炼: 不再有宝匣, 记下今天已通关
+    vaultKeys.omenDay[T.key]=dayCount; addXP(120); sfxLevel && sfxLevel();
+    showName("🩸 不祥试炼通关（+120 经验）！明天可以再来 · 现有不祥钥匙 "+vaultKeys.omen);
+    return;
+  }
   const [cx,cy,cz]=T.chest;
   if(getBlock(cx,cy,cz)===OSIRIS) setBlock(cx,cy,cz,AIR);
   for(let i=0;i<50;i++) particles.push({x:cx+0.5,y:cy+0.6,z:cz+0.5, vx:(Math.random()-.5)*6, vy:2+Math.random()*6, vz:(Math.random()-.5)*6,
@@ -8635,20 +8699,24 @@ function updateTrial(dt,Tover,insideOver){             // Tover/insideOver: 自�
   if(!T){ const s=nearStructure(["pyramid"],30); T=s?trialHall(s):null; }
   if(!trialState.active){
     const inside=insideOver!==undefined?insideOver:(T && inTrialHall(T));
-    if(T && inside && !dead && getBlock(T.chest[0],T.chest[1],T.chest[2])===OSIRIS) startTrial(T);
+    if(T && inside && !dead){
+      if(getBlock(T.chest[0],T.chest[1],T.chest[2])===OSIRIS) startTrial(T);
+      else if(omenReady(T)) startTrial(T,true);          // 首通后: 每个游戏日一次不祥试炼
+    }
     return;
   }
   const stay=insideOver!==undefined?insideOver:(T && T.key===trialState.key && inTrialHall(T,6));
   if(dead || !stay){ abortTrial(dead?"":"⚔ 离开了试炼厅——试炼中断，残余的守卫化作沙尘"); return; }
   trialState.alive=trialState.alive.filter(m=>m.hp>0 && mobs.includes(m));
   if(trialState.alive.length) return;
+  if(trialState.wave>trialState.keysGiven){ trialState.keysGiven++; giveTrialKey(trialState.omen); }   // 每清一波掉一把钥匙
   trialState.nextT-=dt; if(trialState.nextT>0) return;
-  const TT=trialState.T||T;
-  if(trialState.wave>=TRIAL_WAVES.length){ completeTrial(TT); return; }
-  const list=TRIAL_WAVES[trialState.wave++];
-  list.forEach((type,i)=>{ const [sx,sz]=TT.spawns[i%TT.spawns.length]; trialState.alive.push(spawnTrialMob(type,sx,TT.fy+1,sz)); });
+  const TT=trialState.T||T, WAVES=trialState.omen?TRIAL_WAVES_OMEN:TRIAL_WAVES;
+  if(trialState.wave>=WAVES.length){ completeTrial(TT); return; }
+  const list=WAVES[trialState.wave++];
+  list.forEach((type,i)=>{ const [sx,sz]=TT.spawns[i%TT.spawns.length]; trialState.alive.push(spawnTrialMob(type,sx,TT.fy+1,sz,trialState.omen)); });
   trialState.nextT=2.5;
-  showName("⚔ 试炼第 "+trialState.wave+"/"+TRIAL_WAVES.length+" 波"+(trialState.wave===TRIAL_WAVES.length?"：阿努比斯守卫亲临！":""));
+  showName((trialState.omen?"🩸 不祥试炼":"⚔ 试炼")+"第 "+trialState.wave+"/"+WAVES.length+" 波"+(trialState.wave===WAVES.length?"：阿努比斯守卫亲临！":""));
 }
 /* ---- ♨ 地热间歇泉 (第九轮·本地, 对标 Minecraft Chaos Cubed 的间歇泉) ----
    黑沙火山/枯骨盐湖的区块按哈希生成 1~3 个喷口(周围一圈玄武岩/盐壳)。每个喷口约 7 秒一轮:
@@ -11140,6 +11208,7 @@ function collectSave(){
     sunblade,                                    // 第五轮·本地: 拉之烈阳剑(老存档无此字段 → 铁剑)
     mace:maceOwned,                              // 第五轮·本地: 塞特之锤(老存档无此字段 → 没有)
     ench:Object.assign({},enchState),            // 第五轮·本地: 附魔词条(老存档无此字段 → 全 0)
+    trialVault:{trial:vaultKeys.trial, omen:vaultKeys.omen, omenDay:vaultKeys.omenDay},   // 第九轮·本地: 试炼/不祥钥匙 + 各厅不祥试炼通关日
     potions:Object.assign({},potions),           // 第五轮·云端: 药水库存(老存档无此字段 → 全 0; 生效中的效果不存档)
     fish:{ n:fishState.fish, caught:fishState.caught, cooked:fishState.cooked|0 },   // 第五轮·云端: 钓鱼(老存档无此字段 → 0); 第七轮·云端: 烤鱼
     chests:JSON.parse(JSON.stringify(chests)), bundle:{ owned:bundleState.owned, items:Object.assign({},bundleState.items) },   // 第六轮·云端: 储物箱/收纳袋(老存档无 → 空)
@@ -11232,6 +11301,7 @@ function loadGame(){
   setSunblade(!!s.sunblade);
   setMace(!!s.mace);
   for(const D of ENCH_DEFS) enchState[D.k]=Math.max(0,Math.min(D.max,(s.ench&&s.ench[D.k])|0));
+  { const V=s.trialVault||{}; vaultKeys.trial=Math.max(0,V.trial|0); vaultKeys.omen=Math.max(0,V.omen|0); vaultKeys.omenDay=(V.omenDay&&typeof V.omenDay==="object")?V.omenDay:{}; }
   for(const P of POTIONS){ potions[P.k]=Math.max(0,(s.potions&&s.potions[P.k])|0); if(P.k in potionFx) potionFx[P.k]=0; }   // 第五轮·云端: 老存档无 potions → 全 0
   fishState.on=false; fishState.fish=Math.max(0,(s.fish&&s.fish.n)|0); fishState.caught=Math.max(0,(s.fish&&s.fish.caught)|0);   // 第五轮·云端
   for(const k in chests) delete chests[k];                                                              // 第六轮·云端: 储物箱/收纳袋
@@ -13668,7 +13738,8 @@ function selftest(){
           const cache=new Map(), at=(X,Y,Z)=>{ const cx=Math.floor(X/CS), cz=Math.floor(Z/CS), k=cx+","+cz;
             if(!cache.has(k)) cache.set(k,genChunk(cx,cz)); return cache.get(k)[((X-cx*CS)*CS+(Z-cz*CS))*H+Y]; };
           const {x,z,h}=pyr, T=trialHall(pyr), G=tombGallery(pyr);
-          let hall=true; for(let X=T.x0;X<=T.x1;X++) for(let Z=T.z0;Z<=T.z1;Z++){ if(X===T.chest[0]&&Z===T.chest[2]) continue; if(!SOLID(at(X,T.fy,Z)) || at(X,T.fy+1,Z)!==AIR || at(X,T.fy+2,Z)!==AIR || at(X,T.fy+4,Z)!==AIR) hall=false; }
+          const skip=[[T.chest[0],T.chest[2]],...T.vaults,T.omen];               // 宝匣与三座宝库(第九轮②)占着的格子
+          let hall=true; for(let X=T.x0;X<=T.x1;X++) for(let Z=T.z0;Z<=T.z1;Z++){ if(skip.some(q=>q[0]===X&&q[1]===Z)) continue; if(!SOLID(at(X,T.fy,Z)) || at(X,T.fy+1,Z)!==AIR || at(X,T.fy+2,Z)!==AIR || at(X,T.fy+4,Z)!==AIR) hall=false; }
           const door=at(T.door[0],T.fy+1,T.door[1])===AIR && at(T.door[0],T.fy+2,T.door[1])===AIR && at(T.door[0]-1,T.fy+1,T.door[1])===AIR;
           const wallBoth=at(T.x0-1,T.fy+3,T.z0+2)===HIERO && at(G.x1+1,G.fy+5,T.z0+2)===HIERO;
           let pitOk=true; for(let dz=9;dz<=10;dz++) if(at(x,h-3,z-dz)===AIR && at(x,h-4,z-dz)!==STARCEIL) pitOk=false;   // 塌陷坑底下是试炼厅顶, 没被打穿
@@ -13854,6 +13925,50 @@ function selftest(){
         mobs.length=0; for(const q of mobsS) mobs.push(q); Object.assign(player,{x:S.x,y:S.y,z:S.z,vx:S.vx,vy:S.vy,vz:S.vz,onGround:S.og}); steamLift=sl0;
         ok("间歇泉: 平时不顶人; 喷发时站在喷口上的玩家与生物被蒸汽顶起, 旁边 2 格外不受影响; 蒸汽托起后落地摔伤只剩 1/4",
            idle && lifted && miss && fall, "idle="+idle+" lifted="+lifted+" n="+n+" miss="+miss+" 摔伤 硬/软="+hard+"/"+soft);
+      }
+      // ---- 第九轮②·本地: 试炼钥匙 + 试炼宝库 / 不祥宝库 ----
+      {
+        let pyr=null; for(let sx=-40;sx<=40&&!pyr;sx++) for(let sz=-40;sz<=40&&!pyr;sz++){ const s2=structureAt(sx,sz); if(s2&&s2.type==="pyramid"&&s2.h>=14) pyr=s2; }
+        let genOK=false;
+        if(pyr){ const T=trialHall(pyr), cache=new Map(), at=(X,Y,Z)=>{ const cx=Math.floor(X/CS), cz=Math.floor(Z/CS), k=cx+","+cz; if(!cache.has(k)) cache.set(k,genChunk(cx,cz)); return cache.get(k)[((X-cx*CS)*CS+(Z-cz*CS))*H+Y]; };
+          genOK=T.vaults.every(([vx,vz])=>at(vx,T.fy+1,vz)===VAULT) && at(T.omen[0],T.fy+1,T.omen[1])===OMEN_VAULT; }
+        ok("宝库生成: 试炼厅北墙下两座试炼宝库、南侧一座不祥宝库(121/123, 自发光)", genOK && EMIT_LV[VAULT]===8 && BLOCKS[OMEN_VAULT].s===304, "pyr="+(pyr?pyr.x+","+pyr.z:"none"));
+      }
+      {
+        const VK=JSON.stringify(vaultKeys), mobsS=mobs.slice(), bagS=new Map(bag), relS=npcState.relics, coreS=cores, st={xp,lvl,maxHp,dmgMul,hp}, eS=Object.assign({},enchState), akS=arenaState.keys, dS=trialState.done, dayS=dayCount;
+        vaultKeys.trial=0; vaultKeys.omen=0; vaultKeys.omenDay={}; mobs.length=0;
+        const cx=Math.floor(player.x)+2, cz=Math.floor(player.z)+2; let cy=H-4; while(cy>0 && getBlock(cx,cy,cz)!==AIR) cy--;
+        const T={x0:0,x1:0,z0:0,z1:0,fy:cy-1, chest:[cx,cy,cz], spawns:[[cx+3,cz],[cx-3,cz]], key:"Tvault", vaults:[], omen:[0,0]};
+        const run=()=>{ const w=[]; let g=0; while(trialState.active && g++<40){ updateTrial(3,T,true); if(trialState.alive.length){ w.push(trialState.alive.map(m=>m.type+(m.elite?"*":"")).join("+")); for(const m of trialState.alive) m.hp=0; } } return w; };
+        // 普通试炼: 每清一波一把试炼钥匙
+        setBlock(cx,cy,cz,OSIRIS); trialState.active=false; updateTrial(0.1,T,true); const w1=run();
+        const normal=w1.length===3 && vaultKeys.trial===3 && vaultKeys.omen===0 && getBlock(cx,cy,cz)===AIR;
+        // 首通后: 不祥试炼(每日一次), 精英 + 血量 ×1.5, 每清一波一把不祥钥匙
+        updateTrial(0.1,T,true); const omenStart=trialState.active && trialState.omen;
+        updateTrial(3,T,true); const hpOK=trialState.alive.length>0 && trialState.alive.every(m=>m.hp>=Math.round(m.def.hp*1.5)-1 || m.def.boss);
+        for(const m of trialState.alive) m.hp=0;
+        const w2=run();
+        const omen=omenStart && hpOK && vaultKeys.omen===3 && vaultKeys.omenDay.Tvault===dayCount && w2.length===2 && w2[1].split("+").filter(t=>t.startsWith("anubis")).length===2;
+        updateTrial(0.1,T,true); const sameDay=!trialState.active;
+        dayCount++; updateTrial(0.1,T,true); const nextDay=trialState.active && trialState.omen; abortTrial(); dayCount=dayS;
+        ok("试炼钥匙: 普通试炼每清一波掉 1 把(共 3); 首通后每个游戏日可打一次不祥试炼(精英、血 ×1.5、末波双阿努比斯), 每波掉 1 把不祥钥匙; 同日不能重打、次日可以",
+           normal && omen && sameDay && nextDay, "normal="+normal+" waves="+w1.join(" | ")+" omen="+omen+" 不祥波="+w2.join(" | ")+" sameDay="+sameDay+" nextDay="+nextDay);
+        // 宝库开启规则
+        setBlock(cx,cy,cz,VAULT); vaultKeys.trial=0; vaultKeys.omen=0;
+        const noKey=useVaultBlock(cx,cy,cz)===null && getBlock(cx,cy,cz)===VAULT;
+        vaultKeys.trial=1; const g0=bagCount(GOLD_ORE), got=useVaultBlock(cx,cy,cz);
+        const opened=!!got && getBlock(cx,cy,cz)===VAULT_OPEN && vaultKeys.trial===0 && bagCount(GOLD_ORE)>=g0+3 && useVaultBlock(cx,cy,cz)===null;
+        setBlock(cx,cy,cz,OMEN_VAULT); vaultKeys.trial=2;
+        const wrongKey=useVaultBlock(cx,cy,cz)===null && vaultKeys.trial===2;
+        vaultKeys.omen=1; const got2=useVaultBlock(cx,cy,cz); const omenOpen=!!got2 && getBlock(cx,cy,cz)===OMEN_VAULT_OPEN && vaultKeys.omen===0;
+        vaultKeys.trial=4; vaultKeys.omen=2; vaultKeys.omenDay={T1:7};
+        const sv=collectSave().trialVault, saved=sv.trial===4 && sv.omen===2 && sv.omenDay.T1===7;
+        setBlock(cx,cy,cz,AIR);
+        mobs.length=0; for(const q of mobsS) mobs.push(q); bag.clear(); for(const [k,v] of bagS) bag.set(k,v); npcState.relics=relS; cores=coreS;
+        xp=st.xp; lvl=st.lvl; maxHp=st.maxHp; dmgMul=st.dmgMul; hp=st.hp; Object.assign(enchState,eS); arenaState.keys=akS; trialState.done=dS;
+        Object.assign(vaultKeys, JSON.parse(VK)); updateHearts(); updateXPHUD();
+        ok("宝库: 没钥匙打不开; 试炼钥匙开试炼宝库(变暗、只开一次、给金钻文物核心); 不祥宝库只认不祥钥匙; 钥匙与通关日进存档",
+           noKey && opened && wrongKey && omenOpen && saved, "noKey="+noKey+" opened="+opened+" got="+(got||[]).join(",")+" wrongKey="+wrongKey+" omenOpen="+omenOpen+" 不祥="+(got2||[]).join(",")+" saved="+saved);
       }
       { // 守墓石像被盯住时要有常驻提示, 否则玩家以为怪物卡死(用户报 bug: "僵尸突然不动了")
         const mobsP=mobs.slice(); mobs.length=0;
