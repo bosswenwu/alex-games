@@ -30,12 +30,12 @@
     x_scythe: {
       stats: {
         name: "蚀影镰",
-        damage: 9,
-        cooldown: 300,
-        speed: 330,
+        damage: 12,
+        cooldown: 260,
+        speed: 370,
         color: 0x8ce0c8,
         size: 9,
-        pierce: 2,
+        pierce: 3,
       },
       tag: "近身扇形 · 连击越高扇面越宽",
       lore: "刃身没有反光，因为它连光一起吃掉了。",
@@ -48,12 +48,12 @@
     x_railcore: {
       stats: {
         name: "星髓炮",
-        damage: 22,
+        damage: 28,
         cooldown: 999999, // 关闭主包自动开火，改由蓄力逻辑驱动
-        speed: 780,
+        speed: 820,
         color: 0xffd27a,
         size: 12,
-        pierce: 4,
+        pierce: 5,
       },
       tag: "蓄力贯穿 · 满蓄力过载",
       lore: "把一颗死去的星星压进枪管，它还在挣扎。",
@@ -62,9 +62,9 @@
     x_revenant: {
       stats: {
         name: "溯洄弦",
-        damage: 11,
-        cooldown: 300,
-        speed: 540,
+        damage: 14,
+        cooldown: 280,
+        speed: 590,
         color: 0xc79bff,
         size: 7,
       },
@@ -79,9 +79,64 @@
     return !!WEAPONS[id];
   };
 
+  var RELICS = {
+    blood_oath: {
+      entry: {
+        id: "blood_oath",
+        name: "血誓棱片",
+        desc: "生命上限 +2，伤害 ×1.2；生命不超过 2 时再获得 ×1.25 伤害。",
+        rarity: "rare",
+        color: 0xd65f78,
+      },
+    },
+    echo_prism: {
+      entry: {
+        id: "echo_prism",
+        name: "回响棱镜",
+        desc: "射速 ×1.12；每击杀 8 名敌人获得 1 枚金币和 1 点灵魂。",
+        rarity: "rare",
+        color: 0x78cfe1,
+      },
+    },
+    ember_ward: {
+      entry: {
+        id: "ember_ward",
+        name: "余烬护符",
+        desc: "移速 ×1.12；受伤时释放余烬冲击波，冷却 2.5 秒。",
+        rarity: "legendary",
+        color: 0xf0a15d,
+      },
+    },
+  };
+
   // 武器价目：基础武器便宜，深层武器贵
   function weaponPrice(id) {
     return MY_WEAPON(id) ? 16 : 10;
+  }
+
+  function hasRelic(id) {
+    var s = st();
+    return !!(s && s.relics && s.relics.includes(id));
+  }
+
+  function applyDeepRelic(g, id) {
+    var s = st();
+    if (!s) return;
+    s.__deepRelicsApplied = s.__deepRelicsApplied || {};
+    if (s.__deepRelicsApplied[id]) return;
+    s.__deepRelicsApplied[id] = true;
+    if (id === "blood_oath") {
+      s.maxHp += 2;
+      s.hp = s.maxHp;
+      s.damageMult *= 1.2;
+      s.__bloodOathLow = false;
+    } else if (id === "echo_prism") {
+      s.fireMult *= 1.12;
+      g.__deepEchoKills = 0;
+    } else if (id === "ember_ward") {
+      s.speedMult *= 1.12;
+      g.__emberWardReadyAt = 0;
+    }
   }
 
   // --- 生成一发子弹并给它打标记 ---------------------------------------------
@@ -89,6 +144,27 @@
   // 于是「最后一个」经常是上一发还活着的子弹，新子弹反而没被标记
   //（实测表现为溯洄弦只生成 1 发折返弹而不是 2 发）。
   // 用「生成前后的活跃集合求差」才是可靠的。
+  function emitBulletTrail(g, bullet, color) {
+    if (!g || !bullet || !bullet.active) return;
+    var trail = g.add.graphics();
+    trail.setDepth(12);
+    trail.lineStyle(2.4, color, 0.8);
+    trail.beginPath();
+    trail.moveTo(bullet.x, bullet.y);
+    var x2 = bullet.x - Math.cos(bullet.rotation || 0) * 18;
+    var y2 = bullet.y - Math.sin(bullet.rotation || 0) * 18;
+    trail.lineTo(x2, y2);
+    trail.strokePath();
+    g.tweens.add({
+      targets: trail,
+      alpha: 0,
+      duration: 130,
+      onComplete: function () {
+        trail.destroy();
+      },
+    });
+  }
+
   function spawnMarked(g, ang, def, mark) {
     var before = new Set(g.shots.getChildren().filter(function (b) {
       return b.active;
@@ -97,7 +173,12 @@
     var made = g.shots.getChildren().filter(function (b) {
       return b.active && !before.has(b);
     });
-    made.forEach(mark);
+    made.forEach(function (b) {
+      mark(b);
+      if (b && b.__deepTrailColor) {
+        emitBulletTrail(g, b, b.__deepTrailColor);
+      }
+    });
     return made[0] || null;
   }
 
@@ -106,13 +187,14 @@
     var s = st();
     var def = D.tables.weapons.x_scythe;
     // 与连击评级咬合：连击越高，扇面从 3 发扩到 7 发
-    var n = g.combo >= 20 ? 7 : g.combo >= 8 ? 5 : 3;
-    var spread = 0.5;
+    var n = g.combo >= 24 ? 8 : g.combo >= 10 ? 6 : 4;
+    var spread = 0.62;
     for (var i = 0; i < n; i++) {
       var a = ang + (i - (n - 1) / 2) * spread * (2 / (n - 1 || 1));
       spawnMarked(g, a, def, function (b) {
         b.__deepRange = WEAPONS.x_scythe.range;
-        b.__deepKnock = 210;
+        b.__deepKnock = 220;
+        b.__deepTrailColor = def.color;
       });
     }
     // 近身武器需要一点「挥砍」的形，画一道弧
@@ -143,15 +225,16 @@
     // 临时 def：绝不能改表里的对象，那是跨局共用的
     var def = {
       name: base.name,
-      damage: 14 + 42 * t,
+      damage: 18 + 50 * t,
       cooldown: base.cooldown,
-      speed: 520 + 340 * t,
+      speed: 560 + 360 * t,
       color: full ? 0xfff2c4 : base.color,
-      size: 7 + 9 * t,
-      pierce: Math.round(1 + 5 * t),
+      size: 8 + 10 * t,
+      pierce: Math.round(2 + 5 * t),
     };
     spawnMarked(g, ang, def, function (b) {
       b.__deepRail = t;
+      b.__deepTrailColor = def.color;
       b.setScale(def.size / 7);
       if (full) b.__deepOverload = true;
     });
@@ -173,6 +256,7 @@
       spawnMarked(g, ang + o, def, function (b) {
         b.__deepReturn = { turnAt: now + WEAPONS.x_revenant.returnAt, phase: "out" };
         b.__deepSoul = true;
+        b.__deepTrailColor = def.color;
       });
     });
     g.fx.muzzle(g.player.x, g.player.y, ang, def.color);
@@ -632,6 +716,9 @@
     Object.keys(WEAPONS).forEach(function (id) {
       api.registerWeapon(id, WEAPONS[id]);
     });
+    Object.keys(RELICS).forEach(function (id) {
+      api.registerRelic(RELICS[id]);
+    });
     api.registerRoom(FORGE_TYPE, { meta: { name: "熔渊锻炉", icon: "⚒", locked: false } });
 
     // --- 开火接管 ---
@@ -667,6 +754,41 @@
         var s = st();
         if (s) s.soul = Math.min(100, s.soul + 1);
       }
+    });
+
+    // --- 深层遗物效果 ---
+    kit.wrap(P, "applyRelic", function (args) {
+      var id = args[0] && args[0].id;
+      if (RELICS[id]) applyDeepRelic(this, id);
+    });
+
+    kit.wrap(P, "damagePlayer", function () {
+      var s = st();
+      if (!s) return;
+      if (hasRelic("blood_oath") && s.hp <= 2 && !s.__bloodOathLow) {
+        s.__bloodOathLow = true;
+        s.damageMult *= 1.25;
+        this.fx.statusText(this.player.x, this.player.y - 44, "血誓觉醒", "#ff9aad", 15);
+      }
+      if (hasRelic("ember_ward") && this.time.now >= (this.__emberWardReadyAt || 0)) {
+        this.__emberWardReadyAt = this.time.now + 2500;
+        kit.shockwave(this, this.player.x, this.player.y, 0xf0a15d, 92);
+        this.fx.statusText(this.player.x, this.player.y - 28, "余烬反击", "#ffd09a", 14);
+      }
+    });
+
+    kit.wrap(P, "killEnemy", function (args) {
+      if (!hasRelic("echo_prism")) return;
+      this.__deepEchoKills = (this.__deepEchoKills || 0) + 1;
+      if (this.__deepEchoKills < 8) return;
+      this.__deepEchoKills = 0;
+      var s = st();
+      if (!s) return;
+      s.coins += 1;
+      s.soul = Math.min(100, s.soul + 1);
+      this.fx.statusText(this.player.x, this.player.y - 42, "回响 +◉ +灵魂", "#a7efff", 14);
+      this.fx.particle(this.player.x, this.player.y, 0x78cfe1, { count: 8, speed: 80, life: 260, size: 3 });
+      this.updateHud();
     });
 
     // --- 楼层生成后处理：塞进锻炉 ---
@@ -716,6 +838,12 @@
         var s = base();
         var cur = st();
         s.deep = "deep-3.0";
+        s.deepRelics = cur && cur.relics
+          ? cur.relics.filter(function (id) {
+              return !!RELICS[id];
+            })
+          : [];
+        s.echoKills = g.__deepEchoKills || 0;
         s.deepWeapon = cur ? cur.weapon : null;
         s.deepWeaponIsNew = cur ? MY_WEAPON(cur.weapon) : false;
         s.railCharge = g.__rail ? Math.round(g.__rail.charge) : 0;
@@ -732,11 +860,20 @@
 
   window.__deepDebug = {
     weapons: WEAPONS,
+    relics: RELICS,
     give: function (id) {
       var s = st();
       if (!s || !D.tables.weapons[id]) return false;
       s.weapon = id;
       D.scene().updateHud();
+      return true;
+    },
+    giveRelic: function (id) {
+      var g = D.scene();
+      var def = RELICS[id];
+      if (!g || !def || !g.applyRelic) return false;
+      g.applyRelic(def.entry);
+      g.updateHud();
       return true;
     },
     forgeHere: function () {

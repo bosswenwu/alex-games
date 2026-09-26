@@ -174,8 +174,10 @@
   function buildAmbience(scene) {
     var cam = scene.cameras.main;
     var vignette = scene.add.graphics().setDepth(46).setScrollFactor(0);
+    var scanlines = scene.add.graphics().setDepth(47).setScrollFactor(0);
     vignette.__tone = 0x000000;
     scene.__vignette = vignette;
+    scene.__scanlines = scanlines;
 
     var motes = [];
     for (var i = 0; i < 26; i++) {
@@ -207,6 +209,13 @@
         vignette.fillRect(0, 0, inset, H);
         vignette.fillRect(W - inset, 0, inset, H);
       }
+      scanlines.setAlpha(pulse);
+    }
+
+    scanlines.clear();
+    for (var y = 0; y < H; y += 4) {
+      scanlines.fillStyle(0xffffff, y % 8 === 0 ? 0.018 : 0.01);
+      scanlines.fillRect(0, y, W, 1.2);
     }
 
     var tick = 0;
@@ -280,7 +289,18 @@
       .setScrollFactor(0);
     var barBg = scene.add.rectangle(28, 170, 180, 6, 0x231a1a, 0.94).setOrigin(0, 0.5).setDepth(52).setScrollFactor(0);
     var bar = scene.add.rectangle(28, 170, 0, 4, 0xc9603f, 1).setOrigin(0, 0.5).setDepth(52).setScrollFactor(0);
+
+    var comboLabel = scene.add
+      .text(28, 196, "连击 x0", {
+        fontSize: "12px",
+        color: "#a7e7b3",
+      })
+      .setDepth(52)
+      .setScrollFactor(0);
+    var comboBg = scene.add.rectangle(28, 216, 140, 6, 0x1b261e, 0.94).setOrigin(0, 0.5).setDepth(52).setScrollFactor(0);
+    var comboBar = scene.add.rectangle(28, 216, 0, 4, 0x8fe5a9, 1).setOrigin(0, 0.5).setDepth(52).setScrollFactor(0);
     scene.__pressure = { text: pressure, bg: barBg, bar: bar };
+    scene.__combo = { text: comboLabel, bg: comboBg, bar: comboBar };
 
     scene.time.delayedCall(9000, function () {
       if (scene.__hint && scene.__hintVisible) {
@@ -304,14 +324,21 @@
 
   function refreshInfoLayer(scene) {
     var p = scene.__pressure;
+    var c = scene.__combo;
     // 场景重启/关闭途中 updateHud 仍可能被调用，此时文本对象已销毁
-    if (!p || !scene.sys || !scene.sys.isActive()) return;
-    if (!p.text.scene || !p.bar.scene) return;
+    if (!p || !c || !scene.sys || !scene.sys.isActive()) return;
+    if (!p.text.scene || !p.bar.scene || !c.text.scene || !c.bar.scene) return;
     var st = state();
     var info = pressureLevel(st, scene);
     p.text.setText("⚠ 深渊压迫 Lv." + info.level);
     p.bar.width = 180 * info.ratio;
     p.bar.setFillStyle(info.ratio > 0.72 ? 0xe0553f : info.ratio > 0.4 ? 0xd08a45 : 0x8f9d6b);
+
+    var comboValue = scene.combo || 0;
+    var comboRatio = Math.min(1, comboValue / 30);
+    c.text.setText("连击 x" + comboValue);
+    c.bar.width = 140 * comboRatio;
+    c.bar.setFillStyle(comboValue >= 20 ? 0xe9d66f : comboValue >= 10 ? 0x9fe8b7 : 0x8fe5a9);
     if (scene.__hint && scene.__hintVisible) scene.__hint.setDepth(52);
   }
 
