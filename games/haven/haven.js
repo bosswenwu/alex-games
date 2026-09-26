@@ -821,6 +821,45 @@
     }
   }
 
+  function oasisAtChunk(cx, cz) {
+    const coreKey = cx + "," + cz;
+    if (["0,0","0,-1","-1,0","1,-1","0,1","1,0"].includes(coreKey)) return null;
+    if (hash2(cx, cz, G.seed + 218) <= 0.94) return null;
+    const x = cx * 16 + 8, z = cz * 16 + 8, y = heightAt(x, z);
+    if (y <= SEA + 1 || y >= 52) return null;
+    for (let dx = -4; dx <= 4; dx += 4) for (let dz = -4; dz <= 4; dz += 4) {
+      if (biomeAt(x + dx, z + dz) !== "desert" || Math.abs(heightAt(x + dx, z + dz) - y) > 1)
+        return null;
+    }
+    const roadX = Math.abs((((x + 48) % 96) + 96) % 96 - 48) < 3;
+    const roadZ = Math.abs((((z + 48) % 96) + 96) % 96 - 48) < 3;
+    if (roadX || roadZ) return null;
+    return { cx, cz, x, z, y };
+  }
+
+  function putOasis(blocks, site) {
+    const { cx, cz, y } = site;
+    for (let dx = -3; dx <= 3; dx++) for (let dz = -3; dz <= 3; dz++) {
+      const d2 = dx * dx + dz * dz;
+      if (d2 > 12) continue;
+      const x = 8 + dx, z = 8 + dz;
+      blocks[cidx(x, y, z)] = d2 <= 6 ? WATER : SANDSTONE;
+      blocks[cidx(x, y + 1, z)] = AIR;
+    }
+    for (const [x, z] of [[3, 4], [12, 4], [3, 12], [12, 12]]) {
+      const ground = heightAt(cx * 16 + x, cz * 16 + z);
+      for (let dy = 1; dy <= 5; dy++) blocks[cidx(x, ground + dy, z)] = OAK_LOG;
+      for (const [dx, dz] of [[0,0],[1,0],[-1,0],[0,1],[0,-1],[2,0],[-2,0],[0,2],[0,-2],[1,1],[1,-1],[-1,1],[-1,-1]])
+        blocks[cidx(x + dx, ground + 6, z + dz)] = OAK_LEAVES;
+      for (const [dx, dz] of [[0,0],[1,0],[-1,0],[0,1],[0,-1]])
+        blocks[cidx(x + dx, ground + 7, z + dz)] = OAK_LEAVES;
+    }
+    for (const [x, z] of [[8, 4], [4, 8], [12, 8], [8, 12]]) {
+      const ground = heightAt(cx * 16 + x, cz * 16 + z);
+      blocks[cidx(x, ground + 1, z)] = TALLGRASS;
+    }
+  }
+
   function putHouse(blocks, ox, oz, floorY) {
     for (let x = 0; x < 6; x++) for (let z = 0; z < 6; z++) {
       blocks[cidx(ox + x, floorY, oz + z)] = PLANKS;
@@ -1066,7 +1105,8 @@
     }
     const landmark = hash2(cx, cz, s + 200);
     const isCapital = ["0,0","0,-1","-1,0","1,-1","0,1","1,0"].includes(coreKey);
-    if (!isCapital && landmark > 0.955) {
+    const oasis = oasisAtChunk(cx, cz);
+    if (!isCapital && !oasis && landmark > 0.955) {
       const wx = cx * 16 + 8, wz = cz * 16 + 8;
       const h = heightAt(wx, wz);
       const bio = biomeAt(wx, wz);
@@ -1088,6 +1128,7 @@
         else putRomanArch(blocks, h);
       }
     }
+    if (oasis) putOasis(blocks, oasis);
     // apply diffs
     const ch = { cx, cz, blocks, mesh: null, water: null, plants: null };
     for (const [k, id] of G.diffs) {
@@ -3727,7 +3768,9 @@
       P.x>=16&&P.x<32&&P.z>=-16&&P.z<0 ? "朱庇特神庙" :
       P.x>=0&&P.x<16&&P.z>=16&&P.z<32 ? "帕拉蒂尼宅邸" :
       P.x>=0&&P.x<16&&P.z>=0&&P.z<16 ? "第十军团营地" : null;
-    $("world-biome").textContent = zone || BIOME_NAMES[bio] || bio;
+    const oasis = oasisAtChunk(w2c(wf(P.x)), w2c(wf(P.z)));
+    const atOasis = oasis && Math.hypot(P.x - oasis.x - 0.5, P.z - oasis.z - 0.5) <= 7.5;
+    $("world-biome").textContent = zone || (atOasis ? "古泉绿洲" : BIOME_NAMES[bio] || bio);
     $("world-discovery").textContent = "探索 " + Math.min(discoveries.size, BIOME_GOAL) + " / " + BIOME_GOAL;
     $("world-relic").textContent = "第纳里乌斯 " + inv.reduce((n, s) => n + (s && s.key === "denarius" ? s.n : 0), 0);
     const sea = season();
@@ -6052,6 +6095,17 @@
       let riverHits = 0;
       for (let i = 0; i < 80; i++) if (riverInf(i * 3, 10) > 0.5) riverHits++;
       ok("rivers exist on seed 42", riverHits > 0, "hits=" + riverHits);
+      let oasisSite = null;
+      for (let cz = -64; cz <= 64 && !oasisSite; cz++) for (let cx = -64; cx <= 64 && !oasisSite; cx++)
+        oasisSite = oasisAtChunk(cx, cz);
+      const oasisChunk = oasisSite && generateChunkInner(oasisSite.cx, oasisSite.cz);
+      const oasisWater = oasisChunk ? oasisChunk.blocks.reduce((n, id) => n + (id === WATER ? 1 : 0), 0) : 0;
+      const oasisLogs = oasisChunk ? oasisChunk.blocks.reduce((n, id) => n + (id === OAK_LOG ? 1 : 0), 0) : 0;
+      ok("seeded desert generation places a spring and four palms",
+        !!oasisSite && oasisWater >= 13 && oasisLogs >= 20,
+        "site=" + !!oasisSite + " water=" + oasisWater + " trunks=" + oasisLogs);
+      ok("oasis locator returns the same deterministic site",
+        !!oasisSite && oasisAtChunk(oasisSite.cx, oasisSite.cz).x === oasisSite.x);
       ok("AO table has 4 steps", AOL.length === 4 && AOL[0] > AOL[3]);
       ok("touch pad state exists", typeof pad.x === "number" && typeof pad.z === "number");
 
@@ -6317,6 +6371,16 @@
     brazierCovers,
     ashland() { return { x: ASHLAND.x, z: ASHLAND.z, r: ASHLAND.r }; },
     biome(x, z) { return biomeAt(wf(x == null ? P.x : x), wf(z == null ? P.z : z)); },
+    oasisAt(x, z) { return oasisAtChunk(w2c(wf(x == null ? P.x : x)), w2c(wf(z == null ? P.z : z))); },
+    oases(radius) {
+      const r = clamp(radius == null ? 128 : +radius, 16, 512);
+      const range = Math.ceil(r / 16), pcx = w2c(wf(P.x)), pcz = w2c(wf(P.z)), found = [];
+      for (let cz = pcz - range; cz <= pcz + range; cz++) for (let cx = pcx - range; cx <= pcx + range; cx++) {
+        const site = oasisAtChunk(cx, cz);
+        if (site && Math.hypot(P.x - site.x - 0.5, P.z - site.z - 0.5) <= r) found.push(site);
+      }
+      return found.sort((a, b) => Math.hypot(P.x - a.x, P.z - a.z) - Math.hypot(P.x - b.x, P.z - b.z));
+    },
     mobTier(kind) { return MOB_TIER[kind] || 0; },
     ui() {
       return {
@@ -6335,6 +6399,7 @@
         buffs: Object.keys(buffs).filter(function(k){return buffs[k]>0;}),
         day: G.day, threat: threatTier(), mobs: mobs.length, shake: shake > 0.001, victory: !$("victory").hidden,
         chapter: CHAPTERS[chapter].n, shots: shots.length, biome: biomeAt(wf(P.x), wf(P.z)),
+        oasis: oasisAtChunk(w2c(wf(P.x)), w2c(wf(P.z))),
         boss: (() => { const b = mobs.find((m) => m.boss); return b ? { hp: b.hp, maxHp: b.maxHp, phase: bossPhase(b) } : null; })()
       };
     }

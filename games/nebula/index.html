@@ -563,6 +563,11 @@ function buildShip(){
   const f=flatten(g);f.userData.engines=engines;return f;
 }
 const ship=buildShip();scene.add(ship);
+const muzzleFlashes=[-.5,.5].map(x=>{
+  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex('255,220,150'),transparent:true,
+    blending:THREE.AdditiveBlending,depthWrite:false,opacity:0}));
+  s.position.set(x,0,-1.68);s.scale.set(1.15,1.15,1);s.visible=false;ship.add(s);return s;
+});
 const shieldMesh=new THREE.Mesh(new THREE.SphereGeometry(2.4,20,14),
   new THREE.MeshBasicMaterial({color:0x66d0ff,transparent:true,opacity:0,side:THREE.DoubleSide,
     blending:THREE.AdditiveBlending,depthWrite:false,wireframe:true}));
@@ -1015,7 +1020,8 @@ const G={
   wpnLv:1,shieldN:0,missileT:0,missileCD:0,droneN:0,droneCD:0,
   bossWave:false,bossName:'',
   energy:0,od:0,odCD:0,graze:0,
-  hitStop:0,pullX:0,pullY:0,kills:0,waveKills:0,waveHitless:true
+  hitStop:0,pullX:0,pullY:0,kills:0,waveKills:0,waveHitless:true,
+  muzzleT:0,weaponKick:0
 };
 const MAXE=100;
 const HI_KEY='nebula_hi_v3';
@@ -1338,7 +1344,7 @@ refreshHi();
 function startGame(){
   Object.assign(G,{playing:true,paused:false,score:0,wave:0,hp:100,combo:0,maxCombo:0,inv:1.2,
     wpnLv:1,shieldN:0,missileT:0,droneN:0,bossWave:false,energy:0,od:0,graze:0,kills:0,
-    hitStop:0,pullX:0,pullY:0,shake:0,fireCD:0});
+    hitStop:0,pullX:0,pullY:0,shake:0,fireCD:0,muzzleT:0,weaponKick:0});
   enemies.forEach(e=>{e.alive=false;e.g.visible=false;e.elite=false;e.eliteSp.visible=false;});
   rocks.forEach(r=>{r.alive=false;r.m.visible=false;});
   pickups.forEach(p=>{p.alive=false;p.g.visible=false;});
@@ -1772,10 +1778,20 @@ function step(now){
   G.pullX*=Math.pow(.02,dt);G.pullY*=Math.pow(.02,dt);
   const bankZ=(tx-ship.position.x)*-.06,bankX=(ty-ship.position.y)*.04;
   ship.rotation.z+=(bankZ-ship.rotation.z)*dt*8;
-  ship.rotation.x+=(bankX-ship.rotation.x)*dt*8;
+  G.weaponKick*=Math.exp(-18*dt);
+  ship.rotation.x+=(bankX-G.weaponKick-ship.rotation.x)*dt*8;
   ship.userData.engines.forEach((f,i)=>{
     const s=(.7+Math.sin(G.t*30+i*3)*.15+(G.firing?.25:0))*(G.od>0?1.6:1);
     f.scale.set(s,s,1);
+  });
+  G.muzzleT=Math.max(0,G.muzzleT-dt);
+  const muzzleK=G.muzzleT/.085;
+  muzzleFlashes.forEach((f,i)=>{
+    f.visible=muzzleK>0&&G.playing;
+    f.material.opacity=muzzleK*(G.od>0?.95:.8);
+    f.material.color.setHex(G.od>0?0xff7edb:0xffdc96);
+    const size=(.7+muzzleK*.8)*(G.od>0?1.25:1);
+    f.scale.set(size*(i===0?1:.92),size,1);
   });
   G.inv=Math.max(0,G.inv-dt);
   ship.visible=!G.playing||G.inv<=0||Math.sin(G.t*40)>0;
@@ -1811,6 +1827,7 @@ function step(now){
     if(G.firing&&G.fireCD<=0){
       const lv=G.wpnLv;
       G.fireCD=(lv>=4?.085:lv>=2?.10:.13)*(G.od>0?.5:1);
+      G.muzzleT=.085;G.weaponKick=Math.min(.14,G.weaponKick+.08);
       sfxLaser();
       const shots=[[-.5,0,0],[.5,0,0]];
       if(lv>=3)shots.push([-1.2,0,-.11],[1.2,0,.11]);
@@ -2262,6 +2279,7 @@ window.__game={
   get qualityMode(){return qualityMode;},    /* low/mid/high/auto */
   get bloom(){return bloomOn;},
   get pixR(){return pixR;},
+  get muzzle(){return{active:muzzleFlashes.some(f=>f.visible),remaining:G.muzzleT,kick:G.weaponKick};},
   get particleMul(){return particleMul();},  /* 粒子倍率，画质切换后应变化 */
   get audio(){return AC?{music:musicGain.gain.value,sfx:sfxGain.gain.value,master:masterGain.gain.value}:null;},
   get acState(){return AC?AC.state:'none';},            /* none / suspended / running */

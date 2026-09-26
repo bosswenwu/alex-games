@@ -4070,6 +4070,62 @@ function drawEscortLinks(){
     ctx.fillText('结阵×'+alive, e.pos.x, e.pos.y-e.radius-32);
   }
 }
+function selectedTacticalInfo(){
+  const t=selectedTower;
+  if(!t||t.wreck||t.disableUntil>gameTime) return null;
+  const kind=DEFS[t.key].kind;
+  if(kind!=='ranged'&&kind!=='melee') return null;
+  const range=rngOf(t), candidates=enemies.filter(e=>!e.dead&&!e.hidden
+    &&Math.hypot(e.pos.x-t.x,e.pos.y-t.y)<=range);
+  const target=acquire(t);
+  return {tower:t, range, candidates, target, mode:t.targetMode||'first'};
+}
+function drawSelectedTactics(){
+  const info=selectedTacticalInfo();
+  if(!info) return;
+  const {tower:t,range,candidates,target,mode}=info;
+  const pulse=0.5+Math.sin(gameTime*5)*0.12;
+  ctx.save();
+  ctx.fillStyle='rgba(255,213,74,.025)';
+  ctx.beginPath(); ctx.arc(t.x,t.y,range,0,Math.PI*2); ctx.fill();
+  ctx.setLineDash([9,6]); ctx.lineWidth=2.2;
+  ctx.strokeStyle='rgba(255,213,74,'+(0.68+pulse*0.2).toFixed(2)+')';
+  ctx.beginPath(); ctx.arc(t.x,t.y,range,0,Math.PI*2); ctx.stroke();
+  ctx.setLineDash([]);
+  for(const e of candidates){
+    if(e===target) continue;
+    ctx.strokeStyle='rgba(115,232,255,.68)'; ctx.lineWidth=1.7;
+    ctx.beginPath(); ctx.arc(e.pos.x,e.pos.y,e.radius+8,0,Math.PI*2); ctx.stroke();
+  }
+  if(target){
+    const angle=Math.atan2(target.pos.y-t.y,target.pos.x-t.x);
+    ctx.save();
+    ctx.shadowColor='#ffd54a'; ctx.shadowBlur=12;
+    ctx.strokeStyle='rgba(255,213,74,.92)'; ctx.lineWidth=2.6;
+    ctx.setLineDash([5,4]);
+    ctx.beginPath(); ctx.moveTo(t.x,t.y-6); ctx.lineTo(target.pos.x,target.pos.y-4); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(target.pos.x,target.pos.y,target.radius+12+Math.sin(gameTime*7)*2,0,Math.PI*2); ctx.stroke();
+    ctx.lineWidth=2;
+    for(let i=0;i<4;i++){
+      const a=angle+i*Math.PI/2;
+      ctx.beginPath();
+      ctx.arc(target.pos.x,target.pos.y,target.radius+19,a-0.24,a+0.24);
+      ctx.stroke();
+    }
+    ctx.restore();
+    const label='集火 · '+(TARGET_LABEL[mode]||mode);
+    ctx.font='bold 11px sans-serif'; ctx.textAlign='center';
+    const lx=target.pos.x, ly=target.pos.y+target.radius+24, lw=ctx.measureText(label).width+12;
+    ctx.fillStyle='rgba(18,12,4,.88)'; ctx.fillRect(lx-lw/2,ly-12,lw,16);
+    ctx.strokeStyle='rgba(255,213,74,.75)'; ctx.lineWidth=1; ctx.strokeRect(lx-lw/2,ly-12,lw,16);
+    ctx.fillStyle='#ffe9a0'; ctx.fillText(label,lx,ly);
+  }else{
+    ctx.fillStyle='rgba(18,12,4,.8)'; ctx.font='bold 11px sans-serif'; ctx.textAlign='center';
+    ctx.fillText('射程内无可锁定目标',t.x,t.y-range-7);
+  }
+  ctx.restore();
+}
 function draw(){
   ctx.setTransform(1,0,0,1,0,0);
   ctx.fillStyle='#080602'; ctx.fillRect(0,0,canvas.width,canvas.height);
@@ -4149,6 +4205,7 @@ function draw(){
   }});
   sprites.sort((a,b)=>a.y-b.y); for(const s of sprites) s.d();
   drawEscortLinks(); drawSiegeShots();
+  drawSelectedTactics();
 
   for(const rain of rains){
     ctx.globalAlpha=Math.min(0.28, rain.life*0.4);
@@ -5516,6 +5573,11 @@ window.__game={
   get levels(){return towers.map(t=>t.level);},
   get skillCd(){return selectedTower?selectedTower.cdLeft:null;},
   get paused(){return paused;}, get difficulty(){return difficulty;},
+  get targeting(){
+    const info=selectedTacticalInfo();
+    return info?{tower:info.tower.key,mode:info.mode,range:info.range,
+      candidates:info.candidates.length,target:info.target?{type:info.target.type,hp:Math.round(info.target.hp)}:null}:null;
+  },
   get hitstop(){return +hitstop.toFixed(3);}, addHitstop(s){ addHitstop(s||0.1); return +hitstop.toFixed(3); },
   get targetMode(){return selectedTower?selectedTower.targetMode:null;},
   get best(){return loadBest();},

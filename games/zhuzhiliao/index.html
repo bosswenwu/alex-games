@@ -161,7 +161,7 @@
   <a class="back-arcade" href="../../index.html">← 返回游戏厅</a>
 </div>
 
-<div id="hint">按住左右<b>来回搓动</b>（往哪边搓都是加速，越连贯倍率越高）· 右键拖动转视角 · 滚轮缩放 · 方向键也能搓</div>
+<div id="hint">按住左右<b>来回搓动</b>（往哪边搓都是加速，越连贯倍率越高）· 搓动会带起气流波纹 · 右键拖动转视角 · 滚轮缩放 · 方向键也能搓</div>
 <div id="combo"></div>
 <div id="charge"><div id="chargeBar"></div></div>
 <div id="toast"></div>
@@ -545,6 +545,8 @@ const W_MAX = 330;                 // rad/s ≈ 3150 RPM
 const D_LIN = 0.30, D_QUAD = 0.00092, D_COUL = 0.75;
 let omega = 0, angle = HOME.theta;   // 静止时竹片横跨屏幕（垂直于视线），两半对称
 let lastInputAt = -1e9;
+// 输入冲量驱动短暂气流波纹，让低转速搓动也有即时可见的反馈。
+let airImpulse = 0;
 
 function physics(dt){
   const s = Math.sign(omega), a = Math.abs(omega);
@@ -555,6 +557,7 @@ function physics(dt){
 function torque(d){
   if(!isFinite(d) || d===0) return;
   omega = clamp(omega + d, -W_MAX, W_MAX);
+  airImpulse = Math.max(airImpulse, clamp(Math.sqrt(Math.abs(d))*0.52, 0, 0.65));
   lastInputAt = performance.now();
 }
 const rps = ()=> Math.abs(omega)/(2*Math.PI);
@@ -1310,6 +1313,7 @@ function frame(now){
   let dt = (now-last)/1000; last = now;
   if(!isFinite(dt) || dt<0) dt = 0;
   dt = Math.min(dt, 0.1);
+  airImpulse *= Math.exp(-dt*2.6);
 
   keyboardRub();
 
@@ -1350,7 +1354,8 @@ function frame(now){
     r.t = (r.t + dt*(0.5+f*0.06)) % 1;
     r.m.scale.setScalar(0.62 + r.t*0.85);            // 只在叶尖附近，别糊满地板
     r.m.position.y = spin.position.y - r.t*0.34;     // 被叶片下洗的气流向下走
-    r.m.material.opacity = clamp((f-8)/26,0,1) * (1-r.t) * 0.13;
+    const speedWake = clamp((f-8)/26,0,1) * 0.13;
+    r.m.material.opacity = Math.min(0.35, speedWake + airImpulse*0.46) * (1-r.t);
     r.m.visible = r.m.material.opacity > 0.004;
   });
   under.intensity = 0.5 + lift*0.5;
@@ -1394,6 +1399,7 @@ canvas.addEventListener('webglcontextrestored', ()=> location.reload());
 window.__game = {
   get omega(){ return omega; },
   get rpm(){ return rpm(); },
+  get airWake(){ return airImpulse; },
   get handsOn(){ return handsOn; },
   get handsReady(){ return typeof window.Hands === 'function'; },
   startHands, stopHands, ensureMediaPipe

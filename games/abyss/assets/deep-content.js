@@ -107,6 +107,15 @@
         color: 0xf0a15d,
       },
     },
+    riftwake: {
+      entry: {
+        id: "riftwake",
+        name: "裂潮棱片",
+        desc: "冲刺结束时释放裂潮，对附近至多 6 名敌人造成 9 点伤害。",
+        rarity: "rare",
+        color: 0x7fd8ff,
+      },
+    },
   };
 
   // 武器价目：基础武器便宜，深层武器贵
@@ -777,6 +786,49 @@
       }
     });
 
+    kit.wrap(P, "tryDash", function (args, result) {
+      var readyAt = this.dashReadyAt;
+      var previousReadyAt = this.__riftwakeDashReadyAt;
+      this.__riftwakeDashReadyAt = readyAt;
+      if (result !== true || readyAt === previousReadyAt || !hasRelic("riftwake")) return;
+
+      var g = this;
+      var s = st();
+      var roomKey = s && s.roomKey;
+      g.time.delayedCall(235, function () {
+        var current = st();
+        if (!g.sys.isActive() || !g.player || !g.player.active || !current || current.roomKey !== roomKey) return;
+
+        var x = g.player.x;
+        var y = g.player.y;
+        var targets = g.enemies
+          .getChildren()
+          .filter(function (enemy) {
+            return enemy.active && Ph.Math.Distance.Between(x, y, enemy.x, enemy.y) <= 108;
+          })
+          .sort(function (a, b) {
+            return Ph.Math.Distance.Between(x, y, a.x, a.y) - Ph.Math.Distance.Between(x, y, b.x, b.y);
+          })
+          .slice(0, 6);
+
+        kit.shockwave(g, x, y, 0x7fd8ff, 132);
+        g.fx.particle(x, y, 0x7fd8ff, { count: 14, speed: 115, life: 320, size: 4 });
+        g.fx.statusText(x, y - 38, "裂潮", "#a8efff", 16);
+        g.__riftwakePulses = (g.__riftwakePulses || 0) + 1;
+
+        var pulse = {
+          x: x,
+          y: y,
+          damage: Math.max(1, Math.round(9 * (current.damageMult || 1))),
+          pierce: targets.length + 1,
+          destroy: function () {},
+        };
+        targets.forEach(function (enemy) {
+          g.hitEnemy(pulse, enemy);
+        });
+      });
+    });
+
     kit.wrap(P, "killEnemy", function (args) {
       if (!hasRelic("echo_prism")) return;
       this.__deepEchoKills = (this.__deepEchoKills || 0) + 1;
@@ -848,6 +900,7 @@
         s.deepWeaponIsNew = cur ? MY_WEAPON(cur.weapon) : false;
         s.railCharge = g.__rail ? Math.round(g.__rail.charge) : 0;
         s.forgeOpen = !!g.__forge;
+        s.riftwakePulses = g.__riftwakePulses || 0;
         s.forgeRooms = cur && cur.rooms
           ? [...cur.rooms.values()].filter(function (r) {
               return r.type === FORGE_TYPE;
