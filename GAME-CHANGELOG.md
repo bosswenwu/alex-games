@@ -42,6 +42,18 @@ Persistent handoff notes for future agents. Add a new entry for each user-visibl
 
 **Verification:** `?selftest=1` passed 323/323 (2 new checks: generation only in the two biomes with ring and air gap; lift on eruption, no lift when idle or 2 blocks away, fall damage ×1/4). Also ran headlessly through a new CDP driver on real GPU (RTX 5060 Ti).
 
+## 2026-09-26 — 沙海奇境 第九轮（云端）：参考图风格的草地与植被
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only. The user sent a high-quality Minecraft village screenshot as the visual target.
+
+| Change | Player-visible behavior |
+| --- | --- |
+| Grass tone variation | Grass tops, tall-grass tufts and leaves get low-frequency world-space tone/hue variation (darker blue-green vs. sunlit yellow-green patches plus slight per-block jitter), so large meadows no longer look like one flat sheet. Implemented in the `mainProg` fragment shader by atlas-tile id; no vertex-format or uniform changes. |
+| Meadow tufts & flowers | Plains, forest, savanna, swamp and taiga now grow clustered tall-grass tufts (noise-based meadows vs. bare patches) with occasional roses/daisies. Desert, mesa, salt lake and volcano stay barren as before. Plants remain non-solid and are skipped by `groundY`, so spawning and collision are unaffected. |
+| Mossy cobblestone | Atlas tile 96 repainted with a narrower moss palette and less relief so it no longer looks noisy up close. |
+
+**Verification:** inline script `node --check`; headless Chromium `?selftest=1` **328/328** after merging local round 9 (new check: aggregate tuft coverage over 8 plains chunks is 2–40%, barren biomes have zero tuft multiplier, shader contains the grass-variation code); before/after screenshots at 极致 quality from the same camera.
+
 ## 2026-09-25 — Multi-game design improvements
 
 **Scope:** Updated six games. 沙海奇境 (`games/minecraft/`) was explicitly excluded and not modified.
