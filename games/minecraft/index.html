@@ -745,6 +745,7 @@ function surfaceTop(bio,h,beach){
   return GRASS;
 }
 
+const GREEN_TUFT_MUL=(()=>{ const a=new Float32Array(16); a[BIO_PLAIN]=1; a[BIO_FOREST]=0.8; a[BIO_SAVANNA]=1.25; a[BIO_SWAMP]=0.9; a[BIO_TAIGA]=0.55; return a; })();   // 第九轮·云端: 各群系草丛密度倍率(0 = 不长)
 function genChunk(cx, cz){
   const b = new Uint8Array(CS*CS*H);
   const bx = cx*CS, bz = cz*CS;
@@ -836,6 +837,14 @@ function genChunk(cx, cz){
         for(let k=1;k<=ch;k++) put(gx,h+k,gz,SANDSTONE,true);
         if(hash2(gx,gz)<0.4) put(gx,h+ch+1,gz,CLAY,true);
       }
+    }
+    // ---- 绿色群系草丛与小花(第九轮·云端): 按低频噪声成片生长(草甸/空地交替), 沙漠/红土/盐湖/火山仍保持荒凉 ----
+    if(h>WATER_Y+1 && b[col+h]===GRASS && GREEN_TUFT_MUL[bio]>0){
+      const pn=noise2(gx*0.09+31.7, gz*0.09-12.3);
+      const dens=pn<0.42 ? 0 : (pn-0.42)*0.55*GREEN_TUFT_MUL[bio];
+      const r2=hash2(gx*19-5, gz*23+17);
+      if(r2<dens) put(gx,h+1,gz,TALLGRASS,false);
+      else if(r2>0.986 && pn>0.5 && bio!==BIO_TAIGA) put(gx,h+1,gz, r2>0.993?ROSE:DAISY, false);
     }
     // ---- 沙漠仙人掌(独立于上面的岩石/断柱概率) ----
     if(isCactusAt(gx,gz,h,bio) && b[col+h]!==AIR){
@@ -2669,11 +2678,27 @@ const _mainSrc = [`
   ${SHADOW_GLSL}
   ${CLOUDSH_GLSL}
   vec3 aces(vec3 x){ return clamp(x*(2.51*x+0.03)/(x*(2.43*x+0.59)+0.14), 0.0, 1.0); }
+  float gHash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float gNoise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
+    return mix(mix(gHash(i), gHash(i+vec2(1.0,0.0)), f.x), mix(gHash(i+vec2(0.0,1.0)), gHash(i+vec2(1.0,1.0)), f.x), f.y); }
   void main(){
     vec4 c = texture2D(uTex, vUV);
     if(uMode==0){ if(c.a<0.5) discard; c.a=1.0; }
     else c.a *= uAlpha;
     vec3 alb = pow(c.rgb, vec3(2.2));
+    // 草地深浅(第九轮·云端): 草顶/高草丛/树叶按世界坐标叠两层低频噪声 —— 一片偏暗蓝绿、一片偏亮黄绿, 再加逐格微抖,
+    // 打破大片草地"一整块塑料布"的观感。材质按图集格号识别(同沙面高光), 不加顶点属性
+    if(uMode==0 && vL <= 1.5 && vKind < 1.5){
+      float gid = floor(vUV.y*32.0)*16.0 + floor(vUV.x*16.0);
+      float gk = abs(gid-${BLOCKS[GRASS].t}.0)<0.5 || abs(gid-${BLOCKS[TALLGRASS].t}.0)<0.5 ? 1.0
+               : abs(gid-${BLOCKS[LEAVES].t}.0)<0.5 ? 0.55 : 0.0;
+      if(gk > 0.0){
+        vec2 gw = (vRel + uEyeL).xz;
+        float m = gNoise(gw*0.043)*0.62 + gNoise(gw*0.16 + 7.3)*0.38;
+        float jit = (gHash(floor(gw)) - 0.5) * 0.07;
+        alb *= mix(vec3(1.0), mix(vec3(0.74,0.84,0.82), vec3(1.15,1.08,0.84), m) * (1.0 + jit), gk);
+      }
+    }
     vec3 light, spec = vec3(0.0);
     if(vL > 1.5){
       light = vec3(vL*0.55);                         // 自发光方块(灯笼/岩浆/水晶): 不受日照与阴影影响
@@ -3403,10 +3428,10 @@ function cobbleC(x,y,h,s,sd){
 txLit(10,(x,y)=>cobbleH(x,y,101),(x,y,h,s)=>cobbleC(x,y,h,s,101),1.6);
 txLit(96,(x,y)=>cobbleH(x,y,961),(x,y,h,s)=>{                            // 苔石: 圆石 + 苔藓(越往上越多, 先长在缝里)
   const m=txFbm(x,y,3,3,3,962)+(h<0.1?0.12:0);
-  if(m>0.58-0.25*(1-y/30)){ const t=(m-0.4)*1.6+s*1.4+(txH(x,y,963)-0.5)*0.3;
-    return txRamp(txSteps("#3c5723 #4f6e2e #6b8f3a #8dae52",5),t); }
+  if(m>0.62-0.22*(1-y/30)){ const t=(m-0.45)*1.2+s*1.0+(txH(x,y,963)-0.5)*0.2;   // 第九轮·云端: 苔藓略少、色阶收窄, 近看不再发花
+    return txRamp(txSteps("#4a5c31 #566b38 #647a42 #74894f",5),t); }
   return cobbleC(x,y,h,s,961);
-},1.6);
+},1.25);
 txPut(11,(x,y)=>{                                                         // 玻璃: 双线窗框 + 斜向反光
   const e=Math.min(x,y,TX_V-1-x,TX_V-1-y);
   if(e===0) return [150,178,190];
@@ -13769,6 +13794,21 @@ function selftest(){
         ok("砂岩熔炉: 注册/配方/自发光; 燃料耗尽即停、金 2:1、成品格不同类不吞燃料; 生鱼烤熟回 12 血; 拆炉退回; 有火变亮熄火变回; 存档含 furnaces",
            reg && s1 && s2 && s3 && s4 && fishOk && spillOk && lit && unlit && saved && brokeOk,
            "reg="+reg+" s1="+s1+" s2="+s2+" s3="+s3+" s4="+s4+" fish="+fishOk+" spill="+spillOk+" lit="+lit+" unlit="+unlit+" saved="+saved+" broke="+brokeOk);
+      }
+      { // 第九轮·云端: 参考图画面 —— 绿色群系成片草丛/小花、荒漠群系不长; 主着色器带草地深浅变化
+        const mulOk=GREEN_TUFT_MUL[BIO_PLAIN]>0 && GREEN_TUFT_MUL[BIO_SAVANNA]>0 && GREEN_TUFT_MUL[BIO_DESERT]===0 && GREEN_TUFT_MUL[BIO_MESA]===0
+          && GREEN_TUFT_MUL[BIO_SALTLAKE]===0 && GREEN_TUFT_MUL[BIO_VOLCANO]===0;
+        let tufts=0, grassTop=0, found=false;
+        for(let cx=-60; cx<=60 && !found; cx+=3) for(let cz=-60; cz<=60 && !found; cz+=3){
+          if(biomeAt(cx*16+8,cz*16+8)!==BIO_PLAIN || structureAt(cx*16+8,cz*16+8)) continue;
+          const B=genChunk(cx,cz); tufts=0; grassTop=0;
+          for(let lx=0;lx<16;lx++) for(let lz=0;lz<16;lz++){ const col=(lx*CS+lz)*H; let y=H-1; while(y>0 && (B[col+y]===AIR||PLANT(B[col+y]))) y--;
+            if(B[col+y]===GRASS){ grassTop++; if(B[col+y+1]===TALLGRASS||B[col+y+1]===ROSE||B[col+y+1]===DAISY) tufts++; } }
+          if(grassTop>150) found=true;
+        }
+        const shaderOk=/gNoise/.test(_mainSrc[1]) && /草地深浅/.test(_mainSrc[1]);
+        ok("第九轮画面: 平原草地长出成片草丛与小花(覆盖 2%~40%), 荒漠群系倍率为 0; 主着色器带草地深浅变化",
+           mulOk && found && tufts>=grassTop*0.02 && tufts<=grassTop*0.4 && shaderOk, "mul="+mulOk+" found="+found+" tufts="+tufts+"/"+grassTop+" shader="+shaderOk);
       }
       { // 第七轮·云端: 群系动物变种 —— 群系规则; 部件换贴图不改原版; 贴图已画且与原图不同; 生成时挂上
         const rule=animalVariantFor("camel",BIO_MESA,0.5)==="red" && animalVariantFor("camel",BIO_SALTLAKE,0.5)==="white" && animalVariantFor("camel",BIO_DESERT,0.5)===null
