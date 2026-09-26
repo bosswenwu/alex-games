@@ -2,6 +2,19 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-09-26 — 沙海奇境: faster chunk meshing (local round 9 ③)
+
+**Scope:** 沙海奇境 (`games/minecraft/`) only. Performance-only; rendered output is byte-identical.
+
+| Change | Details | Files |
+| --- | --- | --- |
+| Local block lookup in `buildChunkMesh` | The chunk plus a 1-block border (18×18 columns) is copied column-by-column into a reusable `Uint8Array`. Each of the ~72k per-chunk block lookups is now a single index instead of a `gb()` call that built a `"cx,cz"` key and did a Map lookup. Before, the lookup cache thrashed at chunk borders. | `games/minecraft/index.html` |
+| Reusable typed mesh buffers | Vertices and indices are written into preallocated `Float32Array`/`Uint32Array` buffers that double when full, and upload directly via `subarray`. This removes per-chunk array growth and conversion garbage. | `games/minecraft/index.html` |
+| Predicate lookup tables | `OCCLUDE`/`SKY_OCC`/`EMISSIVE`/`OPAQUE` inside the mesher are replaced with 256-entry tables built from the same predicates (3 AO samples per vertex). | `games/minecraft/index.html` |
+| Result | Average mesh time 4.27 → 3.19 ms per chunk (−25%, 80 chunks, headless Chrome on RTX 5060 Ti). Less GC churn while streaming. | — |
+
+**Verification:** Output of the optimized build vs the pre-change `HEAD` build was hashed on the same fixed seed (`?seed=424242`, 49 chunks, 2.42M vertex/index elements): identical hash. `?selftest=1` passed 327/327 (new regression check: padded lookup vs per-block `gb()` produce element-identical buffers, and all lookup tables match the predicates for all 256 IDs).
+
 ## 2026-09-26 — 沙海奇境: trial keys, trial vaults and ominous trials (local round 9 ②)
 
 **Scope:** 沙海奇境 (`games/minecraft/`) only. Extends the 奥西里斯试炼厅 under each pyramid. Block IDs 121–124, atlas tiles 301–305 (claimed in issue #11).

@@ -4135,6 +4135,9 @@ EMIT_LV[CRYSTAL]=9; EMIT_LV[GLOWVEIN]=9; EMIT_LV[SALTCRYSTAL]=9; EMIT_LV[AMETHYS
 EMIT_LV[KAHEART]=10; EMIT_LV[GEYSER]=7; EMIT_LV[VAULT]=8; EMIT_LV[OMEN_VAULT]=8; EMIT_LV[LAMPPOST]=13; EMIT_LV[FURNACE_LIT]=12;                                  // 第六轮·本地: 卡之石
 const BL_OPQ=new Uint8Array(256);                     // 挡光(= OPAQUE)
 for(let i=0;i<256;i++) BL_OPQ[i]=OPAQUE(i)?1:0;
+// 建网格热路径用的查表(第九轮·本地性能): 每顶点 AO 要判 3 次 OCCLUDE(层层调 SOLID/PLANT/查形状表), 换成一次下标
+const OCC_T=new Uint8Array(256), SKY_T=new Uint8Array(256), EMI_T=new Uint8Array(256);
+for(let i=0;i<256;i++){ OCC_T[i]=OCCLUDE(i)?1:0; SKY_T[i]=SKY_OCC(i)?1:0; EMI_T[i]=EMISSIVE(i)?1:0; }
 const BL_R=13;                                        // 最远传播格数(14 级光源 13 格外还剩 1 级)
 const BL_W=CS+2+2*BL_R+2;                             // 区域边长(含外圈墙) = 46
 const _blL=new Uint8Array(BL_W*BL_W*(H+2)), _blO=new Uint8Array(BL_W*BL_W*(H+2));
@@ -4279,9 +4282,37 @@ function swayClass(id, topVert){
 }
 // 水面角点深度: 共享该角点的 4 列水深取平均(非水列记 0), 再减去水面下沉的 0.14 → 岸边角点趋近 0, 供泡沫/深浅色
 const waterCornerDepth=(a,b,c,d)=>Math.max(0,(a+b+c+d)/4-0.14);
+const _pad=new Uint8Array((CS+2)*(CS+2)*H);           // buildChunkMesh 的本地取块数组(本区块 + 外扩一圈)
+/* 建网格的顶点/索引缓冲(第九轮·本地性能): 预分配、每次复用的定长类型数组, 满了翻倍; 上传时直接截取一段交给 GL。
+   原先 push 进普通数组(每块约 4 万个数)再整体 new Float32Array/Uint32Array, 既慢又制造大量垃圾。
+   push 参数个数固定(顶点 7 个、索引 6 个), 调用处不用改。 */
+class MeshVBuf{ constructor(n){ this.a=new Float32Array(n); this.n=0; } reset(){ this.n=0; return this; }
+  grow(){ const b=new Float32Array(this.a.length*2); b.set(this.a); this.a=b; }
+  push(a,b,c,d,e,f,g){ if(this.n+7>this.a.length) this.grow(); const A=this.a, n=this.n; A[n]=a; A[n+1]=b; A[n+2]=c; A[n+3]=d; A[n+4]=e; A[n+5]=f; A[n+6]=g; this.n=n+7; }
+  view(){ return this.a.subarray(0,this.n); } }
+class MeshIBuf{ constructor(n){ this.a=new Uint32Array(n); this.n=0; } reset(){ this.n=0; return this; }
+  grow(){ const b=new Uint32Array(this.a.length*2); b.set(this.a); this.a=b; }
+  push(a,b,c,d,e,f){ if(this.n+6>this.a.length) this.grow(); const A=this.a, n=this.n; A[n]=a; A[n+1]=b; A[n+2]=c; A[n+3]=d; A[n+4]=e; A[n+5]=f; this.n=n+6; }
+  view(){ return this.a.subarray(0,this.n); } }
+const _mB={oV:new MeshVBuf(1<<16), oI:new MeshIBuf(1<<15), wV:new MeshVBuf(1<<13), wI:new MeshIBuf(1<<12), pV:new MeshVBuf(1<<13), pI:new MeshIBuf(1<<12)};
+let _meshPad=true, _meshCapture=null;
 function buildChunkMesh(c){
   const bx=c.cx*CS, bz=c.cz*CS;
-  // gb() 缓存"上次访问的区块", 连"不存在"(null)也会缓存; 邻区块之后才生成时缓存仍是 null →
+  // 取块走本地连续数组(第九轮·本地性能): 本区块 + 外扩一圈共 18×18 列按列整段拷进 _pad, 之后每次取块只是一次下标运算。
+  // 原先每格都调 gb(): 算所在区块、拼 "cx,cz" 字符串查 Map; AO 取样在区块边上两块之间来回跳, 缓存反复失效(每区块约 7 万次)。
+  // 网格只会查 [-1, CS] 范围内的列(面前方格 ±1), 数组足够; 缺失的邻区块与 gb() 一样当空气。_meshPad=false 可切回 gb()(自测对照用)。
+  let G=gb;
+  if(_meshPad){
+    _pad.fill(0);
+    for(let px=-1;px<=CS;px++) for(let pz=-1;pz<=CS;pz++){
+      const wx=bx+px, wz=bz+pz, nc=(px>=0&&px<CS&&pz>=0&&pz<CS)?c:world.get(key(wx>>4,wz>>4));
+      if(!nc) continue;
+      const src=((wx&15)*CS+(wz&15))*H;
+      _pad.set(nc.blocks.subarray(src,src+H), ((px+1)*(CS+2)+(pz+1))*H);
+    }
+    G=(x,y,z)=>(y<0||y>=H)?AIR:_pad[((x-bx+1)*(CS+2)+(z-bz+1))*H+y];
+  }
+  // G() 缓存"上次访问的区块", 连"不存在"(null)也会缓存; 邻区块之后才生成时缓存仍是 null →
   // 区块边界上会冒出朝向"空气"的多余面(水里表现为一道道亮线)。每次建网格前先让缓存失效。
   _gcx=1e9;
   // 水深缓存: 某格往下连续的水格数(最多 8), 非水 = 0; 键用区块局部坐标(含外扩 1 格)
@@ -4289,17 +4320,17 @@ function buildChunkMesh(c){
   const wcol=(x,y,z)=>{
     const k=((x-bx+1)*(CS+2)+(z-bz+1))*H+y;
     let v=_wd.get(k); if(v!==undefined) return v;
-    v=0; for(let yy=y; yy>=0 && yy>y-8 && gb(x,yy,z)===WATER; yy--) v++;
+    v=0; for(let yy=y; yy>=0 && yy>y-8 && G(x,yy,z)===WATER; yy--) v++;
     _wd.set(k,v); return v;
   };
-  const oV=[], oI=[], wV=[], wI=[], pV=[], pI=[];   // p*: 十字植物单独成层, 在 disable(CULL_FACE) 后绘制
+  const oV=_mB.oV.reset(), oI=_mB.oI.reset(), wV=_mB.wV.reset(), wI=_mB.wI.reset(), pV=_mB.pV.reset(), pI=_mB.pI.reset();   // p*: 十字植物单独成层, 在 disable(CULL_FACE) 后绘制
   let oN=0, wN=0, pN=0;
   const ao=[0,0,0,0];
   // 顶点格式: x,y,z, u,v, aL(AO 或自发光强度; 水层=水深), aF(面朝向 + 8*天光0..15 + 128*高位类别), 见 mainProg 注释
   for(let ix=-1; ix<=CS; ix++) for(let iz=-1; iz<=CS; iz++){
     let y=H-1;
-    if(ix>=0 && ix<CS && iz>=0 && iz<CS){ const col=(ix*CS+iz)*H; while(y>=0 && !SKY_OCC(c.blocks[col+y])) y--; }
-    else { const wx=bx+ix, wz=bz+iz; while(y>=0 && !SKY_OCC(gb(wx,y,wz))) y--; }
+    if(ix>=0 && ix<CS && iz>=0 && iz<CS){ const col=(ix*CS+iz)*H; while(y>=0 && !SKY_T[c.blocks[col+y]]) y--; }
+    else { const wx=bx+ix, wz=bz+iz; while(y>=0 && !SKY_T[G(wx,y,wz)]) y--; }
     _hm[(ix+1)*(CS+2)+(iz+1)]=y;
   }
   const blOn=blBuild(bx,bz);                        // 方块光场(区域内没有光源/照不到本区块 → false, 下面全部跳过)
@@ -4332,7 +4363,7 @@ function buildChunkMesh(c){
       }
       if(SHAPES[id]){                                   // 方块形状系统: 逐盒出面, 只剔除贴在整格边界且邻格不透明的面; 无 AO
         const sky0=cellSky(bx,bz,wx,y,wz), bl0=(blOn&&y>=blLo&&y<=blHi)?blAt(wx,y,wz):0;
-        for(const Q of shapeQuads(id, f=>{ const d=FACES[f].d, n=gb(wx+d[0],y+d[1],wz+d[2]); return n!==AIR && OPAQUE(n); })){
+        for(const Q of shapeQuads(id, f=>{ const d=FACES[f].d, n=G(wx+d[0],y+d[1],wz+d[2]); return n!==AIR && BL_OPQ[n]; })){
           const d=FACES[Q.f].d, u0=(Q.tile%16)*TS, v0=Math.floor(Q.tile/16)*TV;
           let sky=sky0, bl=bl0;
           if(Q.edge){ sky=cellSky(bx,bz,wx+d[0],y+d[1],wz+d[2]); if(blOn&&y+d[1]>=blLo&&y+d[1]<=blHi) bl=blAt(wx+d[0],y+d[1],wz+d[2]); }
@@ -4346,13 +4377,13 @@ function buildChunkMesh(c){
         }
         continue;
       }
-      const wTop = isW && gb(wx,y+1,wz)!==WATER;
+      const wTop = isW && G(wx,y+1,wz)!==WATER;
       // 高位附加码: 树叶 = 风摆类别 2; 水 = 水色类别(1 = 沼泽)
       const hiF = isW ? (biomeAt(wx,wz)===BIO_SWAMP ? 128 : 0) : 128*swayClass(id,false);
       for(let f=0; f<6; f++){
         const F=FACES[f], d=F.d;
-        const nid=gb(wx+d[0], y+d[1], wz+d[2]);
-        if(nid!==AIR && OPAQUE(nid)) continue;
+        const nid=G(wx+d[0], y+d[1], wz+d[2]);
+        if(nid!==AIR && BL_OPQ[nid]) continue;
         if(nid===id && id!==LEAVES && id!==PALM_LEAF) continue;
         // 岩层按世界 y 取片, 再按列加 0~2 格的噪声偏移(恶地式): 条纹沿崖壁起伏, 不是一圈圈死板的环
         const bandOff=(f!==2 && f!==3 && (id===CLAY||id===WINDROCK)) ? Math.min(2,Math.max(0,Math.floor(fbm2(wx*0.021+313.3, wz*0.021-71.9, 2)*3))) : 0;
@@ -4374,7 +4405,7 @@ function buildChunkMesh(c){
           if(rot===1){ const t=ta; ta=tb; tb=1-t; } else if(rot===2){ ta=1-ta; tb=1-tb; } else if(rot===3){ const t=ta; ta=1-tb; tb=t; }
           _uvA[k]=ta; _uvB[k]=tb;
         }
-        const skyB = (f===3 && !isW && !EMISSIVE(id)) ? openBelowSky(wx,y-1,wz) : 0;   // 底面: 下方空旷 → 地面反光
+        const skyB = (f===3 && !isW && !EMI_T[id]) ? openBelowSky(wx,y-1,wz) : 0;   // 底面: 下方空旷 → 地面反光
         for(let k=0;k<4;k++){
           const i=CORNERS[k][0], j=CORNERS[k][1];
           let px = (d[0]===1?1:0) + i*F.u[0] + j*F.v[0];
@@ -4383,14 +4414,14 @@ function buildChunkMesh(c){
           if(wTop && py===1) py=0.86;
           let light=1, sky, vhi=hiF, bl=0;
           const fx=wx+d[0], fy=y+d[1], fz=wz+d[2];   // 面前方那一格
-          if(EMISSIVE(id)){ light=2.2; ao[k]=3; sky=1; }  // 灯笼自发光, 夜里也亮
+          if(EMI_T[id]){ light=2.2; ao[k]=3; sky=1; }  // 灯笼自发光, 夜里也亮
           else if(!isW){
             const si=i?1:-1, sj=j?1:-1;
             const s1x=wx+d[0]+si*F.u[0], s1y=y+d[1]+si*F.u[1], s1z=wz+d[2]+si*F.u[2];
             const s2x=wx+d[0]+sj*F.v[0], s2y=y+d[1]+sj*F.v[1], s2z=wz+d[2]+sj*F.v[2];
-            const o1=OCCLUDE(gb(s1x,s1y,s1z))?1:0;
-            const o2=OCCLUDE(gb(s2x,s2y,s2z))?1:0;
-            const oc=OCCLUDE(gb(s1x+sj*F.v[0], s1y+sj*F.v[1], s1z+sj*F.v[2]))?1:0;
+            const o1=OCC_T[G(s1x,s1y,s1z)];
+            const o2=OCC_T[G(s2x,s2y,s2z)];
+            const oc=OCC_T[G(s1x+sj*F.v[0], s1y+sj*F.v[1], s1z+sj*F.v[2])];
             const a=(o1&&o2)?0:3-(o1+o2+oc);
             ao[k]=a; light*=AOL[a];
             // 天光: 与 AO 同一组邻格取平均(被实心块占据的格不计), 相邻顶点间自然渐变
@@ -4414,8 +4445,8 @@ function buildChunkMesh(c){
               const ax=fx+si*F.u[0], ay=fy+si*F.u[1], az=fz+si*F.u[2];
               const cx2=fx+sj*F.v[0], cy2=fy+sj*F.v[1], cz2=fz+sj*F.v[2];
               let bs=blAt(fx,fy,fz), bn=1;
-              if(!BL_OPQ[gb(ax,ay,az)]){ bs+=blAt(ax,ay,az); bn++; }
-              if(!BL_OPQ[gb(cx2,cy2,cz2)]){ bs+=blAt(cx2,cy2,cz2); bn++; }
+              if(!BL_OPQ[G(ax,ay,az)]){ bs+=blAt(ax,ay,az); bn++; }
+              if(!BL_OPQ[G(cx2,cy2,cz2)]){ bs+=blAt(cx2,cy2,cz2); bn++; }
               bl=Math.round(bs/bn);
             }
             // 水: aL 改存水深。顶面按角点取 4 列平均(岸边→0); 其余面取本格水深
@@ -4444,14 +4475,15 @@ function buildChunkMesh(c){
   // 上传 GPU
   if(c.mesh) destroyMesh(c.mesh);
   const up=(verts,inds)=>{
-    if(!inds.length) return null;
+    if(!inds.n) return null;
     const vbo=gl.createBuffer(), ibo=gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER,vbo);
-    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(verts),gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER,verts.view(),gl.STATIC_DRAW);      // GL 会拷贝, 缓冲随后即可复用
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ibo);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint32Array(inds),gl.STATIC_DRAW);
-    return {vbo,ibo,n:inds.length};
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,inds.view(),gl.STATIC_DRAW);
+    return {vbo,ibo,n:inds.n};
   };
+  if(_meshCapture) _meshCapture.push({cx:c.cx,cz:c.cz,oV:oV.view().slice(),oI:oI.view().slice(),wV:wV.view().slice(),wI:wI.view().slice(),pV:pV.view().slice(),pI:pI.view().slice()});   // 自测: 抓顶点/索引副本做逐元素对照
   c.mesh={opaque:up(oV,oI), water:up(wV,wI), plant:up(pV,pI)};
   blStoreChunk(c,bx,bz); c.blOn=blOn; blF.on=false;
   // 阴影范围内的区块变了(挖/放方块、新加载) → 下一帧重画阴影贴图
@@ -13969,6 +14001,17 @@ function selftest(){
         Object.assign(vaultKeys, JSON.parse(VK)); updateHearts(); updateXPHUD();
         ok("宝库: 没钥匙打不开; 试炼钥匙开试炼宝库(变暗、只开一次、给金钻文物核心); 不祥宝库只认不祥钥匙; 钥匙与通关日进存档",
            noKey && opened && wrongKey && omenOpen && saved, "noKey="+noKey+" opened="+opened+" got="+(got||[]).join(",")+" wrongKey="+wrongKey+" omenOpen="+omenOpen+" 不祥="+(got2||[]).join(",")+" saved="+saved);
+      }
+      // ---- 第九轮③·本地: 区块网格优化(本地取块数组 + 复用类型数组 + 判定查表)的等价性 ----
+      {
+        const cx0=Math.floor(player.x/CS), cz0=Math.floor(player.z/CS), cs=[];
+        for(let dx=-2;dx<=2;dx++) for(let dz=-2;dz<=2;dz++){ const c=world.get(key(cx0+dx,cz0+dz)); if(c && c.mesh) cs.push(c); }
+        const cap=flag=>{ const p0=_meshPad; _meshPad=flag; _meshCapture=[]; for(const c of cs) buildChunkMesh(c); const r=_meshCapture; _meshCapture=null; _meshPad=p0; return r; };
+        const A=cap(false), B=cap(true); let diff=0, elems=0;
+        for(let k=0;k<A.length;k++) for(const f of ["oV","oI","wV","wI","pV","pI"]){ const a=A[k][f], b=B[k][f]; elems+=a.length; if(a.length!==b.length){ diff++; continue; } for(let i=0;i<a.length;i++) if(a[i]!==b[i]){ diff++; break; } }
+        const tabs=[...Array(256).keys()].every(i=>OCC_T[i]===(OCCLUDE(i)?1:0) && SKY_T[i]===(SKY_OCC(i)?1:0) && EMI_T[i]===(EMISSIVE(i)?1:0) && BL_OPQ[i]===(OPAQUE(i)?1:0));
+        ok("网格优化等价: 本地取块数组与逐格 gb() 生成的顶点/索引逐元素一致; 判定查表与原判定函数 256 个 ID 全部一致",
+           cs.length>0 && diff===0 && tabs, "区块="+cs.length+" 元素="+elems+" 不一致="+diff+" 查表="+tabs);
       }
       { // 守墓石像被盯住时要有常驻提示, 否则玩家以为怪物卡死(用户报 bug: "僵尸突然不动了")
         const mobsP=mobs.slice(); mobs.length=0;
