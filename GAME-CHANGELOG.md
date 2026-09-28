@@ -2,6 +2,17 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-09-28 — 沙海奇境 第十一轮（云端）：载具驾驶 HUD + 倒影里的生物与载具
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only. No gameplay/physics changes; no new keys, blocks or atlas tiles.
+
+| Change | Player-visible behavior |
+| --- | --- |
+| Vehicle HUD | While riding, a jet-style green HUD overlays the screen (hidden in photo mode / on death / after dismounting). All vehicles: heading tape at the top (0 = N, 90 = E) and speed in km/h (from per-frame displacement; teleports ignored). Airliner & hover bike: artificial horizon with a 10° pitch ladder, altitude above sea level, height above ground/water (amber warning under 4 m in the airliner) and climb rate. Car / horse / chariot / camel: speed dial at the bottom-left, plus the camel's dash cooldown. Drawn on a 2D canvas at ≤30 fps. |
+| Entities in water reflections | The round-10 planar reflection now also draws mobs, ridden vehicles and arrows within 40 blocks and above the water, so a plane skimming the sea or a camel on the shore shows up in the water. |
+
+**Verification:** `node --check`; `node tools/headless.mjs selftest` **330/330**, and 330/330 with another random seed (new check: vehicle classification, heading, speed from displacement incl. teleport rejection, height above ground, HUD shown only while riding). Screenshots riding an airliner over the sea and a car on land at 极致. One car screenshot rendered only sky (camera heading had drifted to 198°); it could not be reproduced on re-run with the camera confirmed in air, and is believed to be a test-setup artifact.
+
 ## 2026-09-28 — 沙海奇境 第十轮（云端）：海平面水面的平面反射
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) only; the "water reflections" item from the user's reference screenshot.
