@@ -274,6 +274,7 @@
   <div id="npcList"></div>
 </div>
 <div id="hud">
+<canvas id="driveHud" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;display:none"></canvas>
   <div id="tutCard"><div class="tt-h"><span id="tutStep"></span><span id="tutSkip">跳过引导 ✕ <b>N</b></span></div>
     <div id="tutTitle"></div><div id="tutText"></div><div class="tt-bar"><i id="tutBar"></i></div></div>
   <div id="npcPrompt"></div>
@@ -5307,6 +5308,92 @@ function chestSpill(x,y,z){               // 储物箱被挖掉/炸掉: 箱内�
   if(chestOpen && chestOpen.key===k) closeChest();
   if(n) showName("📦 储物箱拆了，箱内 "+n+" 件物品收回背包");
   return n;
+}
+
+/* =========================================================
+   🛩 载具驾驶 HUD(第十一轮·云端, 对标参考推文里的"驾驶舱 HUD")
+   骑乘/驾驶时在 #hud 里叠一块全屏 2D 画布; 速度按每帧位移算(对所有载具一致), 平滑后显示 km/h。
+   · 全部载具: 顶部航向刻度带 + 速度
+   · 客机/悬浮摩托: 人工地平线 + 俯仰刻度, 海拔(相对海平面)、离地高度、爬升率
+   · 汽车/马/战车/骆驼: 速度表盘; 骆驼另显示冲刺冷却
+   ========================================================= */
+const H_MAX_Y=H-1;
+const driveHud={cv:null, g:null, lx:0, ly:0, lz:0, spd:0, vs:0, on:false, t:0, frames:0};
+const HUD_COL="rgba(126,255,178,0.92)", HUD_DIM="rgba(126,255,178,0.45)", HUD_WARN="rgba(255,196,96,0.95)";
+function driveKind(m){ if(!m||!m.def) return null; return m.def.plane?"plane":(m.def.mountFly?"bike":(m.def.car?"car":"ground")); }
+function headingDeg(){ let d=player.yaw*180/Math.PI; d%=360; if(d<0) d+=360; return d; }
+function driveReadout(dt){                               // 纯数据(自测也用): 速度 km/h / 海拔 / 离地 / 爬升率 / 航向
+  const H=driveHud, k=Math.min(1, dt*4);
+  const dx=player.x-H.lx, dy=player.y-H.ly, dz=player.z-H.lz;
+  const jump=Math.hypot(dx,dz)>40;                     // 传送/读档: 不把瞬移算成速度
+  const v=(dt>0 && !jump) ? Math.hypot(dx,dz)/dt : 0, vy=(dt>0 && !jump) ? dy/dt : 0;
+  H.spd+= (v-H.spd)*k; H.vs+=(vy-H.vs)*k;
+  H.lx=player.x; H.ly=player.y; H.lz=player.z;
+  // 离地高度: 往下找第一个不是空气/花草的方块(水面也算"地面", 海上显示离水面高度); 区块未加载则 null
+  let agl=null; const bx=Math.floor(player.x), bz=Math.floor(player.z);
+  if(world.has(key(bx>>4,bz>>4))) for(let y=Math.min(H_MAX_Y, Math.floor(player.y)); y>0; y--){ const id=getBlock(bx,y,bz); if(id!==AIR && !PLANT(id)){ agl=Math.max(0, player.y-(y+(id===WATER?0.86:1))); break; } }
+  return { kmh:H.spd*3.6, alt:player.y-WATER_Y, agl, vs:H.vs, hdg:headingDeg(), pitch:-player.pitch*180/Math.PI };
+}
+function tickDriveHud(dt){
+  const H=driveHud;
+  if(!H.cv){ H.cv=document.getElementById("driveHud"); if(!H.cv) return; H.g=H.cv.getContext("2d"); }
+  const kind=driveKind(riding);
+  if(!kind || photoMode || dead){ if(H.on){ H.cv.style.display="none"; H.on=false; } H.lx=player.x; H.ly=player.y; H.lz=player.z; return; }
+  const R=driveReadout(dt);
+  H.t+=dt; if(H.t<1/30 && H.on) return; H.t=0;          // 30 fps 足够, 省画布开销
+  const dpr=Math.min(2,devicePixelRatio||1), W=innerWidth, Hh=innerHeight;
+  if(H.cv.width!==Math.round(W*dpr) || H.cv.height!==Math.round(Hh*dpr)){ H.cv.width=Math.round(W*dpr); H.cv.height=Math.round(Hh*dpr); }
+  if(!H.on){ H.cv.style.display="block"; H.on=true; }
+  const g=H.g; g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,W,Hh);
+  g.lineWidth=1.5; g.strokeStyle=HUD_COL; g.fillStyle=HUD_COL; g.font="bold 13px monospace"; g.textBaseline="middle";
+  g.shadowColor="rgba(0,0,0,0.55)"; g.shadowBlur=3;
+  // 航向刻度带(顶部中央)
+  { const cx=W/2, y=Math.max(150, Hh*0.2), span=Math.min(360, W*0.34), pxPerDeg=span/90;
+    g.save(); g.beginPath(); g.rect(cx-span/2, y-24, span, 40); g.clip();
+    for(let d=Math.floor((R.hdg-50)/5)*5; d<=R.hdg+50; d+=5){
+      const x=cx+(d-R.hdg)*pxPerDeg, dd=((d%360)+360)%360, big=dd%30===0;
+      g.beginPath(); g.moveTo(x,y); g.lineTo(x,y-(big?10:5)); g.stroke();
+      if(big){ const lab=dd===0?"N":dd===90?"E":dd===180?"S":dd===270?"W":String(dd/10|0).padStart(2,"0"); g.textAlign="center"; g.fillText(lab,x,y-18); }
+    }
+    g.restore();
+    g.beginPath(); g.moveTo(cx,y+2); g.lineTo(cx-6,y+10); g.lineTo(cx+6,y+10); g.closePath(); g.fill();
+    g.textAlign="center"; g.fillText(String(Math.round(R.hdg)%360).padStart(3,"0")+"°", cx, y+22); }
+  const cx=W/2, cy=Hh/2;
+  if(kind==="plane" || kind==="bike"){
+    // 人工地平线 + 俯仰刻度(每 10°), 视线水平时地平线穿过准星
+    const pxDeg=Math.min(W,Hh)/60, off=R.pitch*pxDeg;
+    g.save(); g.beginPath(); g.arc(cx,cy,Math.min(W,Hh)*0.26,0,Math.PI*2); g.clip();
+    for(let a=-60;a<=60;a+=10){
+      const y=cy+off-a*pxDeg; if(a===0){ g.lineWidth=2; g.beginPath(); g.moveTo(cx-150,y); g.lineTo(cx-34,y); g.moveTo(cx+34,y); g.lineTo(cx+150,y); g.stroke(); g.lineWidth=1.5; continue; }
+      const L=a%20===0?46:26; g.setLineDash(a<0?[6,5]:[]);
+      g.beginPath(); g.moveTo(cx-34-L,y); g.lineTo(cx-34,y); g.moveTo(cx+34,y); g.lineTo(cx+34+L,y); g.stroke();
+      g.setLineDash([]); if(a%20===0){ g.textAlign="right"; g.fillText(String(a),cx-40-L,y); g.textAlign="left"; g.fillText(String(a),cx+40+L,y); }
+    }
+    g.restore();
+    g.beginPath(); g.moveTo(cx-22,cy); g.lineTo(cx-8,cy); g.lineTo(cx,cy+7); g.lineTo(cx+8,cy); g.lineTo(cx+22,cy); g.stroke();   // 机身符号
+    // 左: 速度带  右: 高度带(文字框)
+    const box=(x,y,txt,sub,warn)=>{ g.strokeStyle=warn?HUD_WARN:HUD_COL; g.fillStyle=warn?HUD_WARN:HUD_COL; g.strokeRect(x-44,y-14,88,28); g.textAlign="center"; g.fillText(txt,x,y); if(sub){ g.fillStyle=HUD_DIM; g.font="12px monospace"; g.fillText(sub,x,y+26); g.font="bold 13px monospace"; } g.strokeStyle=HUD_COL; g.fillStyle=HUD_COL; };
+    const sx=cx-Math.min(W,Hh)*0.36, ax=cx+Math.min(W,Hh)*0.36;
+    box(sx, cy, Math.round(R.kmh)+" km/h", "速度");
+    box(ax, cy, "海拔 "+Math.round(R.alt), "离地 "+(R.agl==null?"--":Math.round(R.agl))+"m", R.agl!=null && R.agl<4 && kind==="plane");
+    g.textAlign="center"; g.fillStyle=R.vs>0.3?HUD_COL:(R.vs<-3?HUD_WARN:HUD_DIM);
+    g.fillText((R.vs>=0?"▲ ":"▼ ")+Math.abs(R.vs).toFixed(1)+" m/s", ax, cy+50);
+    g.fillStyle=HUD_DIM; g.font="12px monospace"; g.fillText(kind==="plane"?"客机":"悬浮摩托", cx, cy+Math.min(W,Hh)*0.26+16);
+  } else {
+    // 地面载具: 速度表盘(左下, 避开右下角的第一人称手臂)
+    const r=62, ox=r+34, oy=Hh-r-120, maxK=riding.def.chariot?60:riding.def.car?40:30;
+    g.lineWidth=3; g.strokeStyle=HUD_DIM; g.beginPath(); g.arc(ox,oy,r,Math.PI*0.75,Math.PI*2.25); g.stroke();
+    const f=Math.min(1,R.kmh/maxK); g.strokeStyle=HUD_COL; g.beginPath(); g.arc(ox,oy,r,Math.PI*0.75,Math.PI*(0.75+1.5*f)); g.stroke();
+    g.lineWidth=1.5; g.textAlign="center"; g.fillStyle=HUD_COL; g.font="bold 20px monospace"; g.fillText(String(Math.round(R.kmh)),ox,oy-4);
+    g.font="12px monospace"; g.fillStyle=HUD_DIM; g.fillText("km/h",ox,oy+14);
+    const name=riding.def.chariot?"战车":riding.def.car?"汽车":riding.def.camelMount?"骆驼":"马";
+    g.fillText(name,ox,oy+r+4);
+    if(riding.def.camelMount){                            // 骆驼冲刺冷却
+      const ready=camelState.cd<=0; g.fillStyle=ready?HUD_COL:HUD_WARN;
+      g.fillText(ready?"冲刺就绪(空格)":"冲刺 "+camelState.cd.toFixed(1)+"s", ox, oy+r+20);
+    }
+  }
+  H.frames++;
 }
 
 /* =========================================================
@@ -10491,7 +10578,7 @@ function drawBlobShadows(pv, camX, camZ, fogNear, fogFar, sunI){
    只在上一帧画过水、相机在水面之上时才做, 看不到水的内陆一分钱不多花。 */
 const REFL_Y = WATER_Y + 0.86;                     // 水面顶点高度(见 waterProg: y 的小数 = 0.86)
 const refl={fbo:null, tex:null, rb:null, w:0, h:0, on:false, frames:0};
-const REFL_CHUNKS=6;
+const REFL_CHUNKS=6, REFL_ENT_R=40;
 let _reflWater=false;
 function reflFree(){ if(refl.fbo){ gl.deleteFramebuffer(refl.fbo); gl.deleteTexture(refl.tex); gl.deleteRenderbuffer(refl.rb); } refl.fbo=refl.tex=refl.rb=null; refl.w=refl.h=0; refl.on=false; }
 function reflEnsure(rw,rh){
@@ -10554,6 +10641,16 @@ function renderReflection(pv, camX, camY, camZ, w, h, uw){
     bindChunkAttribs();
     gl.drawElements(gl.TRIANGLES,c.mesh.plant.n,gl.UNSIGNED_INT,0);
   }
+  // 第十一轮·云端: 生物/载具/箭矢也进倒影(40 格内、水面以上; 飞机掠过海面、骆驼走在岸边都有倒影)
+  let ents=0;
+  for(const m of mobs){
+    if(!m || m.burrowed || !m.def || !m.def.parts) continue;
+    if(m.y+(m.def.h||1) < REFL_Y || Math.hypot(m.x-camX,m.z-camZ)>REFL_ENT_R) continue;
+    drawEntity(m); ents++;
+  }
+  for(const a of arrows) if(a.y>REFL_Y && Math.hypot(a.x-camX,a.z-camZ)<REFL_ENT_R){ drawEntity(a); ents++; }
+  gl.uniform3f(U.uTint,1,1,1);
+  refl.ents=ents;
   // 还原主通道状态
   updateFrustum(pv);
   gl.uniformMatrix4fv(U.uPV,false,pv);
@@ -11290,6 +11387,7 @@ function frame(now){
     tickCamel(dt);                                // 第五轮·云端
     tickAmbient(dt);                              // 第六轮·云端: 萤火虫/炊烟/跃鱼
     tickFurnaces(dt);                             // 第七轮·云端: 熔炉按秒推进
+    tickDriveHud(dt);                             // 第十一轮·云端: 载具驾驶 HUD
     tickTitle();
     arrowCd=Math.max(0,arrowCd-dt);
     gunCd=Math.max(0,gunCd-dt);
@@ -14183,6 +14281,27 @@ function selftest(){
         ok("砂岩熔炉: 注册/配方/自发光; 燃料耗尽即停、金 2:1、成品格不同类不吞燃料; 生鱼烤熟回 12 血; 拆炉退回; 有火变亮熄火变回; 存档含 furnaces",
            reg && s1 && s2 && s3 && s4 && fishOk && spillOk && lit && unlit && saved && brokeOk,
            "reg="+reg+" s1="+s1+" s2="+s2+" s3="+s3+" s4="+s4+" fish="+fishOk+" spill="+spillOk+" lit="+lit+" unlit="+unlit+" saved="+saved+" broke="+brokeOk);
+      }
+      { // 第十一轮·云端: 载具驾驶 HUD —— 载具分类; 航向 0=北/90=东; 速度按位移算(瞬移不计); 离地高度含水面; 骑乘才显示
+        const kindOk=driveKind(null)===null && driveKind({def:MOB_DEFS.plane})==="plane" && driveKind({def:MOB_DEFS.bike})==="bike"
+          && driveKind({def:MOB_DEFS.car})==="car" && driveKind({def:MOB_DEFS.horse})==="ground" && driveKind({def:MOB_DEFS.chariot})==="ground";
+        const pS={x:player.x,y:player.y,z:player.z,yaw:player.yaw,pitch:player.pitch}, rS=riding, hS=Object.assign({},driveHud);
+        player.yaw=0; const h0=Math.round(headingDeg()); player.yaw=Math.PI/2; const h90=Math.round(headingDeg()); player.yaw=-Math.PI/2; const h270=Math.round(headingDeg());
+        const hdgOk=h0===0 && h90===90 && h270===270;
+        driveHud.lx=player.x; driveHud.ly=player.y; driveHud.lz=player.z; driveHud.spd=0; driveHud.vs=0;
+        player.x+=5; player.y+=1; const R1=driveReadout(0.5);                    // 0.5 秒走 5 格 → 10 m/s = 36 km/h, 爬升 2 m/s
+        const spdOk=Math.abs(R1.kmh-36)<0.5 && Math.abs(R1.vs-2)<0.05;
+        player.x+=500; const R2=driveReadout(0.5); const jumpOk=R2.kmh<36;         // 传送不算速度(平滑后只会变小)
+        const gx=Math.floor(player.x), gz=Math.floor(player.z); ensureData(gx>>4,gz>>4); player.y=groundY(gx,gz)+7.5;
+        const R3=driveReadout(0.1); const aglOk=R3.agl!=null && Math.abs(R3.agl-7.5)<1.01;
+        const cv=document.getElementById("driveHud");
+        riding=null; tickDriveHud(0.1); const hidden=cv.style.display==="none";
+        riding={def:MOB_DEFS.plane}; tickDriveHud(0.1); const shown=cv.style.display==="block" && driveHud.on;
+        riding=null; tickDriveHud(0.1);
+        riding=rS; Object.assign(player,pS); Object.assign(driveHud,hS); if(!driveHud.on) cv.style.display="none";
+        ok("第十一轮驾驶 HUD: 载具分类正确; 航向 0=北 90=东; 速度按位移算且瞬移不计; 离地高度正确; 骑乘时显示、下车隐藏",
+           kindOk && hdgOk && spdOk && jumpOk && aglOk && hidden && shown,
+           "kind="+kindOk+" hdg="+h0+"/"+h90+"/"+h270+" spd="+R1.kmh.toFixed(1)+"/"+R1.vs.toFixed(2)+" jump="+R2.kmh.toFixed(1)+" agl="+(R3.agl==null?"null":R3.agl.toFixed(2))+" hidden="+hidden+" shown="+shown);
       }
       { // 第十轮·云端: 海平面平面反射 —— 只在高/极致开; 镜像矩阵把水面上方映到下方; 反射 FBO 可建; 水下/无水时不画; 着色器接好
         const presetOk=!GFX_PRESETS[0].refl && !GFX_PRESETS[1].refl && GFX_PRESETS[2].refl>0 && GFX_PRESETS[3].refl>0;
