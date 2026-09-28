@@ -2,6 +2,18 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-09-28 — 沙海奇境 第十轮（云端）：海平面水面的平面反射
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only; the "water reflections" item from the user's reference screenshot.
+
+| Change | Player-visible behavior |
+| --- | --- |
+| Planar water reflections (高 / 极致 quality) | Sea-level water now mirrors the shore: sandstone, grass tufts, flowers, trees and buildings appear upside-down in the water and wobble with the waves. Where no terrain is reflected, the existing sky/cloud Fresnel reflection is kept. Reflections stay visible even when looking down at the water (stylized, shader-pack-like). Ponds above sea level keep sky-only reflections. 低 / 中 quality are unchanged. |
+
+**How:** a mirrored camera (pv × reflect about y = `WATER_Y`+0.86) redraws opaque terrain and cross plants within 6 chunks into a half-resolution RGBA texture (cleared transparent); `mainProg` gained a `uClipY` discard so underwater geometry doesn't block the mirror; culling flips to BACK for the mirrored pass. `waterProg` samples the texture in screen space, distorted by the wave normal. The pass is skipped when the camera is underwater, below the surface, more than 90 blocks above it, or when no water chunk was drawn in the previous frame. New preset field `refl` (0.5 on 高/极致).
+
+**Verification:** inline script `node --check`; `node tools/headless.mjs selftest` **329/329** and 329/329 with another random seed (new check: presets, mirror matrix, FBO creation, skip conditions, shader uniforms); on/off screenshots of the same shoreline at 极致.
+
 ## 2026-09-28 — 沙海奇境: round-9 grass self-test made seed-robust (cloud)
 
 **Scope:** test-only change in `games/minecraft/index.html` (no player-visible behavior change). The round-9 check "plains grow tuft meadows" searched a fixed ±60-chunk window every 3 chunks and required ≥3 plains chunks; under `tools/headless.mjs`'s seed only 2 were found, so it failed on main even though coverage was a normal 7.3%. The search now spans ±90 chunks every 2 chunks and needs ≥2 plains chunks.
