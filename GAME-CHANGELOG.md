@@ -2,6 +2,12 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-09-28 — 沙海奇境: round-9 grass self-test made seed-robust (cloud)
+
+**Scope:** test-only change in `games/minecraft/index.html` (no player-visible behavior change). The round-9 check "plains grow tuft meadows" searched a fixed ±60-chunk window every 3 chunks and required ≥3 plains chunks; under `tools/headless.mjs`'s seed only 2 were found, so it failed on main even though coverage was a normal 7.3%. The search now spans ±90 chunks every 2 chunks and needs ≥2 plains chunks.
+
+**Verification:** `node tools/headless.mjs selftest` **328/328** (was 327/328 on main); also 328/328 with a different random seed via the previous Playwright runner.
+
 ## 2026-09-26 — 沙海奇境: faster chunk meshing (local round 9 ③)
 
 **Scope:** 沙海奇境 (`games/minecraft/`) only. Performance-only; rendered output is byte-identical.
