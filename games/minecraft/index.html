@@ -2681,7 +2681,7 @@ const _mainSrc = [`
   varying vec3 vN, vRel, vSh;
   uniform sampler2D uTex;
   uniform vec3 uTint, uSunDir, uSunCol, uAmbCol;
-  uniform float uDay, uAlpha, uBlk, uSandFx;
+  uniform float uDay, uAlpha, uBlk, uSandFx, uClipY;
   uniform int uMode;
   ${SKY_GLSL}
   ${FOG_GLSL}
@@ -2692,6 +2692,7 @@ const _mainSrc = [`
   float gNoise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
     return mix(mix(gHash(i), gHash(i+vec2(1.0,0.0)), f.x), mix(gHash(i+vec2(0.0,1.0)), gHash(i+vec2(1.0,1.0)), f.x), f.y); }
   void main(){
+    if((vRel + uEyeL).y < uClipY) discard;         // 水面反射那一遍: 丢掉水面以下的片元(第十轮·云端; 平时 uClipY 极小)
     vec4 c = texture2D(uTex, vUV);
     if(uMode==0){ if(c.a<0.5) discard; c.a=1.0; }
     else c.a *= uAlpha;
@@ -2807,6 +2808,7 @@ const waterProg = makeShader(`
   varying vec3 vRel, vN, vSh; varying float vDepth, vCls, vShore, vBL;
   uniform vec3 uSunDir, uSunCol, uAmbCol, uGlint, uShallow, uDeep, uShallow2, uDeep2;
   uniform float uDay, uBlk;
+  uniform sampler2D uRefl; uniform float uReflOn, uReflY; uniform vec2 uInvScr;   // 平面反射(第十轮·云端)
   ${SKY_GLSL}
   ${FOG_GLSL}
   ${SHADOW_GLSL}
@@ -2834,9 +2836,19 @@ const waterProg = makeShader(`
     if(below > 0.5) N = -N;
     float ndv = max(dot(N, V), 0.0);
     float fres = 0.03 + 0.97*pow(1.0 - ndv, 5.0);
+    float planar = 0.0;                               // 平面反射命中地形的程度(0..1), 见下
     vec3 R = reflect(-V, N); R.y = abs(R.y);
     vec3 refl = skyCol(R);
     vec4 cl = clouds(R); refl = mix(refl, cl.rgb, cl.a*0.8);
+    // 平面反射(第十轮·云端): 海平面水面按屏幕坐标采样镜像相机画出的"水上世界", 用波浪法线扰动 → 岸、树、房子在水里摇晃的倒影;
+    // 贴图 alpha=0 的地方(没画到地形)仍是天空与云。高于海平面的水塘不在镜面上, 照旧只反射天空
+    if(uReflOn > 0.5 && top > 0.5 && below < 0.5 && abs(wp.y - uReflY) < 0.25){
+      vec2 suv = gl_FragCoord.xy * uInvScr + N.xz * (0.05 / (1.0 + d*0.035));
+      vec4 rt = texture2D(uRefl, clamp(suv, vec2(0.002), vec2(0.998)));
+      refl = mix(refl, rt.rgb, rt.a);
+      planar = rt.a;
+    }
+    fres = max(fres, 0.36*planar);                    // 风格化: 岸上景物的倒影即使俯视也清晰可见(对标光影包)
     float sh = 1.0;
     if(uShadowOn > 0.5) sh = shadowAt();
     float cs = 1.0;
@@ -2895,12 +2907,13 @@ const blobVbo=gl.createBuffer();
 const U = {}; // uniform 位置
 for(const n of ["uPV","uOffset","uUVOff","uEye","uFogNear","uFogFar","uTex","uFogCol","uDay","uAlpha","uMode","uTint",
                  "uLightPV","uShadowBias","uShadow","uSunDir","uSunCol","uAmbCol","uShadowOn","uShadowTexel","uPCF",
-                 "uWTime","uWind","uWOrig","uCloudShadow","uBlk","uSandFx"])
+                 "uWTime","uWind","uWOrig","uCloudShadow","uBlk","uSandFx","uClipY"])
   U[n]=gl.getUniformLocation(mainProg,n);
 // 水面程序 uniform
 const UW = {};
 for(const n of ["uPV","uLightPV","uEye","uWOrig","uWTime","uShadowBias","uShadow","uShadowOn","uShadowTexel","uPCF",
-                 "uSunDir","uSunCol","uAmbCol","uGlint","uShallow","uDeep","uShallow2","uDeep2","uDay","uCloudShadow","uBlk"])
+                 "uSunDir","uSunCol","uAmbCol","uGlint","uShallow","uDeep","uShallow2","uDeep2","uDay","uCloudShadow","uBlk",
+                 "uRefl","uReflOn","uReflY","uInvScr"])
   UW[n]=gl.getUniformLocation(waterProg,n);
 // 天空/云/雾共享 uniform: 三个程序(天空/主/水面)各取一份位置, 每帧由 applySkyUniforms() 统一灌入
 const SKY_UNIFS=["uZenith","uHorizon","uGround","uBand","uSkySun","uSunGlowCol","uCloudLit","uCloudSh","uCloudOff",
@@ -9791,10 +9804,11 @@ const GFX_PRESETS=[
   // msaa: 离屏多重采样数(多重采样渲染缓冲 + blit 解析)。WebGL2 下 mainProg 已转 GLSL 300 且 UV 用 centroid 插值,
   //       部分覆盖像素不再外推 UV 采到图集相邻格子, 所以高/极致开 4×(FXAA 同时降到 0.35 只补残余锯齿)。
   // clouds = 云噪声层数(3..5), cshadow = 地面云影开关
+  // refl: 海平面水面的平面反射(镜像相机把水上地形再画一遍进半分辨率贴图, 第十轮·云端); 0/缺省 = 只反射天空与云
   {shadow:false, post:false, clouds:3, cshadow:0},                                                          // 低: 无阴影贴图、无后处理(直出画布)
   {shadow:true, size:1024, range:40, pcf:0, post:true, bloom:true, fxaa:true, clouds:4, cshadow:1},         // 中: + 泛光/调色/暗角/FXAA
-  {shadow:true, size:2048, range:56, pcf:1, post:true, bloom:true, fxaa:true, msaa:4, heat:true, clouds:5, cshadow:1, rays:12, mobShadow:true},   // 高(电脑默认): + 正午热浪 + 光束
-  {shadow:true, size:4096, range:80, pcf:1, post:true, bloom:true, fxaa:true, msaa:4, heat:true, dof:true, clouds:5, cshadow:1, rays:20, mobShadow:true}, // 极致: + 远景柔化
+  {shadow:true, size:2048, range:56, pcf:1, post:true, bloom:true, fxaa:true, msaa:4, heat:true, clouds:5, cshadow:1, rays:12, mobShadow:true, refl:0.5},   // 高(电脑默认): + 正午热浪 + 光束
+  {shadow:true, size:4096, range:80, pcf:1, post:true, bloom:true, fxaa:true, msaa:4, heat:true, dof:true, clouds:5, cshadow:1, rays:20, mobShadow:true, refl:0.5}, // 极致: + 远景柔化
 ];
 let gfxLevel=2;
 try{ const v=parseInt(localStorage.getItem("sandsea_gfx"),10); if(v>=0 && v<GFX_PRESETS.length) gfxLevel=v; }catch(e){}
@@ -10470,6 +10484,87 @@ function drawBlobShadows(pv, camX, camZ, fogNear, fogFar, sunI){
   gl.depthMask(true); gl.disable(gl.BLEND);
   gl.useProgram(mainProg);
 }
+/* ---- 🌊 海平面水面的平面反射(第十轮·云端, 高/极致) ----
+   镜像相机: 在 pv 后乘一个沿水面 y=REFL_Y 翻转的矩阵, 把水面以上的地形与十字植物再画一遍进半分辨率贴图(清成全透明,
+   画到地形的像素 alpha=1)。主着色器用 uClipY 丢掉水面以下的片元; 镜像后三角形绕序反转, 所以这一遍剔 BACK。
+   水面着色器按屏幕坐标采样 + 波浪法线扰动, alpha 为 0 处退回原来的天空/云反射。
+   只在上一帧画过水、相机在水面之上时才做, 看不到水的内陆一分钱不多花。 */
+const REFL_Y = WATER_Y + 0.86;                     // 水面顶点高度(见 waterProg: y 的小数 = 0.86)
+const refl={fbo:null, tex:null, rb:null, w:0, h:0, on:false, frames:0};
+const REFL_CHUNKS=6;
+let _reflWater=false;
+function reflFree(){ if(refl.fbo){ gl.deleteFramebuffer(refl.fbo); gl.deleteTexture(refl.tex); gl.deleteRenderbuffer(refl.rb); } refl.fbo=refl.tex=refl.rb=null; refl.w=refl.h=0; refl.on=false; }
+function reflEnsure(rw,rh){
+  if(refl.fbo && refl.w===rw && refl.h===rh) return true;
+  reflFree();
+  const tex=gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D,tex);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,rw,rh,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+  for(const [k,v] of [[gl.TEXTURE_MIN_FILTER,gl.LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR],[gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D,k,v);
+  const rb=gl.createRenderbuffer();
+  gl.bindRenderbuffer(gl.RENDERBUFFER,rb);
+  gl.renderbufferStorage(gl.RENDERBUFFER,gl.DEPTH_COMPONENT16,rw,rh);
+  const fbo=gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,tex,0);
+  gl.framebufferRenderbuffer(gl.FRAMEBUFFER,gl.DEPTH_ATTACHMENT,gl.RENDERBUFFER,rb);
+  const ok=gl.checkFramebufferStatus(gl.FRAMEBUFFER)===gl.FRAMEBUFFER_COMPLETE;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,sceneFBO);
+  gl.bindTexture(gl.TEXTURE_2D,atlasTex);
+  if(!ok){ gl.deleteFramebuffer(fbo); gl.deleteTexture(tex); gl.deleteRenderbuffer(rb); return false; }
+  refl.fbo=fbo; refl.tex=tex; refl.rb=rb; refl.w=rw; refl.h=rh;
+  return true;
+}
+const reflMirror=()=>new Float32Array([1,0,0,0, 0,-1,0,0, 0,0,1,0, 0,2*REFL_Y,0,1]);   // y → 2·REFL_Y − y
+// 调用时: mainProg 已启用、公共 uniform 已灌好、当前绑定的是场景 FBO(视口 w×h)
+function renderReflection(pv, camX, camY, camZ, w, h, uw){
+  const P=GFX_PRESETS[gfxLevel];
+  refl.on=false;
+  if(!P.refl || uw || !_reflWater || camY < REFL_Y+0.2 || camY > REFL_Y+90){ return false; }
+  const rw=Math.max(64,Math.round(w*P.refl)), rh=Math.max(36,Math.round(h*P.refl));
+  if(!reflEnsure(rw,rh)) return false;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,refl.fbo);
+  gl.viewport(0,0,rw,rh);
+  gl.clearColor(0,0,0,0); gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  const pvR=matMul(pv,reflMirror()), myY=2*REFL_Y-camY;
+  updateFrustum(pvR);
+  gl.uniformMatrix4fv(U.uPV,false,pvR);
+  gl.uniform3f(U.uEye,camX,myY,camZ);
+  gl.uniform3f(SKL_MAIN.uEyeL,_sky.eyeL[0],myY,_sky.eyeL[2]); gl.uniform1f(SKL_MAIN.uCamY,myY);
+  gl.uniform1f(U.uClipY,REFL_Y-0.05);
+  gl.uniform1i(U.uMode,0);
+  gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK);   // 镜像后绕序反转: 主通道剔 FRONT, 这里剔 BACK
+  const plants=[], RR=Math.min(RENDER, REFL_CHUNKS);   // 远处的倒影早被雾吞掉, 只画 6 个区块以内, 省一半以上的顶点
+  for(const c of world.values()){
+    if(!c.mesh) continue;
+    if(Math.max(Math.abs(c.cx-pcx),Math.abs(c.cz-pcz))>RR) continue;
+    if(!chunkInFrustum(c.cx,c.cz)) continue;
+    if(c.mesh.opaque){
+      gl.bindBuffer(gl.ARRAY_BUFFER,c.mesh.opaque.vbo);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,c.mesh.opaque.ibo);
+      bindChunkAttribs();
+      gl.drawElements(gl.TRIANGLES,c.mesh.opaque.n,gl.UNSIGNED_INT,0);
+    }
+    if(c.mesh.plant) plants.push(c);
+  }
+  gl.disable(gl.CULL_FACE);
+  for(const c of plants){
+    gl.bindBuffer(gl.ARRAY_BUFFER,c.mesh.plant.vbo);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,c.mesh.plant.ibo);
+    bindChunkAttribs();
+    gl.drawElements(gl.TRIANGLES,c.mesh.plant.n,gl.UNSIGNED_INT,0);
+  }
+  // 还原主通道状态
+  updateFrustum(pv);
+  gl.uniformMatrix4fv(U.uPV,false,pv);
+  gl.uniform3f(U.uEye,camX,camY,camZ);
+  gl.uniform3fv(SKL_MAIN.uEyeL,_sky.eyeL); gl.uniform1f(SKL_MAIN.uCamY,_sky.camY);
+  gl.uniform1f(U.uClipY,-1e4);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,sceneFBO);
+  gl.viewport(0,0,w,h);
+  refl.on=true; refl.frames++;
+  return true;
+}
 function render(now){
   if(ctxLost) return;                       // 上下文丢失期间不绘制
   // 宽高必须 >=1: 窗口最小化/面板隐藏时为 0 会让投影矩阵变 NaN → 白屏
@@ -10656,6 +10751,8 @@ function render(now){
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D,atlasTex);
   gl.uniform1i(U.uTex,0);
+  gl.uniform1f(U.uClipY,-1e4);
+  renderReflection(pv, camX, camY, camZ, w, h, uw);   // 第十轮·云端: 海平面水面的平面反射(高/极致)
 
   // 不透明方块
   gl.uniform1i(U.uMode,0);
@@ -10676,6 +10773,7 @@ function render(now){
     if(c.mesh.plant) plantList.push(c);
     if(c.mesh.water) waterList.push(c);
   }
+  _reflWater = waterList.length>0;                        // 下一帧是否需要画平面反射
   gl.disable(gl.CULL_FACE);   // 以下(十字植物/生物/广告牌/水面)均需双面, 关掉背面剔除
   // 十字植物: 单套绕序 + 关剔除 = 真正双面可见(仍走不透明 uMode=0 的 alpha<0.5 discard 抠像, 写深度)
   for(const c of plantList){
@@ -10844,6 +10942,8 @@ function render(now){
     gl.uniform3f(UW.uGlint,gc[0]*gI,gc[1]*gI,gc[2]*gI);
     gl.uniform3f(UW.uShallow,0.27,0.74,0.70);  gl.uniform3f(UW.uDeep,0.06,0.31,0.43);    // 绿洲/尼罗河: #45BDB3 → #0F4F6E
     gl.uniform3f(UW.uShallow2,0.43,0.54,0.31); gl.uniform3f(UW.uDeep2,0.17,0.23,0.16);   // 沼泽: #6E8A4E → #2C3B2A
+    gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, refl.on ? refl.tex : null); gl.activeTexture(gl.TEXTURE0);   // 平面反射(第十轮·云端)
+    gl.uniform1i(UW.uRefl,2); gl.uniform1f(UW.uReflOn,refl.on?1:0); gl.uniform1f(UW.uReflY,REFL_Y); gl.uniform2f(UW.uInvScr,1/w,1/h);
     waterList.sort((a,b)=>{
       const da=(b.cx*CS+8-player.x)**2+(b.cz*CS+8-player.z)**2;
       const db=(a.cx*CS+8-player.x)**2+(a.cz*CS+8-player.z)**2;
@@ -14083,6 +14183,21 @@ function selftest(){
         ok("砂岩熔炉: 注册/配方/自发光; 燃料耗尽即停、金 2:1、成品格不同类不吞燃料; 生鱼烤熟回 12 血; 拆炉退回; 有火变亮熄火变回; 存档含 furnaces",
            reg && s1 && s2 && s3 && s4 && fishOk && spillOk && lit && unlit && saved && brokeOk,
            "reg="+reg+" s1="+s1+" s2="+s2+" s3="+s3+" s4="+s4+" fish="+fishOk+" spill="+spillOk+" lit="+lit+" unlit="+unlit+" saved="+saved+" broke="+brokeOk);
+      }
+      { // 第十轮·云端: 海平面平面反射 —— 只在高/极致开; 镜像矩阵把水面上方映到下方; 反射 FBO 可建; 水下/无水时不画; 着色器接好
+        const presetOk=!GFX_PRESETS[0].refl && !GFX_PRESETS[1].refl && GFX_PRESETS[2].refl>0 && GFX_PRESETS[3].refl>0;
+        const M=reflMirror(), mp=(y)=>M[5]*y+M[13];
+        const mirrorOk=Math.abs(mp(REFL_Y+2)-(REFL_Y-2))<1e-5 && Math.abs(mp(REFL_Y)-REFL_Y)<1e-5 && Math.abs(REFL_Y-(WATER_Y+0.86))<1e-6;
+        const fb0=sceneFBO, fboOk=reflEnsure(64,36) && !!refl.fbo && refl.w===64; reflFree(); gl.bindFramebuffer(gl.FRAMEBUFFER,fb0);
+        const w0=_reflWater, g0=gfxLevel; gfxLevel=3;
+        _reflWater=true; const skipUw=renderReflection(new Float32Array(16),0,REFL_Y+5,0,96,54,true)===false && !refl.on;
+        _reflWater=false; const skipDry=renderReflection(new Float32Array(16),0,REFL_Y+5,0,96,54,false)===false;
+        _reflWater=true; const skipBelow=renderReflection(new Float32Array(16),0,REFL_Y-1,0,96,54,false)===false;
+        _reflWater=w0; gfxLevel=g0; reflFree(); gl.bindFramebuffer(gl.FRAMEBUFFER,fb0);
+        const unifOk=!!U.uClipY && !!UW.uRefl && !!UW.uReflOn && !!UW.uInvScr;
+        ok("第十轮水面反射: 只在高/极致开; 镜像矩阵正确; 反射贴图可建; 水下/没有水/相机在水面下都不画; 主/水面着色器接口就绪",
+           presetOk && mirrorOk && fboOk && skipUw && skipDry && skipBelow && unifOk,
+           "preset="+presetOk+" mirror="+mirrorOk+" fbo="+fboOk+" uw="+skipUw+" dry="+skipDry+" below="+skipBelow+" unif="+unifOk);
       }
       { // 第九轮·云端: 参考图画面 —— 绿色群系成片草丛/小花、荒漠群系不长; 主着色器带草地深浅变化
         const mulOk=GREEN_TUFT_MUL[BIO_PLAIN]>0 && GREEN_TUFT_MUL[BIO_SAVANNA]>0 && GREEN_TUFT_MUL[BIO_DESERT]===0 && GREEN_TUFT_MUL[BIO_MESA]===0
