@@ -11765,6 +11765,7 @@ function tick(now){
     if(t){ t.textContent="渲染异常: "+(err&&err.message||err); t.style.display="block"; }
   }
 }
+let _stSkipRender=false;   // 自测只推进逻辑时跳过渲染(软件渲染下每帧要数秒); 渲染另由「渲染一帧无异常」覆盖
 function frame(now){
   let dt=clamp((now-lastT)/1000,0,0.05); lastT=now;
   fpsC++; if(now-fpsT>500){ fps=Math.round(fpsC*1000/(now-fpsT)); fpsC=0; fpsT=now; autoScalePerf(); }
@@ -12008,7 +12009,7 @@ XYZ: ${player.x.toFixed(1)} / ${player.y.toFixed(1)} / ${player.z.toFixed(1)}
 模式: ${player.flying?"飞行":"行走"}${player.sprint?" 疾跑":""}`;
     }
   }
-  render(now);
+  if(!_stSkipRender) render(now);
 }
 
 /* =========================================================
@@ -13710,7 +13711,8 @@ function selftest(){
         if(spawnMob(b,6,14)) bossSpawned++;
       }
       for(let i=0;i<60;i++) updateMobs(0.033);
-      for(const m of mobs) drawEntity(m);
+      const vp=gl.getParameter(gl.VIEWPORT); gl.viewport(0,0,1,1);   // 只验证绘制路径不抛错: 缩到 1 像素, 免得软件渲染下全屏填充数分钟
+      try{ for(const m of mobs) drawEntity(m); } finally { gl.viewport(vp[0],vp[1],vp[2],vp[3]); }
     }catch(e){ bossErr=e.message; }
     ok("Boss 生成与 AI 流程无异常", !bossErr, bossErr||("已生成 "+bossSpawned+" 个 Boss"));
     mobs.length=0;
@@ -13740,6 +13742,7 @@ function selftest(){
       // 新世界出生在村口, 正前方可能恰被路灯/墙/村民挡住 → 四个朝向依次试, 有一个能走开即可(每次试前回到原位)
       const start={x:player.x,y:player.y,z:player.z,yaw:player.yaw};
       const wasSoft=softLock; softLock=true;
+      _stSkipRender=true;   // 只测摇杆驱动位移, 不必画 30 帧
       for(let k=0;k<4 && moved<=1;k++){
         player.x=start.x; player.y=start.y; player.z=start.z; player.vx=player.vz=0; player.yaw=start.yaw+k*Math.PI/2;
         touchState.active=true; touchState.moveX=0; touchState.moveY=-1;   // 摇杆推到最前
@@ -13750,6 +13753,7 @@ function selftest(){
       }
       softLock=wasSoft; player.yaw=start.yaw;
     }catch(e){ touchErr=e.message; }
+    _stSkipRender=false;
     ok("模拟触屏摇杆能驱动玩家移动", !touchErr && moved>1, touchErr||("位移="+moved.toFixed(2)+"m"));
 
     // 8. 关卡系统: 推进 → 完成 → 索引前进
