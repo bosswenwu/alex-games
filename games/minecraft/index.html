@@ -14934,7 +14934,9 @@ function selftest(){
         player.x+=5; player.y+=1; const R1=driveReadout(0.5);                    // 0.5 秒走 5 格 → 10 m/s = 36 km/h, 爬升 2 m/s
         const spdOk=Math.abs(R1.kmh-36)<0.5 && Math.abs(R1.vs-2)<0.05;
         player.x+=500; const R2=driveReadout(0.5); const jumpOk=R2.kmh<36;         // 传送不算速度(平滑后只会变小)
-        const gx=Math.floor(player.x), gz=Math.floor(player.z); ensureData(gx>>4,gz>>4); player.y=groundY(gx,gz)+7.5;
+        let gx=Math.floor(player.x); const gz=Math.floor(player.z); ensureData(gx>>4,gz>>4);
+        for(let i=0;i<40 && groundY(gx,gz)<=0;i++){ gx+=3; ensureData(gx>>4,gz>>4); }   // 水面/树冠上 groundY=-1: 挪到实地再测
+        player.x=gx+0.5; driveHud.lx=player.x; player.y=groundY(gx,gz)+7.5;
         const R3=driveReadout(0.1); const aglOk=R3.agl!=null && Math.abs(R3.agl-7.5)<1.01;
         const cv=document.getElementById("driveHud");
         riding=null; tickDriveHud(0.1); const hidden=cv.style.display==="none";

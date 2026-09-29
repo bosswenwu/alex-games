@@ -485,3 +485,10 @@
 - **可用性/视觉**：设置弹窗使用 `role=dialog`、`aria-modal`、Esc/关闭按钮/背景关闭、焦点返回与 Tab 焦点圈；操作面板列出常用键并可打开既有完整帮助。桌面和短横屏首屏无滚动；设置卡片在 1280×720、844×390、390×844 检查，短屏可滚动且滚动条为暗金配色。
 - **自动验证**：`node tools/headless.mjs selftest` **336/336**；UI 冒烟的 `opened/gfxApplied/musicApplied/volumeApplied/escapeClosed/saveVisible/overlayUnchanged/restored` 全部为 `true`。另在一次性 Chromium profile 实际点击「立即保存」，验证存档含有效 `seed` 且成功状态提示出现；偏好恢复后冒烟全项通过。桌面/横屏主菜单量测 `scrollHeight == viewport height`；`git diff --check` 通过。无头截图检查桌面菜单、短横屏菜单、桌面设置及两种手机方向。
 - **范围与后续 AI 接手**：只改 `games/minecraft/index.html`；未改世界生成/战斗/水面植被渲染/存档 schema/外部资源。关键锚点：`#menuActions`、`#settingsPanel`；控制器 `refreshSettingsUI/openSettings/closeSettings/setMusicEnabled/setMusicVolume`；音频 bus `ensureMusicBus/applyMusicAudioPrefs`；`setGfx()` 负责同步四档按钮；自测对应“设置枢纽”断言。继续改这部分前先查 Issue #11 最新认领，保留设置偏好独立于世界存档、音效不受背景音乐滑杆影响；当前分支为 `work/sandsea-pause-settings-20260929`，PR/协作状态见 Issue #11。
+
+## 云端进度（2026-09-29：第十二轮·倒影跟着最近水面 + 雨天湿地面 + 雨滴涟漪）
+
+- **倒影**：`pickReflY()` 每 0.5 秒找相机下方最近的水面（半径 32 格），村庄水塘、绿洲、高处河面都能正确出倒影。
+- **下雨**：`mainProg` 的 `uWet` 让露天方块约 8 秒湿透（变暗、反光、出现小水洼），雨停后约 40 秒干透；`waterProg` 的 `uRain` 画雨滴涟漪，另有雨滴水花粒子。
+- **自测**：338/338；顺带修好了第十一轮 HUD 自测会因落在水面/树冠上而失败的问题。
+- **后续接手**：湿地面在 mainProg 片元着色器「雨天湿地面」段；涟漪在 waterProg 的 `rainRing()`；两个 tick 在主循环 `tickDriveHud(dt)` 之后。没碰 C 键、`foeStrike()`、全局键盘处理（Manus 第十五轮）。
