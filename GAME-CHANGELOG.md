@@ -2,6 +2,22 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-09-29 — 沙海奇境 第十二轮（云端）：倒影跟着最近水面 + 雨天湿地面 + 雨滴涟漪/水花
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only, desktop. Rendering/weather visuals; no new keys, blocks, atlas tiles or save fields. Did not touch the C-key dodge / `foeStrike()` / global key handler (Manus round 15).
+
+| Change | Player-visible behavior |
+| --- | --- |
+| Reflections follow the nearest water | The planar reflection (高/极致) no longer assumes sea level: every 0.5 s `pickReflY()` finds the nearest water surface below the camera (under the player first, then rings out to 32 blocks) and mirrors around it, so village ponds, oases and raised rivers reflect correctly. Falls back to sea level when no water is found. |
+| Wet ground in rain | While it rains, open-sky blocks darken over ~8 s; tops gain a sky/sun sheen, and noise-shaped puddles show stronger reflections. Everything dries over ~40 s after the rain stops. Off on 低 quality; roofed/shaded blocks stay dry (sky-light gated). |
+| Rain ripples on water | During rain/storms, water tops show expanding drop rings (two offset hash grids), denser in storms (`rainK` 0.6 rain / 1.0 storm, eased over ~3 s). Fades out 32–52 blocks away; skipped underwater. |
+| Rain splashes | Within ~20 blocks, small splash particles pop on open-sky ground and water (≈30/s rain, ≈50/s storm, halved on 低). |
+| Test robustness | The round-11 drive-HUD self-test now moves to a solid-ground column before checking height-above-ground; before, it failed whenever it landed on water or a tree top. |
+
+**How:** `pickReflY`/`waterTopAt`/`reflY` in the reflection pass (`uReflY`, clip plane, entity filter); `mainProg` `uWet` + `wetK`/`tickWetness(dt)`; `waterProg` `uRain` + `rainRing()`; `rainK`/`tickRainSplash(dt)`. Both ticks run after `tickDriveHud(dt)`. The rain ripples were written by a helper agent and merged here.
+
+**Verification:** `node tools/headless.mjs selftest` **338/338** after merging main (#37–#40), including 2 new round-12 assertions. The first run failed only the drive-HUD height check (the location issue above); it passes after the fix. Headless SwiftShader screenshots: a village pond during a storm (reflection on, `reflY` = 34.86, pond above sea level) and wet ground in rain; no console errors. Mobile not checked (desktop-only scope).
+
 ## 2026-09-28 — 沙海奇境: village market doorway clearance
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) only. A deterministic village-layout reliability fix; no new controls, blocks, or save fields.

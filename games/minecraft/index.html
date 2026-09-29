@@ -2956,7 +2956,7 @@ const _mainSrc = [`
   varying vec3 vN, vRel, vSh;
   uniform sampler2D uTex;
   uniform vec3 uTint, uSunDir, uSunCol, uAmbCol;
-  uniform float uDay, uAlpha, uBlk, uSandFx, uClipY;
+  uniform float uDay, uAlpha, uBlk, uSandFx, uClipY, uWet;
   uniform int uMode;
   ${SKY_GLSL}
   ${FOG_GLSL}
@@ -3033,6 +3033,26 @@ const _mainSrc = [`
           spec = uSunCol * ((sheen + rim + glit) * dirVis * sandK);
         }
       }
+      // 雨天湿地面(第十二轮·云端): 露天方块(天光可见度高)被雨打湿 → 颜色变深; 顶面加一层菲涅尔天空反光,
+      // 平地按噪声积出一洼洼水坑(更暗、更亮、带太阳高光)。洞穴/屋内不受影响; 侧面只轻微变深
+      if(uWet > 0.001 && vKind < 0.5 && uMode==0){
+        float wk = uWet * smoothstep(0.82, 0.98, vSky);
+        if(wk > 0.0){
+          float wtop = vN.y > 0.5 ? 1.0 : 0.0;
+          vec2 pw = (vRel + uEyeL).xz;
+          float pud = wtop * wk * smoothstep(0.68, 0.76, gNoise(pw*0.19)*0.75 + gNoise(pw*0.8 + 3.1)*0.25);   // 只在噪声高点积水: 零星几洼, 不淹成一片
+          alb *= 1.0 - wk*mix(0.12, 0.26, wtop) - pud*0.30;
+          if(wtop > 0.5){
+            float wd = length(vRel);
+            vec3 Vw = -vRel / max(wd, 0.001);
+            vec3 Rw = reflect(-Vw, vec3(0.0, 1.0, 0.0));
+            float frw = 0.02 + 0.98*pow(1.0 - max(Vw.y, 0.0), 5.0);
+            vec3 skw = pow(skyCol(Rw), vec3(2.2));
+            float glw = pow(max(dot(Rw, uSunDir), 0.0), 180.0) * dirVis;
+            spec += skw * frw * (0.10*wk + 0.55*pud) + uSunCol * glw * (0.25*wk + 1.4*pud);
+          }
+        }
+      }
       // 方块光: 灯笼/岩浆/水晶周围的暖色光池(夜里明显, 正午几乎看不出); 平滑衰减, 墙角随 AO 略暗
       if(vBL > 0.0) light += ${BL_COL_GLSL} * (uBlk * pow(vBL, 3.2) * mix(1.0, ao, 0.5));
       // 浅水底的焦散光纹(只在露天水域: 天光可见度门控, 洞穴里不出现)
@@ -3084,6 +3104,7 @@ const waterProg = makeShader(`
   uniform vec3 uSunDir, uSunCol, uAmbCol, uGlint, uShallow, uDeep, uShallow2, uDeep2;
   uniform float uDay, uBlk;
   uniform sampler2D uRefl; uniform float uReflOn, uReflY; uniform vec2 uInvScr;   // 平面反射(第十轮·云端)
+  uniform float uRain;                                // 雨滴涟漪强度 0..1(第十二轮·云端·A)
   ${SKY_GLSL}
   ${FOG_GLSL}
   ${SHADOW_GLSL}
@@ -3094,6 +3115,20 @@ const waterProg = makeShader(`
          + 0.035*sin(dot(q, vec2(-0.37, 0.93))*2.03 + uTime*1.45)
          + 0.012*sin(dot(q, vec2(0.66, -0.75))*3.70 + uTime*1.90)
          + 0.005*sin(dot(q, vec2(-0.98, -0.20))*6.98 + uTime*2.60);
+  }
+  // 雨滴涟漪(第十二轮·云端·A): q 为"格子单位"坐标(1 单位 ≈ 1.2 格); 每格每周期按哈希决定是否落雨点、落在哪,
+  // 圆环随周期内时间 t 向外扩散并衰减。返回 (法线 xz 扰动, 环亮度)
+  vec3 rainRing(vec2 q, float seed, float dens){
+    vec2 c = floor(q); vec2 f = q - c;
+    float tt = uTime*0.95 + hash12(c + seed*17.31);
+    float cyc = floor(tt); float t = tt - cyc;
+    if(hash12(c*1.37 + vec2(cyc*7.13, seed*3.3)) > dens) return vec3(0.0);
+    vec2 ctr = 0.3 + 0.4*vec2(hash12(c + vec2(cyc*1.91, 11.0 + seed)), hash12(c + vec2(23.0 + seed, cyc*2.37)));
+    vec2 dv = f - ctr; float r = length(dv);
+    float w = r - t*0.4;
+    float amp = (1.0 - t)*(1.0 - t);
+    float g = exp(-w*w*650.0);
+    return vec3(dv/max(r, 0.001) * sin(w*70.0) * g * amp, g * amp);
   }
   void main(){
     vec3 wp = vRel + uEyeL;
@@ -3106,6 +3141,16 @@ const waterProg = makeShader(`
       N = normalize(vec3(wh(wp.xz - e.xy) - wh(wp.xz + e.xy), 2.0*e.x, wh(wp.xz - e.yx) - wh(wp.xz + e.yx)));
       N = normalize(N + vec3(vnoise(wp.xz*1.7 + uTime*0.4) - 0.5, 0.0, vnoise(wp.zx*1.7 - uTime*0.35) - 0.5)*0.12);
       N = normalize(mix(N, vec3(0.0, 1.0, 0.0), smoothstep(40.0, 140.0, d)*0.7));   // 远处压平, 不闪烁
+    }
+    float ripB = 0.0;                                 // 雨滴涟漪亮度(第十二轮·云端·A); uRain=0 时整段跳过, 与原画面逐像素一致
+    if(uRain > 0.001 && top > 0.5 && d < 54.0){
+      float rf = uRain * (1.0 - smoothstep(32.0, 52.0, d));      // 远处淡出, 避免闪烁
+      vec2 rq = wp.xz / 1.2;
+      float dens = 0.2 + 0.7*uRain;                              // 雷暴(uRain→1)更密
+      vec3 r1 = rainRing(rq, 0.0, dens);
+      vec3 r2 = rainRing(rq + 0.5, 5.0, dens);                   // 错开半格的第二层, 圆环可跨格交叠
+      N = normalize(N + vec3(r1.x + r2.x, 0.0, r1.y + r2.y) * (0.7*rf));
+      ripB = (r1.z + r2.z) * rf;
     }
     float below = dot(vN, V) < 0.0 ? 1.0 : 0.0;       // 从水下往上看
     if(below > 0.5) N = -N;
@@ -3142,6 +3187,7 @@ const waterProg = makeShader(`
     float shore = max(clamp(vShore*2.0, 0.0, 1.0), smoothstep(0.75, 0.15, vDepth)) * top;
     float foam = shore * smoothstep(0.5, 0.68, fn*0.75 + shore*0.5 - 0.12 + 0.1*sin(shore*9.0 - uTime*2.2));
     col = mix(col, vec3(0.93, 0.96, 0.94)*lg*1.1, foam*0.75);
+    if(ripB > 0.0) col += vec3(0.16, 0.18, 0.19) * lg * ripB * (1.0 - below);   // 涟漪圆环的淡淡亮边
     float alpha = clamp(mix(0.48, 0.92, k) + fres*0.35 + foam*0.4, 0.0, 1.0);
     if(below > 0.5){                                  // 水下仰望水面: 透出天光的亮青色
       col = mix(cD*lg, skyCol(vec3(0.0, 1.0, 0.0))*lg, 0.45 + 0.35*ndv);
@@ -3182,13 +3228,13 @@ const blobVbo=gl.createBuffer();
 const U = {}; // uniform 位置
 for(const n of ["uPV","uOffset","uUVOff","uEye","uFogNear","uFogFar","uTex","uFogCol","uDay","uAlpha","uMode","uTint",
                  "uLightPV","uShadowBias","uShadow","uSunDir","uSunCol","uAmbCol","uShadowOn","uShadowTexel","uPCF",
-                 "uWTime","uWind","uWOrig","uCloudShadow","uBlk","uSandFx","uClipY"])
+                 "uWTime","uWind","uWOrig","uCloudShadow","uBlk","uSandFx","uClipY","uWet"])
   U[n]=gl.getUniformLocation(mainProg,n);
 // 水面程序 uniform
 const UW = {};
 for(const n of ["uPV","uLightPV","uEye","uWOrig","uWTime","uShadowBias","uShadow","uShadowOn","uShadowTexel","uPCF",
                  "uSunDir","uSunCol","uAmbCol","uGlint","uShallow","uDeep","uShallow2","uDeep2","uDay","uCloudShadow","uBlk",
-                 "uRefl","uReflOn","uReflY","uInvScr"])
+                 "uRefl","uReflOn","uReflY","uInvScr","uRain"])
   UW[n]=gl.getUniformLocation(waterProg,n);
 // 天空/云/雾共享 uniform: 三个程序(天空/主/水面)各取一份位置, 每帧由 applySkyUniforms() 统一灌入
 const SKY_UNIFS=["uZenith","uHorizon","uGround","uBand","uSkySun","uSunGlowCol","uCloudLit","uCloudSh","uCloudOff",
@@ -5601,6 +5647,14 @@ function chestSpill(x,y,z){               // 储物箱被挖掉/炸掉: 箱内�
    · 汽车/马/战车/骆驼: 速度表盘; 骆驼另显示冲刺冷却
    ========================================================= */
 const H_MAX_Y=H-1;
+/* 第十二轮·云端: 地面湿度 wetK(0..1) —— 下雨/雷暴时约 8 秒湿透, 雨停后约 40 秒慢慢干; 由 mainProg 的 uWet 使用 */
+let wetK=0;
+const WET_IN=8, WET_OUT=40;
+function tickWetness(dt){
+  const raining = weather==="rain" || weather==="storm";
+  wetK = clamp(wetK + (raining ? dt/WET_IN : -dt/WET_OUT), 0, 1);
+  return wetK;
+}
 const driveHud={cv:null, g:null, lx:0, ly:0, lz:0, spd:0, vs:0, on:false, t:0, frames:0};
 const HUD_COL="rgba(126,255,178,0.92)", HUD_DIM="rgba(126,255,178,0.45)", HUD_WARN="rgba(255,196,96,0.95)";
 function driveKind(m){ if(!m||!m.def) return null; return m.def.plane?"plane":(m.def.mountFly?"bike":(m.def.car?"car":"ground")); }
@@ -11001,23 +11055,43 @@ function reflEnsure(rw,rh){
   refl.fbo=fbo; refl.tex=tex; refl.rb=rb; refl.w=rw; refl.h=rh;
   return true;
 }
-const reflMirror=()=>new Float32Array([1,0,0,0, 0,-1,0,0, 0,0,1,0, 0,2*REFL_Y,0,1]);   // y → 2·REFL_Y − y
+const reflMirror=(y=REFL_Y)=>new Float32Array([1,0,0,0, 0,-1,0,0, 0,0,1,0, 0,2*y,0,1]);   // y → 2·y − y'(默认海平面)
+/* 第十二轮·云端: 镜面高度随最近的水面走 —— 每 0.5 秒在相机周围 32 格内按圈采样, 取水平距离最近、低于相机的水面顶(y+0.86);
+   村庄水塘/绿洲/高原湖也能有倒影。找不到就回到海平面。同一时刻只有与镜面同高的水面用倒影, 其余照旧反射天空 */
+let reflY=REFL_Y, _reflPickT=-1e9;
+function waterTopAt(x,z,yTop){                       // 从 yTop 往下找第一个非空气/花草方块; 是水则返回水面高度, 否则 null
+  for(let y=Math.min(H-1,yTop); y>0; y--){ const id=getBlock(x,y,z); if(id===AIR || PLANT(id)) continue; return id===WATER ? y+0.86 : null; }
+  return null;
+}
+function pickReflY(camX,camY,camZ){
+  const cx=Math.floor(camX), cz=Math.floor(camZ), yTop=Math.floor(camY)+2;
+  const here=waterTopAt(cx,cz,yTop); if(here!=null && here<camY) return here;
+  for(let r=2;r<=32;r+=2){
+    const n=Math.max(8,Math.round(r*1.6));
+    for(let i=0;i<n;i++){ const a=i/n*6.2832, x=Math.floor(camX+Math.cos(a)*r), z=Math.floor(camZ+Math.sin(a)*r);
+      if(!world.has(key(x>>4,z>>4))) continue;
+      const t=waterTopAt(x,z,yTop); if(t!=null && t<camY) return t; }
+  }
+  return REFL_Y;
+}
 // 调用时: mainProg 已启用、公共 uniform 已灌好、当前绑定的是场景 FBO(视口 w×h)
 function renderReflection(pv, camX, camY, camZ, w, h, uw){
   const P=GFX_PRESETS[gfxLevel];
   refl.on=false;
-  if(!P.refl || uw || !_reflWater || camY < REFL_Y+0.2 || camY > REFL_Y+90){ return false; }
+  if(!P.refl || uw || !_reflWater){ return false; }
+  { const t=performance.now(); if(t-_reflPickT>500){ _reflPickT=t; reflY=pickReflY(camX,camY,camZ); } }
+  if(camY < reflY+0.2 || camY > reflY+90){ return false; }
   const rw=Math.max(64,Math.round(w*P.refl)), rh=Math.max(36,Math.round(h*P.refl));
   if(!reflEnsure(rw,rh)) return false;
   gl.bindFramebuffer(gl.FRAMEBUFFER,refl.fbo);
   gl.viewport(0,0,rw,rh);
   gl.clearColor(0,0,0,0); gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
-  const pvR=matMul(pv,reflMirror()), myY=2*REFL_Y-camY;
+  const pvR=matMul(pv,reflMirror(reflY)), myY=2*reflY-camY;
   updateFrustum(pvR);
   gl.uniformMatrix4fv(U.uPV,false,pvR);
   gl.uniform3f(U.uEye,camX,myY,camZ);
   gl.uniform3f(SKL_MAIN.uEyeL,_sky.eyeL[0],myY,_sky.eyeL[2]); gl.uniform1f(SKL_MAIN.uCamY,myY);
-  gl.uniform1f(U.uClipY,REFL_Y-0.05);
+  gl.uniform1f(U.uClipY,reflY-0.05);
   gl.uniform1i(U.uMode,0);
   gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK);   // 镜像后绕序反转: 主通道剔 FRONT, 这里剔 BACK
   const plants=[], RR=Math.min(RENDER, REFL_CHUNKS);   // 远处的倒影早被雾吞掉, 只画 6 个区块以内, 省一半以上的顶点
@@ -11044,10 +11118,10 @@ function renderReflection(pv, camX, camY, camZ, w, h, uw){
   let ents=0;
   for(const m of mobs){
     if(!m || m.burrowed || !m.def || !m.def.parts) continue;
-    if(m.y+(m.def.h||1) < REFL_Y || Math.hypot(m.x-camX,m.z-camZ)>REFL_ENT_R) continue;
+    if(m.y+(m.def.h||1) < reflY || Math.hypot(m.x-camX,m.z-camZ)>REFL_ENT_R) continue;
     drawEntity(m); ents++;
   }
-  for(const a of arrows) if(a.y>REFL_Y && Math.hypot(a.x-camX,a.z-camZ)<REFL_ENT_R){ drawEntity(a); ents++; }
+  for(const a of arrows) if(a.y>reflY && Math.hypot(a.x-camX,a.z-camZ)<REFL_ENT_R){ drawEntity(a); ents++; }
   gl.uniform3f(U.uTint,1,1,1);
   refl.ents=ents;
   // 还原主通道状态
@@ -11234,6 +11308,7 @@ function render(now){
   const blK=blockLightK(sunH);
   gl.uniform1f(U.uBlk,blK);
   gl.uniform1f(U.uSandFx, gfxLevel>0 ? 1 : 0);     // 沙面闪光: 「低」档关
+  gl.uniform1f(U.uWet, gfxLevel>0 ? wetK : 0);     // 第十二轮·云端: 雨天湿地面(「低」档关)
   gl.uniform1f(U.uShadowOn,shadow.ok?1:0);
   gl.uniform1f(U.uPCF,shadow.pcf);
   gl.uniform1f(U.uShadowTexel,shadow.ok?1/shadow.size:0);
@@ -11439,7 +11514,8 @@ function render(now){
     gl.uniform3f(UW.uShallow,0.27,0.74,0.70);  gl.uniform3f(UW.uDeep,0.06,0.31,0.43);    // 绿洲/尼罗河: #45BDB3 → #0F4F6E
     gl.uniform3f(UW.uShallow2,0.43,0.54,0.31); gl.uniform3f(UW.uDeep2,0.17,0.23,0.16);   // 沼泽: #6E8A4E → #2C3B2A
     gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, refl.on ? refl.tex : null); gl.activeTexture(gl.TEXTURE0);   // 平面反射(第十轮·云端)
-    gl.uniform1i(UW.uRefl,2); gl.uniform1f(UW.uReflOn,refl.on?1:0); gl.uniform1f(UW.uReflY,REFL_Y); gl.uniform2f(UW.uInvScr,1/w,1/h);
+    gl.uniform1i(UW.uRefl,2); gl.uniform1f(UW.uReflOn,refl.on?1:0); gl.uniform1f(UW.uReflY,reflY); gl.uniform2f(UW.uInvScr,1/w,1/h);
+    gl.uniform1f(UW.uRain,uw?0:rainK);                                   // 雨滴涟漪(第十二轮·云端·A); 水下不画
     waterList.sort((a,b)=>{
       const da=(b.cx*CS+8-player.x)**2+(b.cz*CS+8-player.z)**2;
       const db=(a.cx*CS+8-player.x)**2+(a.cz*CS+8-player.z)**2;
@@ -11544,6 +11620,46 @@ function updateWeather(dt){
     }
   }
   lightT=Math.max(0,lightT-dt);
+}
+/* ---------- 第十二轮·云端·A: 雨天水面涟漪强度 rainK + 地面/水面雨滴水花 ---------- */
+let rainK=0, rainSplashAcc=0;                       // rainK: 0..1 给水面着色器 uRain(下雨 0.6 / 雷暴 1, 约 3 秒过渡)
+function rainTarget(){
+  if(weather!=="rain" && weather!=="storm") return 0;
+  if(biomeAt(Math.floor(player.x),Math.floor(player.z))===BIO_SNOW) return 0;   // 雪原下的是雪, 不起涟漪/水花
+  return weather==="storm" ? 1 : 0.6;
+}
+// 露天落点: 从天顶往下扫这一列, 越过空气与花草; 碰到水 → 水面高度, 碰到实心地面 → 顶面; 树叶/树干等遮挡 → null
+function rainHitY(x,z){
+  if(!world.has(key(x>>4,z>>4))) return null;
+  for(let y=H-1;y>0;y--){
+    const b=getBlock(x,y,z);
+    if(b===AIR || PLANT(b)) continue;
+    if(b===WATER) return y+0.86;
+    return (SOLID(b)&&b!==LEAVES&&b!==LOG&&b!==PALM_LEAF&&b!==PALM_LOG) ? y+1 : null;
+  }
+  return null;
+}
+function tickRainSplash(dt){
+  const tgt=rainTarget(), step=dt/3;
+  rainK += Math.max(-step, Math.min(step, tgt-rainK));
+  if(rainK<0.02 || tgt===0){ rainSplashAcc=0; return 0; }
+  rainSplashAcc += dt * 50 * rainK * (gfxLevel===0 ? 0.5 : 1);   // 下雨约 30 个/秒, 雷暴约 50 个/秒; 低画质减半
+  let made=0;
+  const tu=(BLOCKS[WATER].s%16)*TS, tv=Math.floor(BLOCKS[WATER].s/16)*TV;
+  while(rainSplashAcc>=1){
+    rainSplashAcc-=1;
+    const a=Math.random()*6.283, d=1.5+Math.sqrt(Math.random())*18.5;
+    const px=player.x+Math.sin(a)*d, pz=player.z+Math.cos(a)*d;
+    const hy=rainHitY(Math.floor(px),Math.floor(pz));
+    if(hy==null) continue;
+    for(let k=0;k<3;k++) particles.push({
+      x:px+(Math.random()-.5)*0.15, y:hy+0.04, z:pz+(Math.random()-.5)*0.15,
+      vx:(Math.random()-.5)*1.4, vy:1.6+Math.random()*1.4, vz:(Math.random()-.5)*1.4,
+      life:0.18+Math.random()*0.12, size:0.035+Math.random()*0.025,
+      u:tu+Math.random()*TS*0.6, v:tv+Math.random()*TV*0.6, l:1.25});
+    made++;
+  }
+  return made;
 }
 function sfxThunder(){
   if(!actx2) return;
@@ -11787,6 +11903,8 @@ function frame(now){
     tickAmbient(dt);                              // 第六轮·云端: 萤火虫/炊烟/跃鱼
     tickFurnaces(dt);                             // 第七轮·云端: 熔炉按秒推进
     tickDriveHud(dt);                             // 第十一轮·云端: 载具驾驶 HUD
+    tickWetness(dt);                              // 第十二轮·云端: 雨天湿地面
+    tickRainSplash(dt);                           // 第十二轮·云端·A: 雨天涟漪强度 + 地面/水面雨滴水花
     tickTitle();
     arrowCd=Math.max(0,arrowCd-dt);
     gunCd=Math.max(0,gunCd-dt);
@@ -14765,6 +14883,47 @@ function selftest(){
            reg && s1 && s2 && s3 && s4 && fishOk && spillOk && lit && unlit && saved && brokeOk,
            "reg="+reg+" s1="+s1+" s2="+s2+" s3="+s3+" s4="+s4+" fish="+fishOk+" spill="+spillOk+" lit="+lit+" unlit="+unlit+" saved="+saved+" broke="+brokeOk);
       }
+      { // 第十二轮·云端: 倒影随最近水面 + 雨天湿地面 —— 放一块水测 pickReflY; 湿度随天气渐变; 着色器接口就绪
+        const bx=Math.floor(player.x)+3, bz=Math.floor(player.z), gyW=groundY(bx,bz);
+        let pickOk=false, fallOk=false;
+        if(gyW>0){
+          const wy=gyW+6, olds=[]; for(let y=wy;y<=wy+2;y++) olds.push(getBlock(bx,y,bz));
+          setBlock(bx,wy,bz,WATER); setBlock(bx,wy+1,bz,AIR); setBlock(bx,wy+2,bz,AIR);
+          const t=pickReflY(bx+0.5, wy+4, bz+0.5); pickOk=Math.abs(t-(wy+0.86))<1e-6 && Math.abs(waterTopAt(bx,bz,wy+3)-(wy+0.86))<1e-6;
+          for(let y=wy;y<=wy+2;y++) setBlock(bx,y,bz,olds[y-wy]);
+        }
+        fallOk=pickReflY(player.x, H-2, player.z)!==undefined;   // 找不到也要返回数值(海平面), 不抛错
+        const w0=weather, k0=wetK;
+        weather="rain"; wetK=0; for(let i=0;i<5;i++) tickWetness(1); const wetUp=wetK>0.55 && wetK<0.7;   // 8 秒湿透 → 5 秒约 0.62
+        for(let i=0;i<10;i++) tickWetness(1); const wetFull=wetK===1;
+        weather="clear"; tickWetness(20); const dryDown=Math.abs(wetK-0.5)<1e-6;                           // 40 秒干透 → 20 秒剩一半
+        weather=w0; wetK=k0;
+        const unifOk=!!U.uWet && /uWet/.test(_mainSrc[1]) && /雨天湿地面/.test(_mainSrc[1]);
+        ok("第十二轮: 镜面高度跟着最近的水面(水塘/绿洲)走; 雨天约 8 秒湿透、雨停约 40 秒干透; 湿地面着色器接口就绪",
+           pickOk && fallOk && wetUp && wetFull && dryDown && unifOk, "pick="+pickOk+" fall="+fallOk+" up="+wetUp+" full="+wetFull+" dry="+dryDown+" unif="+unifOk);
+      }
+      { // 第十二轮·云端·A: 雨天水面涟漪 rainK 渐变 + uRain 接好 + 雨滴水花只在下雨时产生
+        const wS=weather, kS=rainK, aS=rainSplashAcc, pS={x:player.x,y:player.y,z:player.z}, nP=particles.length;
+        const gx=Math.floor(player.x), gz=Math.floor(player.z); ensureData(gx>>4,gz>>4);
+        let bx=gx, bz=gz; for(let i=0;i<60 && biomeAt(bx,bz)===BIO_SNOW;i++){ bx+=40; ensureData(bx>>4,bz>>4); }   // 避开雪原(那里下雪不下雨)
+        player.x=bx+0.5; player.z=bz+0.5;
+        for(let dx=-2;dx<=2;dx++) for(let dz=-2;dz<=2;dz++) ensureData((bx>>4)+dx,(bz>>4)+dz);
+        weather="rain"; rainK=0; rainSplashAcc=0; particles.length=0;
+        tickRainSplash(1.5); const kHalf=rainK;                        // 1.5 秒 → 目标 0.6 的一半左右
+        tickRainSplash(3); const kRain=rainK;
+        weather="storm"; tickRainSplash(3); const kStorm=rainK;
+        let made=0; for(let i=0;i<20;i++) made+=tickRainSplash(0.1);  // 雷暴 2 秒 → 应有水花
+        const pRain=particles.length;
+        weather="clear"; particles.length=0; rainSplashAcc=0;
+        let madeClear=0; for(let i=0;i<20;i++) madeClear+=tickRainSplash(0.1);
+        const kFade=rainK; tickRainSplash(10); const kOff=rainK;
+        const locOk=!!UW.uRain;
+        weather=wS; rainK=kS; rainSplashAcc=aS; Object.assign(player,pS); particles.length=Math.min(particles.length,nP);
+        ok("第十二轮雨天涟漪: rainK 约 3 秒渐升(雨 0.6/雷暴 1)雨停渐降; uRain uniform 存在; 下雨产生雨滴水花、晴天不产生",
+           Math.abs(kHalf-0.5)<0.05 && Math.abs(kRain-0.6)<1e-6 && Math.abs(kStorm-1)<1e-6 && kFade>0 && kFade<1 && kOff===0
+           && locOk && made>0 && pRain>0 && madeClear===0,
+           "k="+kHalf.toFixed(2)+"/"+kRain.toFixed(2)+"/"+kStorm.toFixed(2)+"/"+kFade.toFixed(2)+"/"+kOff+" loc="+locOk+" made="+made+" parts="+pRain+" clear="+madeClear);
+      }
       { // 第十一轮·云端: 载具驾驶 HUD —— 载具分类; 航向 0=北/90=东; 速度按位移算(瞬移不计); 离地高度含水面; 骑乘才显示
         const kindOk=driveKind(null)===null && driveKind({def:MOB_DEFS.plane})==="plane" && driveKind({def:MOB_DEFS.bike})==="bike"
           && driveKind({def:MOB_DEFS.car})==="car" && driveKind({def:MOB_DEFS.horse})==="ground" && driveKind({def:MOB_DEFS.chariot})==="ground";
@@ -14775,7 +14934,9 @@ function selftest(){
         player.x+=5; player.y+=1; const R1=driveReadout(0.5);                    // 0.5 秒走 5 格 → 10 m/s = 36 km/h, 爬升 2 m/s
         const spdOk=Math.abs(R1.kmh-36)<0.5 && Math.abs(R1.vs-2)<0.05;
         player.x+=500; const R2=driveReadout(0.5); const jumpOk=R2.kmh<36;         // 传送不算速度(平滑后只会变小)
-        const gx=Math.floor(player.x), gz=Math.floor(player.z); ensureData(gx>>4,gz>>4); player.y=groundY(gx,gz)+7.5;
+        let gx=Math.floor(player.x); const gz=Math.floor(player.z); ensureData(gx>>4,gz>>4);
+        for(let i=0;i<40 && groundY(gx,gz)<=0;i++){ gx+=3; ensureData(gx>>4,gz>>4); }   // 水面/树冠上 groundY=-1: 挪到实地再测
+        player.x=gx+0.5; driveHud.lx=player.x; player.y=groundY(gx,gz)+7.5;
         const R3=driveReadout(0.1); const aglOk=R3.agl!=null && Math.abs(R3.agl-7.5)<1.01;
         const cv=document.getElementById("driveHud");
         riding=null; tickDriveHud(0.1); const hidden=cv.style.display==="none";
