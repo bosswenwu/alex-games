@@ -467,3 +467,12 @@
 - **修理**：复用 J 神庙武器祭坛；铁剑/烈阳剑/塞特之锤/弓各有不同材料配方，一次修满；材料不足不会扣耐久或材料。
 - **存档兼容**：`gearWear` 随存档读写；旧存档默认满耐久，异常数据限幅；新世界清空磨损。
 - **验证**：完整 `window.__game.selftest()` **334/334**；新增覆盖耐久磨损、威力下限、材料不足、修理、存档/旧档、弓箭快照及热键栏状态条；`git diff --check` 通过。
+
+## 本地进度（2026-09-28：第十三轮·首屏氛围与载入过渡）
+
+- **视觉**：主菜单加入纯 CSS 暮色天光、星点与缓动沙丘；徽记/标题/说明/按钮分层入场，主 CTA 采用半透明磨砂卡片与清晰键盘焦点态。不增加 WebGL draw call、贴图或外部依赖。
+- **载入反馈**：`#menuLoading` 订阅既有 `initialLoad()` 两遍区块生成进度：前半“塑造沙海地形”，后半“绘制遗迹与光影”；真实百分比同步到视觉条和 `role=progressbar` 的 `aria-valuenow`，完成显示 100% 与“沙海已就绪”。按钮仍按原时机禁用/启用。
+- **状态契约**：首屏 `#overlay.main-menu` 才启用装饰/入场动画；`setTitleChrome(false)` 同时清除 `main-menu`/`world-ready`，暂停与死亡继续使用原有遮罩，不继承主菜单动效。短横屏压缩版保留主按钮与前两行控制提示，隐藏细则/扩展帮助以免滚动。
+- **兼容**：新增 `prefers-reduced-motion: reduce` 规则；桌面与窄屏 CSS 适配；不碰战斗、世界生成算法、渲染/水面着色器、村落、存档、快捷键或触屏游戏控件。
+- **验证**：`node tools/headless.mjs selftest` **335/335**；无头截图检查 1280×720 就绪态及 844×390 横屏就绪态；浏览器冒烟确认真实进度/ARIA 达 100%、桌面 overlay 不溢出、暂停时首屏类/进度 UI 隐藏；`git diff --check` 通过。
+- **后续 AI 接手**：主菜单样式在 `games/minecraft/index.html` 标题 CSS 段，节点在 `#overlay`，状态/进度更新分别在 `setTitleChrome()` 与 `initialLoad()`。不要把菜单 CSS 动画搬进 `frame()`；若继续做主菜单转场，维持 `main-menu` 状态隔离并继续覆盖 `prefers-reduced-motion` 与短横屏。

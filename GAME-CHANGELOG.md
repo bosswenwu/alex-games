@@ -127,3 +127,15 @@ Persistent handoff notes for future agents. Add a new entry for each user-visibl
 | Save compatibility | `gearWear` is saved and restored. Older saves start with full durability, malformed wear values are clamped, and a new world resets wear. |
 
 **Verification:** `node tools/headless.mjs selftest` **334/334**; screenshot inspected for the altar panel and all three hotbar meters; `git diff --check` passed.
+
+## 2026-09-28 — 沙海奇境: cinematic title screen and loading feedback (local round 13)
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only. No new controls, save fields, assets, blocks, or external dependencies.
+
+| Change | Player-visible behavior |
+| --- | --- |
+| Animated title scene | The main menu gains a dusk sky, sun glow, stars and gently drifting dune layers, plus staggered title/brand/menu entrance animation. The visual layers are CSS-only and isolated to the title screen. |
+| Loading transition | The disabled start button is paired with a two-stage progress bar driven by the existing world-generation loop; it reaches 100% and changes to a ready state when the world is ready. Progress is exposed through an accessible `role=progressbar` and `aria-valuenow`. |
+| Responsive/accessibility polish | The menu adapts to compact landscape viewports, keeps the primary action and key controls visible, provides keyboard focus outlines, and disables ambient/entrance motion for `prefers-reduced-motion`. Pause/death overlays retain their prior styling and behavior. |
+
+**Verification:** `node tools/headless.mjs selftest` **335/335**; inspected headless screenshots at 1280×720 and 844×390 landscape; browser smoke verified ready progress/ARIA at 100%, no desktop overlay overflow, and pause-state class isolation; `git diff --check` passed.
