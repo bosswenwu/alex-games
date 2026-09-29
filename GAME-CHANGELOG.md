@@ -2,6 +2,22 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-09-29 — 沙海奇境：地热喷口选址避开建筑（多种子自测巡检，bug 修复会话）
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only. Generation fix for the geothermal-vent (间歇泉) placement; no test assertions loosened or removed. Did not touch the C-key dodge / `foeStrike()` / global key handler (Manus) or any shader/render/water code (cloud). (The village door-standing seed bug found in the same sweep was fixed independently on main by PR #37.)
+
+**Found by:** running `?selftest=1` across many world seeds with `tools/headless.mjs`. On seed 2718281 the assertion 「间歇泉: 地热喷口(120)只在黑沙火山/盐湖生成…」 failed with `site=-523,-521 gen=false`.
+
+| Change | Details | Files |
+| --- | --- | --- |
+| Vents no longer placed where a building will pave them | `geyserSites()` picked vent spots in volcano/saltlake by `heightAt`, but `placeGeysers` runs before `buildStructures`, so a structure whose clear box covers the spot erases the vent (for that seed a `city` — the generic structure table also applies to volcano — laid asphalt road over the vent at `-523,45,-521`). The site list then named a vent that the real chunk doesn't contain. Now `geyserSites()` skips any spot a nearby building covers, so the list matches the generated blocks and stays consistent with the runtime eruption check. | `games/minecraft/index.html` |
+| `STRUCT_RAD` hoisted + `structureCovers(x,z)` | The per-type clear-box radii (`RADII`) were local to `buildStructures`; hoisted to a module-level `STRUCT_RAD` (placed after `VIL_N`) so both `buildStructures` and the new `structureCovers(x,z)` predicate use one table. `structureCovers` scans the 3×3 neighbouring structure cells and tests the point against each building's `±rad` box (rad bounds all of a building's blocks, since `buildStructures` culls by it). | `games/minecraft/index.html` |
+
+**Verification (`tools/headless.mjs`, SwiftShader):**
+- `vm.Script` compile-check of the inline script: clean.
+- Geyser-site check (mimics the unchanged self-test: first vent of the first vent-bearing chunk) on 6 seeds → all intact (`gen=true`, `other=true`). Seed 2718281's first vent moved from the covered `-523,-521` to the intact `-488,-536`.
+- `?selftest=1` on repro + varied seeds (2718281 / 314159 / 8675309 / 1 / 42) — see PR for the run.
+
 ## 2026-09-29 — 沙海奇境 第十二轮（云端）：倒影跟着最近水面 + 雨天湿地面 + 雨滴涟漪/水花
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) only, desktop. Rendering/weather visuals; no new keys, blocks, atlas tiles or save fields. Did not touch the C-key dodge / `foeStrike()` / global key handler (Manus round 15).
