@@ -168,3 +168,16 @@ Persistent handoff notes for future agents. Add a new entry for each user-visibl
 | Accessibility/responsive UI | Dialog semantics, focus return/trap, close button/backdrop/Esc, concise controls list with a link to full help, and compact landscape/portrait layouts. Short-landscape title menu remains within the viewport. |
 
 **Verification:** `node tools/headless.mjs selftest` **336/336**; browser UI smoke confirmed the settings/persistence/Esc checks, and a real click in a disposable Chromium profile wrote a valid save (`seed` present) and showed success; inspected screenshots at 1280×720, 844×390 and 390×844; title-menu scroll metrics equal viewport dimensions at 1280×720 and 844×390; `git diff --check` passed.
+
+
+## 2026-09-29 — 沙海奇境: player Sandstep evade
+**Scope:** `games/minecraft/index.html` only. A player-side combat-control slice; no blocks, assets, enemy AI changes, recipes, core upgrades, or world-save schema changes.
+
+| Change | Player-visible behavior |
+| --- | --- |
+| Sandstep (`C`) | On solid ground, press **C** to travel up to 3.2 blocks in the movement direction (or facing direction when stationary). The landing is collision-checked in 0.2-block steps, so the move stops short of walls instead of clipping through them. |
+| Enemy-hit evade window | The step opens a **0.35 s** window that only rejects damage routed through `foeStrike()`—the shared enemy-attack entrance. Fall, traps, poison, weather and lava still use `damagePlayer()` and still hurt the player. |
+| Feedback and cooldown | Sand particles, a sand-rush sound and toasts make activation, a successful evade, blocked use and the **4.5 s** cooldown clear. Controls appear in the title help, full help and settings controls. |
+| Debug/test contract | `window.__game.sandStep` reports cooldown/window/ready/distance and `useSandStep(x,z)` triggers a testable step. Four self-tests cover movement, the precise damage boundary, cooldown/window expiry and absence of new save fields. |
+
+**Verification:** `node tools/headless.mjs selftest` **342/342** (the four new Sandstep assertions plus all regressions); headless `KeyC` smoke moved 3.2 blocks and reported `cd=4.5`, `evade=0.35`, with both help surfaces present; `git diff --check` passed. Real-time dodge timing remains a desktop point-test item.
