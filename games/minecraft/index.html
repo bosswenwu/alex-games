@@ -2020,7 +2020,29 @@ function villagePlan(s){
     const sh=mS===6?1:0;                                               // 6 槽时往主街方向挪一格, 让出隔壁环湖屋的墙角
     const a=gaps[marketIdx], mx=Math.round(x+Math.cos(a)*RM)+gX*sh, mz=Math.round(z+Math.sin(a)*RM)+gZ*sh;
     const fx=-pX, fz=-pZ;                                            // 摊位一律面朝主街轴线: 长边沿主街方向, 不会顶到隔壁环湖屋
-    market={ox:mx+fx,oz:mz+fz,fx,fz,D:3,hw:4};
+    const makeMarket=(dx=0,dz=0)=>({ox:mx+fx+dx,oz:mz+fz+dz,fx,fz,D:3,hw:4});
+    const doorCells=new Set(houses.map(H=>okey(...toW(H,0,-2))));
+    const hasDoorPost=M=>{
+      for(const c of [-2,2]) for(const pu of [-1,1]) for(const pv of [0,2]){
+        const [X,Z]=toW(M,c+pu,pv); if(doorCells.has(okey(X,Z))) return true;
+      }
+      return false;
+    };
+    const overlapsHouse=M=>{
+      for(let u=-4;u<=4;u++) for(let v=-1;v<=2;v++){
+        const [X,Z]=toW(M,u,v); if(get(X,Z)===4) return true;
+      }
+      return false;
+    };
+    market=makeMarket();
+    if(hasDoorPost(market)){
+      // 集市柱恰好挡住邻屋门口时，按固定顺序沿摊位两轴避让一格。
+      // 候选只在已预约房屋之外；不受 Math.random 或世界生成顺序影响。
+      for(const [dx,dz] of [[-fz,fx],[fz,-fx],[-fx,-fz],[fx,fz]]){
+        const next=makeMarket(dx,dz);
+        if(!hasDoorPost(next) && !overlapsHouse(next)){ market=next; break; }
+      }
+    }
     for(let u=-4;u<=4;u++) for(let v=-1;v<=2;v++){ const [X,Z]=toW(market,u,v); set(X,Z,4); }
   }
   {
@@ -12925,6 +12947,11 @@ function selftest(){
           const W=villageWaypoints(P), [tX,tZ]=villageTraderSpot(P);
           const stand=(X,Z)=>SOLID(at2(X,hv,Z)) && !SOLID(at2(X,hv+1,Z)) && !SOLID(at2(X,hv+2,Z));
           const badW=W.filter(w=>!stand(w.x,w.z)).map(w=>w.kind+"@"+w.x+","+w.z);
+          const doorCells=new Set(P.houses.map(H=>P.toW(H,0,-2).join(","))), blockedPosts=[];
+          for(const c of [-2,2]) for(const pu of [-1,1]) for(const pv of [0,2]){
+            const [X,Z]=P.toW(P.market,c+pu,pv); if(doorCells.has(X+","+Z)) blockedPosts.push(X+","+Z);
+          }
+          ok("集市棚柱不挡房屋门口", blockedPosts.length===0, blockedPosts.join(" ")||"ok");
           ok("村民地点(门口/集市/水井/栈桥)与摊主位都能站人", badW.length===0 && stand(tX,tZ) && W.some(w=>w.kind==="market") && W.some(w=>w.kind==="well") && W.filter(w=>w.kind==="door").length===P.houses.length,
              badW.join(" ")||("wps="+W.length));
           // 真的刷几个村民/摊主: 都落在地面(h+1)的地点上, 不在屋顶或灯柱顶
