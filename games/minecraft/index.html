@@ -488,7 +488,7 @@
 <div id="fullhelp">
   <div class="fh-card">
     <div class="fh-title">完整帮助 · 按 <b>H</b> 或点此关闭</div>
-    <b>F1</b> 拍照模式　<b>F2</b> 截图　<b>F5</b> 第三人称(Shift+F5 看正脸)　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成(可熔铸☀拉之烈阳剑、🔨塞特之锤)　<b>0</b> 第10格　<b>J</b> 附魔祭坛(献文物)　<b>Esc</b> 暂停　<b>T</b> 编年史　<b>P</b> 陶片图鉴　<b>K</b> 神话遗物　<b>U</b> 开宝库　<b>R</b> 答斯芬克斯　<b>L</b> 神灯许愿　<b>N</b> 大地图(右上角为小地图)<br>
+    <b>F1</b> 拍照模式　<b>F2</b> 截图　<b>F5</b> 第三人称(Shift+F5 看正脸)　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成(可熔铸☀拉之烈阳剑、🔨塞特之锤)　<b>0</b> 第10格　<b>J</b> 附魔祭坛(献文物)　<b>C</b> 沙步闪避　<b>Esc</b> 暂停　<b>T</b> 编年史　<b>P</b> 陶片图鉴　<b>K</b> 神话遗物　<b>U</b> 开宝库　<b>R</b> 答斯芬克斯　<b>L</b> 神灯许愿　<b>N</b> 大地图(右上角为小地图)<br>
     <b>物品栏</b>：1烟花 2钩爪 3可乐 4铁剑 5机关枪 6火箭筒 7弓 8=TNT(右键放·左键点燃) 9弹跳板<br>
     <b>2 钩爪</b>甩向准星把你拉过去；<b>3 可乐</b>回血+加速；<b>9 弹跳板</b>踩上去高高弹飞不摔伤<br>
     击杀获得<b>经验</b>升级(提升生命与伤害)。白天长、夜晚短而亮，敌人只是点缀<br>
@@ -533,6 +533,7 @@
           <div><dt>挖掘 / 攻击</dt><dd>鼠标左键</dd></div>
           <div><dt>放置 / 使用</dt><dd>鼠标右键</dd></div>
           <div><dt>物品栏 / 合成</dt><dd>1–9 / B</dd></div>
+          <div><dt>沙步闪避</dt><dd>C（短位移；0.35 秒敌击规避）</dd></div>
           <div><dt>切换画质 / 音乐</dt><dd>O / M</dd></div>
           <div><dt>暂停 / 全部帮助</dt><dd>Esc / H</dd></div>
         </dl>
@@ -579,7 +580,7 @@
     <b>W A S D</b> 移动　<b>空格</b> 跳跃(双击飞行)　<b>Shift</b> 潜行/下降　<b>E</b> 上车/骑乘<br>
     <b>左键</b> 挖掘/攻击　<b>右键</b> 放置/使用道具　<b>1–9 / 滚轮</b> 切换物品栏<br>
     <b>探索</b>：右上角<b>指南针</b>指向最近地标——朝它走，寻访金字塔·绿洲·奇观群系<br>
-    <span style="opacity:.7">走进不同群系会有天色与怪物变化，进游戏后随时会有提示 · <b>H</b> 查看完整帮助 · <b>O</b> 切换画质 · <b>V</b> 药水 · <b>X</b> 钓鱼 · 喂仙人掌驯服骆驼(E) · 右键储物箱</span>
+    <span style="opacity:.7">走进不同群系会有天色与怪物变化，进游戏后随时会有提示 · <b>H</b> 查看完整帮助 · <b>O</b> 切换画质 · <b>C</b> 沙步闪避 · <b>V</b> 药水 · <b>X</b> 钓鱼 · 喂仙人掌驯服骆驼(E) · 右键储物箱</span>
   </div>
   <div id="legal">
     《沙海奇境 Sandsea》是一个独立的开源体素游戏，向 Minecraft 致敬。<br>
@@ -4874,6 +4875,57 @@ const matTrans=(x,y,z)=>new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, x,y,z,1]);
 const player={x:8.5, y:60, z:8.5, vx:0, vy:0, vz:0, kbx:0, kbz:0, yaw:0, pitch:0.15,
               onGround:false, flying:false, sprint:false, sneak:false};
 const EYE=1.62, PW=0.3, PH=1.8;
+/* 第十五轮·玩家侧沙步：不写存档、不动敌人 AI；只在 foeStrike 入口规避明确的敌方攻击。 */
+const SANDSTEP_DIST=3.2, SANDSTEP_WINDOW=0.35, SANDSTEP_CD=4.5;
+const sandStepState={cd:0, evadeT:0, dodged:false, lastDist:0};
+function sandStepDirection(overrideX,overrideZ){
+  if(Number.isFinite(overrideX) && Number.isFinite(overrideZ)){
+    const n=Math.hypot(overrideX,overrideZ);
+    if(n>1e-4) return [overrideX/n,overrideZ/n];
+  }
+  let f=(keys.KeyW?1:0)-(keys.KeyS?1:0), s=(keys.KeyD?1:0)-(keys.KeyA?1:0);
+  if(!f && !s) f=1;                              // 未按方向时朝视线前方闪避
+  const n=Math.hypot(f,s)||1, cy=Math.cos(player.yaw), sy=Math.sin(player.yaw);
+  return [(f*sy+s*cy)/n,(-f*cy+s*sy)/n];
+}
+function sandStepLanding(x,y,z,dx,dz){
+  for(let d=SANDSTEP_DIST;d>=0.4;d-=0.2){
+    const nx=x+dx*d, nz=z+dz*d;
+    if(aabbFits(nx,y,nz,PW,PH)) return {x:nx,z:nz,d};
+  }
+  return null;
+}
+function sandStep(dirX,dirZ,force){
+  if(!force && (!playing() || dead || riding || player.flying || grappleTarget || inWater() || inLava() || !player.onGround)){
+    if(playing() && !dead) showName("💨 沙步只能在陆地上使出");
+    return false;
+  }
+  if(sandStepState.cd>0){
+    if(!force) showName("💨 沙步冷却中 · "+sandStepState.cd.toFixed(1)+" 秒");
+    return false;
+  }
+  const [dx,dz]=sandStepDirection(dirX,dirZ), x0=player.x, z0=player.z;
+  const landing=sandStepLanding(x0,player.y,z0,dx,dz);
+  if(!landing){ if(!force) showName("💨 前方没有可落脚的沙步空间"); return false; }
+  player.x=landing.x; player.z=landing.z;
+  player.kbx+=dx*1.5; player.kbz+=dz*1.5;
+  sandStepState.cd=SANDSTEP_CD; sandStepState.evadeT=SANDSTEP_WINDOW;
+  sandStepState.dodged=false; sandStepState.lastDist=landing.d;
+  for(let i=0;i<12;i++){
+    const r=Math.random(), side=(Math.random()-.5)*0.45;
+    particles.push({x:x0+(landing.x-x0)*r+side*dz, y:player.y+0.06+Math.random()*0.35, z:z0+(landing.z-z0)*r-side*dx,
+      vx:-dx*(1.5+Math.random()*2)+side*2, vy:0.7+Math.random()*1.4, vz:-dz*(1.5+Math.random()*2)-side*2,
+      life:0.24+Math.random()*0.22, size:0.06+Math.random()*0.05, u:4*TS, v:0, l:1.05});
+  }
+  sfxBrush();
+  if(!force) showName("💨 沙步！敌击规避 "+SANDSTEP_WINDOW.toFixed(2)+" 秒 · 冷却 "+SANDSTEP_CD.toFixed(1)+" 秒");
+  return true;
+}
+function tickSandStep(dt){
+  sandStepState.cd=Math.max(0,sandStepState.cd-dt);
+  sandStepState.evadeT=Math.max(0,sandStepState.evadeT-dt);
+  if(sandStepState.evadeT<=0) sandStepState.dodged=false;
+}
 function lookDir(){
   const cp=Math.cos(player.pitch), sp=Math.sin(player.pitch);
   const cy=Math.cos(player.yaw),  sy=Math.sin(player.yaw);
@@ -6799,6 +6851,7 @@ document.addEventListener("keydown",e=>{
       lastSpace=now;
     }
     if(e.code==="KeyW"){ if(now-lastW<260) player.sprint=true; lastW=now; }
+    if(e.code==="KeyC"){ e.preventDefault(); sandStep(); }                  // 第十五轮·沙步：短位移 + 仅敌击规避窗
     if(e.code>="Digit1"&&e.code<="Digit9") selectSlot(+e.code.slice(5)-1);
     if(e.code==="Digit0" && HOTBAR_ITEMS.length>9) selectSlot(9);   // 第 10 格(塞特之锤)
     if(e.code==="KeyE") toggleRide();
@@ -8590,7 +8643,16 @@ function nightSpawnFor(bio, r){
 }
 /* 敌人攻击统一走这里以吃难度加成; 环境/陷阱/摔落伤害仍直接走 damagePlayer, 不随天数膨胀。
    传入攻击者 m 时, 精英怪额外 +50% 伤害。 */
-function foeStrike(dmg,kx,kz,m){ const em=(m&&m.elite)?1.5:1; damagePlayer(Math.max(1,Math.round(dmg*foeDmgMul()*em)), kx, kz); }
+function foeStrike(dmg,kx,kz,m){
+  // 沙步只躲经由敌方攻击入口的伤害；坠落、陷阱、毒、岩浆等仍直接走 damagePlayer。
+  if(sandStepState.evadeT>0){
+    if(!sandStepState.dodged){ sandStepState.dodged=true; showName("💨 沙步闪避！"); }
+    return false;
+  }
+  const em=(m&&m.elite)?1.5:1;
+  damagePlayer(Math.max(1,Math.round(dmg*foeDmgMul()*em)), kx, kz);
+  return true;
+}
 /* ---------- 蝎毒(敌人行为差异化 · 巨蝎) ----------
    被巨蝎蜇中→中毒: 数秒内每秒掉 1 血(无视护甲, 但不致死, 最低留 1 血), 逼玩家拉开距离回血, 而非硬扛。 */
 let poisonT=0, poisonTickT=0;
@@ -11824,6 +11886,7 @@ function frame(now){
       processGenQueue(8-(performance.now()-tq)); }
 
     // 生物 & 生存
+    tickSandStep(dt);                              // 第十五轮·玩家侧沙步：先衰减，再由敌方 foeStrike 读取闪避窗
     updateMobs(dt);
     tickSunburn(dt);
     if(maceCd>0) maceCd-=dt;
@@ -13286,6 +13349,8 @@ window.__game = {
   get streak(){ return { cur:killStreak, best:bestStreak, elites:elitesSlain }; },
   get cores(){ return cores; }, get armor(){ return armor; },
   get poison(){ return +poisonT.toFixed(2); },
+  get sandStep(){ return {cd:+sandStepState.cd.toFixed(2), evade:+sandStepState.evadeT.toFixed(2), ready:sandStepState.cd<=0, distance:+sandStepState.lastDist.toFixed(2)}; },
+  useSandStep:(x,z)=>sandStep(x,z),
   get bounty(){ const b=curBounty(); return { id:b.id, desc:b.desc, prog:bountyProg, goal:b.goal, done:bountyDone }; },
   get bossBar(){ return bossBarState(); },
   get sandstorm(){ return { weather, active:weather==="sand", arid:aridBiome(biomeAt(Math.floor(player.x),Math.floor(player.z))) }; },
@@ -14262,6 +14327,48 @@ function selftest(){
         kills=snapKills; xp=snapXp; lvl=snapLvl; maxHp=snapMax; dmgMul=snapDmgMul; hp=snapHp;
         armor=snapArmor; blessT=snapBless; questIdx=snapQi; questProg=snapQp; questDone=snapQd;
         mobs.length=mlen; drops.length=dlen; updateHearts();
+      }
+    }
+
+    // ---- 第十五轮·玩家侧沙步：短位移 + 仅 foeStrike 闪避窗 ----
+    {
+      const P0={x:player.x,y:player.y,z:player.z,onGround:player.onGround,vx:player.vx,vz:player.vz,kbx:player.kbx,kbz:player.kbz};
+      const S0={cd:sandStepState.cd,evadeT:sandStepState.evadeT,dodged:sandStepState.dodged,lastDist:sandStepState.lastDist};
+      const H0={hp,maxHp,armor,blessT,particles:particles.length};
+      try{
+        // 在已生成区域中找一个脚底/头顶/前方都空的确定性测试位；不改世界或存档。
+        let spot=null;
+        for(let rz=0;rz<=16&&!spot;rz+=2) for(let rx=-16;rx<=16&&!spot;rx+=2){
+          const x=Math.floor(P0.x)+rx+0.5, z=Math.floor(P0.z)+rz+0.5, y=groundY(Math.floor(x),Math.floor(z));
+          if(y<=0 || !aabbFits(x,y,z,PW,PH)) continue;
+          for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
+            const to=sandStepLanding(x,y,z,dx,dz);
+            if(to && to.d>=1.8){ spot={x,y,z,dx,dz}; break; }
+          }
+        }
+        if(spot){ player.x=spot.x; player.y=spot.y; player.z=spot.z; player.onGround=true; }
+        sandStepState.cd=0; sandStepState.evadeT=0; sandStepState.dodged=false;
+        const used=!!spot && sandStep(spot.dx,spot.dz,true);
+        const moved=Math.hypot(player.x-(spot?spot.x:P0.x),player.z-(spot?spot.z:P0.z));
+        ok("沙步: 短位移成功并开启0.35秒敌击规避窗", used && moved>=1.8 && sandStepState.evadeT>0.3 && sandStepState.cd>=4.49,
+           "used="+used+" moved="+moved.toFixed(2)+" evade="+sandStepState.evadeT.toFixed(2)+" cd="+sandStepState.cd.toFixed(2));
+        maxHp=999; hp=999; armor=0; blessT=0;
+        const dodged=foeStrike(10,0,0,{elite:false})===false && hp===999;
+        damagePlayer(10,0,0); const environmentStillHurts=hp<999;  // 环境/陷阱/坠落/毒均直走 damagePlayer
+        ok("沙步只规避 foeStrike 敌击；直接伤害仍生效", dodged && environmentStillHurts,
+           "dodged="+dodged+" directHp="+hp);
+        tickSandStep(SANDSTEP_WINDOW+0.02); hp=999;
+        const hitAfterWindow=foeStrike(10,0,0,null)===true && hp<999;
+        const locked=sandStep(spot&&spot.dx,spot&&spot.dz,true)===false && sandStepState.cd>0;
+        ok("沙步闪避窗结束后敌击恢复；冷却期间不能连用", hitAfterWindow && locked,
+           "hit="+hitAfterWindow+" locked="+locked+" cd="+sandStepState.cd.toFixed(2));
+        const sv=collectSave();
+        ok("沙步不改变世界存档结构", !Object.prototype.hasOwnProperty.call(sv,"sandStep"),
+           "sandStep="+("sandStep" in sv));
+      } finally {
+        Object.assign(player,P0); Object.assign(sandStepState,S0);
+        hp=H0.hp; maxHp=H0.maxHp; armor=H0.armor; blessT=H0.blessT; particles.length=H0.particles;
+        updateHearts();
       }
     }
 
