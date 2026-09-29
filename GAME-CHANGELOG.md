@@ -2,6 +2,16 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-09-28 — 沙海奇境: village market doorway clearance
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only. A deterministic village-layout reliability fix; no new controls, blocks, or save fields.
+
+| Change | Player-visible behavior |
+| --- | --- |
+| Market-post clearance | If one of the market canopy posts would occupy a house's villager standing cell just outside its doorway, the whole market is moved by one grid cell along a deterministic candidate direction. Candidate positions are rejected if the stall footprint overlaps a reserved house footprint. All unaffected villages retain their original market position. |
+
+**Verification:** `node tools/headless.mjs selftest` **331/331**. An additional browser-side layout audit checked **1,024** deterministic village centers across both 6- and 8-slot layouts: no market post overlapped a doorway; 40 conflicting layouts were moved exactly one cell; no layout required a larger move. The new self-test also directly checks the market-post/doorway invariant.
+
 ## 2026-09-28 — 沙海奇境 第十一轮（云端）：载具驾驶 HUD + 倒影里的生物与载具
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) only. No gameplay/physics changes; no new keys, blocks or atlas tiles.
@@ -104,3 +114,41 @@ Persistent handoff notes for future agents. Add a new entry for each user-visibl
 - Direct device touch and screenshot inspection were not available for every game; see the owning agent's verification notes if further detail is needed.
 
 **Delivery:** Commit `7053c43` (`feat(games): enrich combat feedback and exploration variety`) was pushed to `origin/main`.
+
+## 2026-09-28 — 沙海奇境: weapon durability and altar repair (local round 12)
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only. No new controls, blocks, atlas tiles or external dependencies.
+
+| Change | Player-visible behavior |
+| --- | --- |
+| Weapon wear | Sword / 拉之烈阳剑, 塞特之锤 and bow now lose durability on successful melee hits, heavy smashes and arrow launches. Durability is shown by a green / yellow / red meter in the hotbar; selecting a weapon shows remaining uses. |
+| Condition feedback | Damage scales down gradually with wear, but remains at least 70% at zero durability; gear is never destroyed. A warning appears below 20%. |
+| Repair at the J altar | The existing 神庙武器祭坛 panel now shows each owned weapon's condition and distinct material costs. One repair restores full durability; insufficient materials change neither gear nor inventory. |
+| Save compatibility | `gearWear` is saved and restored. Older saves start with full durability, malformed wear values are clamped, and a new world resets wear. |
+
+**Verification:** `node tools/headless.mjs selftest` **334/334**; screenshot inspected for the altar panel and all three hotbar meters; `git diff --check` passed.
+
+## 2026-09-28 — 沙海奇境: cinematic title screen and loading feedback (local round 13)
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only. No new controls, save fields, assets, blocks, or external dependencies.
+
+| Change | Player-visible behavior |
+| --- | --- |
+| Animated title scene | The main menu gains a dusk sky, sun glow, stars and gently drifting dune layers, plus staggered title/brand/menu entrance animation. The visual layers are CSS-only and isolated to the title screen. |
+| Loading transition | The disabled start button is paired with a two-stage progress bar driven by the existing world-generation loop; it reaches 100% and changes to a ready state when the world is ready. Progress is exposed through an accessible `role=progressbar` and `aria-valuenow`. |
+| Responsive/accessibility polish | The menu adapts to compact landscape viewports, keeps the primary action and key controls visible, provides keyboard focus outlines, and disables ambient/entrance motion for `prefers-reduced-motion`. Pause/death overlays retain their prior styling and behavior. |
+
+**Verification:** `node tools/headless.mjs selftest` **335/335**; inspected headless screenshots at 1280×720 and 844×390 landscape; browser smoke verified ready progress/ARIA at 100%, no desktop overlay overflow, and pause-state class isolation; `git diff --check` passed.
+
+## 2026-09-28 — 沙海奇境: pause hub and persistent settings (local round 14)
+
+**Scope:** `games/minecraft/index.html` only. No world-save schema changes, new assets, block IDs, gameplay hotkeys, or external dependencies.
+
+| Change | Player-visible behavior |
+| --- | --- |
+| Pause hub | The title and pause menus expose Settings and Controls; pausing also exposes an immediate-save button using the existing save path. Resume/new-world behavior is unchanged. |
+| Graphics | Four visual presets (low/medium/high/ultra) have a selected-state panel and reuse existing `setGfx`, `sandsea_gfx`, `O` shortcut, and performance auto-downgrade. |
+| Background music | Music on/off and a 0–100 volume slider persist independently in `sandsea_music_v1` and `sandsea_music_volume_v1`. Music uses its own WebAudio gain bus; sound effects are unchanged, and `M` stays synchronized. |
+| Accessibility/responsive UI | Dialog semantics, focus return/trap, close button/backdrop/Esc, concise controls list with a link to full help, and compact landscape/portrait layouts. Short-landscape title menu remains within the viewport. |
+
+**Verification:** `node tools/headless.mjs selftest` **336/336**; browser UI smoke confirmed the settings/persistence/Esc checks, and a real click in a disposable Chromium profile wrote a valid save (`seed` present) and showed success; inspected screenshots at 1280×720, 844×390 and 390×844; title-menu scroll metrics equal viewport dimensions at 1280×720 and 844×390; `git diff --check` passed.

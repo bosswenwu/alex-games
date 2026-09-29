@@ -46,6 +46,11 @@
   .recipe .rn { color:#ffe0a0; font-weight:bold; }
   .recipe .rd { color:#a99b82; font-size:11px; margin-top:2px; }
   .recipe .rc { color:#b8c9e8; font-size:11px; white-space:nowrap; }
+  .gearSection { margin:3px 0 0; color:#d9b969; font-weight:bold; letter-spacing:.4px; }
+  .gearMeter { height:4px; margin-top:3px; background:rgba(0,0,0,.7); border:1px solid rgba(0,0,0,.65); border-radius:3px; overflow:hidden; }
+  .gearMeter i { display:block; height:100%; width:100%; background:#75d078; transition:width .15s,background-color .15s; }
+  .slot .gearMeter { position:absolute; left:4px; right:4px; bottom:3px; z-index:2; height:4px; margin:0; pointer-events:none; }
+  .gearRepair .rc { text-align:right; }
   #npcPanel { position:absolute; inset:0; margin:auto; width:min(680px,92vw); max-height:80vh;
     display:none; flex-direction:column; gap:10px; padding:16px 18px; z-index:41;
     background:rgba(22,15,26,.96); border:2px solid #7a5a3a; border-radius:10px;
@@ -154,7 +159,7 @@
   @keyframes vmswing { 0%{transform:translate(0,0) rotate(0)} 35%{transform:translate(-26px,32px) rotate(-24deg)} 100%{transform:translate(0,0) rotate(0)} }
   /* ---------- 标题 / 暂停界面 ---------- */
   #overlay { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:10;
-             background:linear-gradient(180deg,#1d2a4a 0%,#4a3f63 38%,#a8632f 72%,#e0a45c 100%); overflow-y:auto; padding:24px 12px; }
+             background:linear-gradient(180deg,#1d2a4a 0%,#4a3f63 38%,#a8632f 72%,#e0a45c 100%); overflow-y:auto; overflow-x:hidden; padding:24px 12px; }
   #brandmark { width:120px; height:120px; margin-bottom:6px; filter:drop-shadow(0 6px 14px rgba(0,0,0,.45)); }
   #title { font-size:58px; color:#ffe9c4; font-weight:bold; letter-spacing:14px; text-indent:14px;
            text-shadow:0 3px 0 #7a3f14, 0 0 26px rgba(255,190,110,.55); margin-bottom:2px; }
@@ -168,6 +173,151 @@
   .btn:active:not(:disabled){ transform:translateY(3px); box-shadow:0 1px 0 #9c5f26; }
   .btn:disabled { background:linear-gradient(180deg,#b9b0a4,#8e857a); color:#5c554d; cursor:default; box-shadow:0 4px 0 #6b635a; }
   .btn.sub { font-size:16px; padding:9px 44px; background:linear-gradient(180deg,#cfe3ff,#8fb3e0); color:#1e2b40; box-shadow:0 4px 0 #4d6d99; }
+  /* 主菜单首屏：纯 CSS 天光与沙丘，不增加 WebGL draw call 或外部素材 */
+  #overlay.main-menu { isolation:isolate; background:
+    radial-gradient(ellipse 82% 42% at 55% 76%,rgba(216,126,69,.44),transparent 72%),
+    linear-gradient(180deg,#101831 0%,#292746 43%,#794b47 75%,#d28a4e 100%); padding-top:14px; padding-bottom:14px; }
+  #overlay.main-menu::before, #overlay.main-menu::after { content:""; position:absolute; inset:0; z-index:0; pointer-events:none; }
+  #overlay.main-menu::before { background:
+    radial-gradient(circle at 76% 28%,rgba(255,229,170,.94) 0 2.2%,rgba(255,190,120,.40) 3.8%,transparent 15%),
+    radial-gradient(ellipse at 76% 29%,rgba(255,183,111,.22),transparent 34%),
+    radial-gradient(1px 1px at 12% 19%,rgba(255,245,220,.70) 98%,transparent 100%),
+    radial-gradient(1px 1px at 29% 12%,rgba(255,245,220,.58) 98%,transparent 100%),
+    radial-gradient(1px 1px at 48% 24%,rgba(255,245,220,.62) 98%,transparent 100%),
+    radial-gradient(1px 1px at 91% 17%,rgba(255,245,220,.56) 98%,transparent 100%);
+    animation:menuSkyDrift 34s ease-in-out infinite alternate; }
+  #overlay.main-menu::after { background:
+    radial-gradient(ellipse 78% 38% at 4% 103%,rgba(48,37,49,.78) 45%,transparent 50%),
+    radial-gradient(ellipse 72% 33% at 66% 105%,rgba(117,69,54,.69) 45%,transparent 50%),
+    radial-gradient(ellipse 60% 34% at 106% 102%,rgba(177,104,55,.62) 45%,transparent 50%),
+    linear-gradient(180deg,transparent 67%,rgba(28,20,31,.22));
+    animation:menuDuneDrift 26s ease-in-out infinite alternate; }
+  #overlay.main-menu > * { position:relative; z-index:1; }
+  @keyframes menuSkyDrift { from{transform:translate3d(-.4%,0,0)} to{transform:translate3d(.4%,-.15%,0)} }
+  @keyframes menuDuneDrift { from{transform:translate3d(-.4%,0,0)} to{transform:translate3d(.4%,-.15%,0)} }
+  @keyframes menuRise { from{opacity:0;transform:translateY(16px) scale(.985)} to{opacity:1;transform:translateY(0) scale(1)} }
+  @keyframes menuReadyGlow { 0%,100%{box-shadow:0 4px 0 #9c5f26,0 8px 18px rgba(0,0,0,.35),0 0 0 rgba(255,205,117,0)} 50%{box-shadow:0 4px 0 #9c5f26,0 8px 22px rgba(0,0,0,.4),0 0 22px rgba(255,205,117,.24)} }
+  #overlay.main-menu #brandmark { width:108px; height:108px; margin-bottom:1px; animation:menuRise .8s .04s both cubic-bezier(.2,.8,.2,1); }
+  #overlay.main-menu #title { animation:menuRise .72s .14s both cubic-bezier(.2,.8,.2,1); }
+  #overlay.main-menu #titleEn { animation:menuRise .7s .22s both cubic-bezier(.2,.8,.2,1); }
+  #overlay.main-menu #subtitle { margin-bottom:17px; text-shadow:0 1px 8px rgba(20,15,28,.55); animation:menuRise .7s .28s both cubic-bezier(.2,.8,.2,1); }
+  #overlay.main-menu #menu { width:min(360px,92vw); padding:15px 22px 13px; border:1px solid rgba(255,226,178,.28); border-radius:18px;
+    background:linear-gradient(145deg,rgba(33,27,43,.63),rgba(34,27,38,.37)); box-shadow:0 18px 42px rgba(15,11,24,.28),inset 0 1px 0 rgba(255,255,255,.12);
+    backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px); animation:menuRise .72s .34s both cubic-bezier(.2,.8,.2,1); }
+  #overlay.main-menu .btn { min-width:min(280px,78vw); padding-left:24px; padding-right:24px; border:1px solid rgba(255,241,204,.56); transition:transform .16s,filter .16s,box-shadow .2s; }
+  #overlay.main-menu .btn:hover:not(:disabled) { transform:translateY(-2px); filter:brightness(1.1); }
+  #overlay.main-menu #startbtn:not(:disabled) { animation:menuReadyGlow 3.2s 1.1s ease-in-out infinite; }
+  #overlay.main-menu .btn:focus-visible, #overlay.main-menu #menu a:focus-visible { outline:3px solid #fff1bb; outline-offset:4px; }
+  #overlay.main-menu #menu a { opacity:.9; transition:opacity .16s,text-shadow .16s; }
+  #overlay.main-menu #menu a:hover { opacity:1; text-shadow:0 0 12px rgba(255,221,153,.65); }
+  #menuLoading { display:none; width:min(280px,78vw); margin:2px auto 0; padding:8px 10px 9px; border:1px solid rgba(255,229,184,.16); border-radius:9px;
+    background:rgba(15,13,22,.24); color:rgba(255,241,215,.88); text-align:left; font-size:11px; }
+  #overlay.main-menu #menuLoading { display:block; }
+  .menu-load-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px; letter-spacing:.2px; }
+  #menuLoadPct { color:#ffe0a0; font-variant-numeric:tabular-nums; }
+  .menu-load-track { height:5px; overflow:hidden; border-radius:9px; background:rgba(0,0,0,.38); box-shadow:inset 0 1px 2px rgba(0,0,0,.3); }
+  #menuLoadFill { display:block; width:0; height:100%; border-radius:inherit; background:linear-gradient(90deg,#e7a650,#ffe5a3); box-shadow:0 0 9px rgba(255,202,122,.5); transition:width .18s ease-out; }
+  #overlay.main-menu.world-ready #menuLoading { background:rgba(20,35,29,.30); border-color:rgba(194,235,178,.2); }
+  #overlay.main-menu.world-ready #menuLoadLabel { color:#dcf0c8; }
+  #overlay.main-menu #help { max-width:940px; width:min(940px,94vw); margin-top:15px; padding:8px 14px; border:1px solid rgba(255,235,197,.14); border-radius:10px;
+    background:rgba(21,18,29,.18); color:#fff0d5; font-size:12px; line-height:1.7; backdrop-filter:blur(3px); animation:menuRise .72s .42s both cubic-bezier(.2,.8,.2,1); }
+  #overlay.main-menu #help b { color:#ffe4a7; }
+  #overlay.main-menu #legal { margin-top:12px; color:rgba(255,235,205,.74); font-size:10px; line-height:1.55; }
+  @media (max-width:600px) {
+    #overlay.main-menu { padding-left:10px; padding-right:10px; }
+    #overlay.main-menu #brandmark { width:84px; height:84px; }
+    #overlay.main-menu #title { font-size:43px; letter-spacing:9px; text-indent:9px; }
+    #overlay.main-menu #titleEn { font-size:12px; letter-spacing:5px; }
+    #overlay.main-menu #subtitle { max-width:92vw; font-size:13px; margin-bottom:13px; }
+    #overlay.main-menu #menu { padding:12px 15px 11px; }
+    #overlay.main-menu #help { margin-top:11px; padding:7px 9px; font-size:11px; line-height:1.6; }
+    #overlay.main-menu #legal { margin-top:9px; font-size:9px; }
+  }
+  @media (max-height:680px) and (orientation:landscape) {
+    #overlay.main-menu { justify-content:flex-start; padding-top:8px; padding-bottom:8px; }
+    #overlay.main-menu #brandmark { width:52px; height:52px; margin-bottom:0; }
+    #overlay.main-menu #title { font-size:34px; letter-spacing:6px; text-indent:6px; margin-bottom:0; }
+    #overlay.main-menu #titleEn { font-size:10px; letter-spacing:4px; margin-bottom:1px; }
+    #overlay.main-menu #subtitle { font-size:11px; line-height:1.2; margin-bottom:5px; }
+    #overlay.main-menu #menu { padding:7px 12px 6px; gap:5px; }
+    #overlay.main-menu .btn { padding-top:7px; padding-bottom:7px; font-size:16px; }
+    #overlay.main-menu #menu a { margin-top:5px !important; font-size:11px !important; }
+    #overlay.main-menu #menuLoading { padding:5px 8px 6px; font-size:9px; }
+    #overlay.main-menu .menu-load-head { margin-bottom:4px; }
+    #overlay.main-menu .menu-load-track { height:4px; }
+    #overlay.main-menu #help { display:none; }
+    #overlay.main-menu #help span, #overlay.main-menu #legal { display:none; }
+  }
+  @media (prefers-reduced-motion:reduce) {
+    #overlay.main-menu::before, #overlay.main-menu::after, #overlay.main-menu #brandmark, #overlay.main-menu #title,
+    #overlay.main-menu #titleEn, #overlay.main-menu #subtitle, #overlay.main-menu #menu, #overlay.main-menu #help,
+    #overlay.main-menu #startbtn:not(:disabled) { animation:none !important; }
+    #overlay.main-menu .btn, #overlay.main-menu #menu a, #menuLoadFill { transition:none !important; }
+  }
+  /* 第十四轮·完整暂停与设置枢纽 */
+  #menuActions { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin-top:2px; }
+  #overlay.main-menu #menuActions .btn, #overlay.pause-menu #menuActions .btn { min-width:104px; width:auto; padding:7px 13px; font-size:13px; }
+  #saveNowBtn { display:none; }
+  #overlay.pause-menu #saveNowBtn { display:inline-flex; }
+  #saveStatus { min-height:14px; color:#d8efc7; font-size:11px; text-align:center; }
+  #settingsPanel { position:fixed; inset:0; z-index:70; display:none; place-items:center; padding:14px;
+    background:rgba(7,5,10,.76); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); }
+  #settingsPanel.on { display:grid; }
+  .sp-card { width:min(720px,96vw); max-height:88vh; overflow:auto; padding:19px 21px; border:1px solid rgba(255,220,150,.35); border-radius:16px;
+    color:#f7ead2; background:radial-gradient(circle at 50% 0%,rgba(65,48,28,.98),rgba(15,12,19,.99));
+    box-shadow:0 20px 60px rgba(0,0,0,.65),inset 0 1px 0 rgba(255,255,255,.1); scrollbar-width:thin; scrollbar-color:#927448 rgba(255,255,255,.06); }
+  .sp-card::-webkit-scrollbar { width:8px; }
+  .sp-card::-webkit-scrollbar-track { background:rgba(255,255,255,.04); border-radius:8px; }
+  .sp-card::-webkit-scrollbar-thumb { background:#927448; border:2px solid rgba(22,17,12,.85); border-radius:8px; }
+  .sp-card :focus-visible { outline:3px solid #ffe7a2; outline-offset:3px; }
+  .sp-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:4px; }
+  .sp-head h2 { margin:0; color:#ffe1a0; font-size:23px; letter-spacing:1px; }
+  .sp-close { width:38px; height:38px; border:1px solid #ffffff35; border-radius:10px; background:#ffffff10; color:#fff0d2; font-size:23px; cursor:pointer; }
+  .sp-intro { margin:0 0 14px; color:#cbbd9f; font-size:12px; line-height:1.6; }
+  .sp-grid { display:grid; grid-template-columns:1fr 1fr; gap:11px; }
+  .sp-section { min-width:0; padding:12px; border:1px solid #ffffff20; border-radius:11px; background:linear-gradient(145deg,#ffffff0d,#ffffff05); }
+  .sp-section h3 { margin:0 0 9px; color:#ffd98e; font-size:15px; }
+  .sp-quality { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; }
+  .sp-quality button, .sp-action { min-height:38px; border:1px solid #ffffff25; border-radius:8px; padding:7px 9px; color:#f6e9d0; background:#ffffff0b; cursor:pointer; font:inherit; text-align:left; }
+  .sp-quality button[aria-pressed="true"] { border-color:#ffd36f; color:#ffe4a6; background:linear-gradient(135deg,#c8893433,#ffd36f22); box-shadow:inset 0 0 0 1px #ffd36f44; }
+  .sp-quality button span { display:block; font-size:13px; font-weight:700; }
+  .sp-quality button small { display:block; margin-top:2px; color:#b9ad98; font-size:10px; line-height:1.35; }
+  #gfxStatus { min-height:17px; margin-top:8px; color:#c8e7b5; font-size:11px; }
+  .sp-audio-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  #musicToggle { min-height:36px; border:1px solid #ffffff2e; border-radius:8px; padding:7px 11px; color:#f6e9d0; background:#ffffff0b; cursor:pointer; font:inherit; }
+  #musicToggle[aria-pressed="true"] { border-color:#a8d78c; color:#d8f2c3; background:#7ab35c24; }
+  .sp-volume { display:flex; align-items:center; gap:9px; margin-top:12px; color:#e6d7bb; font-size:12px; }
+  .sp-volume input { min-width:0; flex:1; accent-color:#f0bd64; }
+  #musicVolumeValue { min-width:38px; color:#ffe0a0; text-align:right; font-variant-numeric:tabular-nums; }
+  .sp-note { margin:8px 0 0; color:#a99d89; font-size:10px; line-height:1.5; }
+  .sp-controls { display:grid; grid-template-columns:1fr 1fr; gap:5px 12px; margin:0; font-size:11px; }
+  .sp-controls div { display:flex; justify-content:space-between; gap:7px; padding:4px 0; border-bottom:1px solid #ffffff12; }
+  .sp-controls dt { color:#bdb19b; }
+  .sp-controls dd { margin:0; color:#ffe5b2; font-weight:700; text-align:right; }
+  #openFullHelpBtn { width:100%; margin-top:9px; text-align:center; }
+  .sp-footer { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:12px; color:#a99d89; font-size:10px; }
+  @media (max-width:620px) {
+    .sp-card { padding:15px 13px; }
+    .sp-grid { grid-template-columns:1fr; gap:8px; }
+    .sp-section { padding:10px; }
+    .sp-head h2 { font-size:20px; }
+    #overlay.main-menu #menuActions .btn, #overlay.pause-menu #menuActions .btn { min-width:94px; padding:6px 9px; font-size:12px; }
+  }
+  @media (max-height:520px) and (orientation:landscape) {
+    #settingsPanel { padding:7px; }
+    .sp-card { max-height:96vh; padding:9px 12px; }
+    .sp-intro, .sp-footer, .sp-section[aria-labelledby="saveHeading"] { display:none; }
+    .sp-grid { gap:6px; }
+    .sp-section { padding:7px; }
+    .sp-section h3 { margin-bottom:5px; }
+    .sp-quality { gap:5px; }
+    .sp-quality button, .sp-action { min-height:31px; padding:4px 7px; }
+    .sp-quality button small { font-size:9px; }
+    .sp-controls { gap:2px 8px; }
+    .sp-controls div { padding:3px 0; }
+    #openFullHelpBtn { margin-top:5px; }
+  }
+  @media (prefers-reduced-motion:reduce) { #settingsPanel *, #menuActions .btn { scroll-behavior:auto !important; transition:none !important; } }
   /* ---------- 移动端触屏 UI ---------- */
   #touchui { position:fixed; inset:0; display:none; z-index:20; pointer-events:none;
              padding-bottom:env(safe-area-inset-bottom); padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right); }
@@ -248,7 +398,7 @@
   <div id="recipeWrap"><div id="bagTitle">配方（点击合成）</div><div id="recipeList"></div></div>
 </div>
 <div id="enchPanel">
-  <div id="craftHead">✨ 神庙附魔祭坛<span id="craftHint">按 J / Esc 关闭</span></div>
+  <div id="craftHead">✨ 神庙武器祭坛<span id="craftHint">附魔 / 修理 · 按 J / Esc 关闭</span></div>
   <div id="enchInfo"></div>
   <div id="enchList"></div>
 </div>
@@ -355,6 +505,48 @@
   </div>
 </div>
 
+<div id="settingsPanel" aria-hidden="true">
+  <section class="sp-card" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" tabindex="-1">
+    <header class="sp-head"><h2 id="settingsTitle">⚙ 游戏设置</h2><button id="settingsClose" class="sp-close" type="button" aria-label="关闭设置">×</button></header>
+    <p class="sp-intro">设置会单独保存在此浏览器，不改变世界存档；低帧率时游戏仍可能自动降低画质。</p>
+    <div class="sp-grid">
+      <section class="sp-section" aria-labelledby="gfxHeading">
+        <h3 id="gfxHeading">画面质量</h3>
+        <div class="sp-quality" role="group" aria-label="选择画质档位">
+          <button type="button" data-gfx="0" aria-pressed="false"><span>低 · 省性能</span><small>关闭阴影与后处理</small></button>
+          <button type="button" data-gfx="1" aria-pressed="false"><span>中 · 均衡</span><small>阴影、泛光与抗锯齿</small></button>
+          <button type="button" data-gfx="2" aria-pressed="false"><span>高 · 推荐</span><small>光束、反射与高阶阴影</small></button>
+          <button type="button" data-gfx="3" aria-pressed="false"><span>极致 · 画面优先</span><small>高精度阴影与远景柔化</small></button>
+        </div>
+        <div id="gfxStatus" aria-live="polite"></div>
+      </section>
+      <section class="sp-section" aria-labelledby="audioHeading">
+        <h3 id="audioHeading">环境音乐</h3>
+        <div class="sp-audio-row"><span>沙海氛围旋律</span><button id="musicToggle" type="button" aria-pressed="true">音乐：开启</button></div>
+        <label class="sp-volume" for="musicVolume">音量<input id="musicVolume" type="range" min="0" max="100" step="1" value="80"><output id="musicVolumeValue" for="musicVolume">80%</output></label>
+        <p class="sp-note">音量仅影响程序生成的背景旋律，快捷键 <b>M</b> 可快速静音；音效不受影响。</p>
+      </section>
+      <section class="sp-section" aria-labelledby="controlsHeading">
+        <h3 id="controlsHeading">常用操作</h3>
+        <dl class="sp-controls">
+          <div><dt>移动 / 跳跃</dt><dd>W A S D / 空格</dd></div>
+          <div><dt>挖掘 / 攻击</dt><dd>鼠标左键</dd></div>
+          <div><dt>放置 / 使用</dt><dd>鼠标右键</dd></div>
+          <div><dt>物品栏 / 合成</dt><dd>1–9 / B</dd></div>
+          <div><dt>切换画质 / 音乐</dt><dd>O / M</dd></div>
+          <div><dt>暂停 / 全部帮助</dt><dd>Esc / H</dd></div>
+        </dl>
+        <button id="openFullHelpBtn" class="sp-action" type="button">打开完整玩法与快捷键说明</button>
+      </section>
+      <section class="sp-section" aria-labelledby="saveHeading">
+        <h3 id="saveHeading">世界与存档</h3>
+        <p class="sp-note" style="margin:0">游戏会自动保存；暂停时也可点「立即保存」。此处的画质和音乐偏好独立于世界存档。</p>
+      </section>
+    </div>
+    <footer class="sp-footer"><span>画质：<b>O</b> 循环切换 · 音乐：<b>M</b> 静音</span><span>按 <b>Esc</b> 或点 × 返回</span></footer>
+  </section>
+</div>
+
 <div id="chronicle" onclick="toggleChronicle()"><div class="cr-card"></div></div>
 <div id="bazaar-panel" onclick="closeBazaarPanel()"><div class="bz-card" onclick="event.stopPropagation()"></div></div>
 <div id="pottery-panel" onclick="closePotteryPanel()"><div class="pt-card" onclick="event.stopPropagation()"></div></div>
@@ -362,7 +554,7 @@
 <div id="lamp-panel" onclick="closeLampPanel()"><div class="sx-card" onclick="event.stopPropagation()"></div></div>
 <div id="sphinx-panel" onclick="closeSphinxPanel()"><div class="sx-card" onclick="event.stopPropagation()"></div></div>
 
-<div id="overlay">
+<div id="overlay" class="main-menu">
   <canvas id="brandmark" width="120" height="120"></canvas>
   <div id="title">沙海奇境</div>
   <div id="titleEn">S A N D S E A</div>
@@ -371,7 +563,17 @@
     <button id="startbtn" class="btn" disabled>生成世界中… 0%</button>
     <button id="continuebtn" class="btn sub" style="display:none">继续上次的世界</button>
     <button id="newworldbtn" class="btn sub" style="display:none">开启新世界</button>
+    <div id="menuActions">
+      <button id="settingsBtn" class="btn sub" type="button">⚙ 设置</button>
+      <button id="controlsBtn" class="btn sub" type="button">⌨ 操作说明</button>
+      <button id="saveNowBtn" class="btn sub" type="button">💾 立即保存</button>
+    </div>
+    <div id="saveStatus" role="status" aria-live="polite"></div>
     <a href="../../index.html" style="display:inline-block;margin-top:12px;color:#ffe08a;text-decoration:none;font-size:14px">← 返回游戏厅</a>
+    <div id="menuLoading" aria-label="世界生成进度">
+      <div class="menu-load-head"><span id="menuLoadLabel">正在塑造沙海地形</span><b id="menuLoadPct">0%</b></div>
+      <div class="menu-load-track" role="progressbar" aria-label="世界生成进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="menuLoadFill"></i></div>
+    </div>
   </div>
   <div id="help">
     <b>W A S D</b> 移动　<b>空格</b> 跳跃(双击飞行)　<b>Shift</b> 潜行/下降　<b>E</b> 上车/骑乘<br>
@@ -607,6 +809,56 @@ const OCCLUDE = id => SOLID(id) && id!==GLASS && id!==ICE && !SHAPES[id];       
 const EMISSIVE= id => id===LANTERN || id===LAVA || id===CRYSTAL || id===MAGMA || id===NEON || id===WINDOW || id===GLOWVEIN || id===SALTCRYSTAL || id===AMETHYST || id===KAHEART || id===FURNACE_LIT; // 自发光
 /* 物品栏: 常用道具全部落在 1-9 键上, TNT 固定在 9 键 */
 const HOTBAR_ITEMS = ["firework", "grapple", "cola", "sword", "gun", "rpg", "bow", TNT, JUMPPAD];
+/* 装备耐久: 只影响剑/锤/弓, 枪械与建筑工具不消耗耐久。磨损到顶仍可使用(威力保底 70%), 避免永久毁坏造成软锁。 */
+const GEAR_DEFS={
+  sword:{name:"铁剑",max:240},
+  mace:{name:"塞特之锤",max:140},
+  bow:{name:"弓",max:200}
+};
+const gearWear={sword:0,mace:0,bow:0};
+function gearMax(k){ const D=GEAR_DEFS[k]; return D?(k==="sword"&&sunblade?360:D.max):0; }
+function gearOwned(k){ return k!=="mace" || maceOwned; }
+function gearRemaining(k){ return Math.max(0,gearMax(k)-(gearWear[k]||0)); }
+function gearPowerMul(k){ const m=gearMax(k); return m?Math.max(.7,1-.3*Math.min(1,(gearWear[k]||0)/m)):1; }
+function gearRepairCost(k){
+  if(k==="sword"&&sunblade) return [[GOLD_ORE,2],[GEM_ORE,1]];
+  if(k==="sword") return [[IRON_ORE,2],[GOLD_ORE,1]];
+  if(k==="mace") return [[IRON_ORE,3],[GOLD_ORE,1]];
+  if(k==="bow") return [[PLANKS,2],[IRON_ORE,1]];
+  return [];
+}
+function wearGear(k,n){
+  if(!GEAR_DEFS[k] || !gearOwned(k) || n<=0) return false;
+  const max=gearMax(k), before=gearRemaining(k);
+  gearWear[k]=Math.min(max,(gearWear[k]||0)+Math.max(1,n|0));
+  const after=gearRemaining(k);
+  if(before>max*.2 && after<=max*.2){
+    showName(after===0?"⚠ "+GEAR_DEFS[k].name+"磨损到极限：仍可使用(威力 70%)，按 J 修理":"⚠ "+GEAR_DEFS[k].name+"耐久偏低：按 J 在武器祭坛修理");
+  }
+  updateGearHud();
+  if(enchOpen) renderEnch();
+  return true;
+}
+function restoreGearWear(data){
+  const src=data&&typeof data==="object"&&!Array.isArray(data)?data:{};
+  for(const k of Object.keys(GEAR_DEFS)){
+    const n=Number(src[k]); gearWear[k]=Number.isFinite(n)?clamp(Math.floor(n),0,gearMax(k)):0;
+  }
+  updateGearHud();
+}
+function repairGear(k){
+  if(!GEAR_DEFS[k] || !gearOwned(k)) return false;
+  if(gearWear[k]<=0){ showName("✨ "+GEAR_DEFS[k].name+"耐久完好，无需修理"); return false; }
+  const cost=gearRepairCost(k), missing=cost.filter(([id,n])=>bagCount(id)<n);
+  if(missing.length){ showName("⚠ 修理材料不足：需要 "+cost.map(([id,n])=>BLOCKS[id].name+" x"+n).join("、")); return false; }
+  for(const [id,n] of cost) bagTake(id,n);
+  gearWear[k]=0;
+  updateGearHud();
+  showName("🔧 "+(k==="sword"&&sunblade?"拉之烈阳剑":GEAR_DEFS[k].name)+"已修复至满耐久");
+  if(enchOpen) renderEnch();
+  saveGame(true);
+  return true;
+}
 
 /* ---------- 噪声 ---------- */
 function hash2(x, y){
@@ -2020,7 +2272,29 @@ function villagePlan(s){
     const sh=mS===6?1:0;                                               // 6 槽时往主街方向挪一格, 让出隔壁环湖屋的墙角
     const a=gaps[marketIdx], mx=Math.round(x+Math.cos(a)*RM)+gX*sh, mz=Math.round(z+Math.sin(a)*RM)+gZ*sh;
     const fx=-pX, fz=-pZ;                                            // 摊位一律面朝主街轴线: 长边沿主街方向, 不会顶到隔壁环湖屋
-    market={ox:mx+fx,oz:mz+fz,fx,fz,D:3,hw:4};
+    const makeMarket=(dx=0,dz=0)=>({ox:mx+fx+dx,oz:mz+fz+dz,fx,fz,D:3,hw:4});
+    const doorCells=new Set(houses.map(H=>okey(...toW(H,0,-2))));
+    const hasDoorPost=M=>{
+      for(const c of [-2,2]) for(const pu of [-1,1]) for(const pv of [0,2]){
+        const [X,Z]=toW(M,c+pu,pv); if(doorCells.has(okey(X,Z))) return true;
+      }
+      return false;
+    };
+    const overlapsHouse=M=>{
+      for(let u=-4;u<=4;u++) for(let v=-1;v<=2;v++){
+        const [X,Z]=toW(M,u,v); if(get(X,Z)===4) return true;
+      }
+      return false;
+    };
+    market=makeMarket();
+    if(hasDoorPost(market)){
+      // 集市柱恰好挡住邻屋门口时，按固定顺序沿摊位两轴避让一格。
+      // 候选只在已预约房屋之外；不受 Math.random 或世界生成顺序影响。
+      for(const [dx,dz] of [[-fz,fx],[fz,-fx],[-fx,-fz],[fx,fz]]){
+        const next=makeMarket(dx,dz);
+        if(!hasDoorPost(next) && !overlapsHouse(next)){ market=next; break; }
+      }
+    }
     for(let u=-4;u<=4;u++) for(let v=-1;v<=2;v++){ const [X,Z]=toW(market,u,v); set(X,Z,4); }
   }
   {
@@ -5138,15 +5412,24 @@ function enchOnHit(m,dmg,held){                       // 近战命中后: 火焰
 function renderEnch(){
   const info=document.getElementById("enchInfo"); if(!info) return;
   const cur=ENCH_DEFS.filter(D=>enchState[D.k]>0).map(D=>D.n+" "+ROMAN[enchState[D.k]]).join("、")||"无";
-  info.innerHTML="献祭：🏺 文物碎片 <b>x"+npcState.relics+"</b>　金矿石 <b>x"+bagCount(GOLD_ORE)+"</b><br>当前词条（对剑与塞特之锤生效）："+cur;
-  document.getElementById("enchList").innerHTML=ENCH_DEFS.map(D=>{
+  info.innerHTML="献祭：🏺 文物碎片 <b>x"+npcState.relics+"</b>　金矿石 <b>x"+bagCount(GOLD_ORE)+"</b><br>当前词条（对剑与塞特之锤生效）："+cur+"<br>耐久归零仍可使用，武器威力最低保留 70%";
+  const repairs=Object.keys(GEAR_DEFS).filter(gearOwned).map(k=>{
+    const max=gearMax(k), left=gearRemaining(k), pct=Math.round(left/max*100), costs=gearRepairCost(k);
+    const enough=costs.every(([id,n])=>bagCount(id)>=n), ready=left<max&&enough;
+    const price=left>=max?"耐久完好":costs.map(([id,n])=>(bagCount(id)<n?"⚠ ":"")+BLOCKS[id].name+" "+bagCount(id)+"/"+n).join("　");
+    const label=k==="sword"&&sunblade?"拉之烈阳剑":GEAR_DEFS[k].name;
+    return '<div class="recipe gearRepair'+(ready?"":" locked")+'" data-repair="'+k+'">'+
+      '<div><div class="rn">🔧 '+label+' · '+left+'/'+max+' ('+pct+'%)</div><div class="rd">'+(left>=max?"状态良好":"点击修复至满耐久")+'</div></div><div class="rc">'+price+'</div></div>';
+  }).join("");
+  document.getElementById("enchList").innerHTML='<div class="gearSection">装备耐久 · 点击修理</div>'+repairs+'<div class="gearSection">永久附魔</div>'+ENCH_DEFS.map(D=>{
     const lv=enchState[D.k], full=lv>=D.max, c=enchCost(lv+1);
     const cost=full?"已满级":((npcState.relics>=c.relics?"":"⚠ ")+"文物 "+npcState.relics+"/"+c.relics+"　"+(bagCount(GOLD_ORE)>=c.gold?"":"⚠ ")+"金 "+bagCount(GOLD_ORE)+"/"+c.gold);
     return '<div class="recipe'+(canEnchant(D.k)?"":" locked")+'" data-k="'+D.k+'">'+
       '<div><div class="rn">'+D.n+" "+(ROMAN[lv]||"—")+(full?"":" → "+ROMAN[lv+1])+'</div><div class="rd">'+D.d(full?lv:lv+1)+'</div></div>'+
       '<div class="rc">'+cost+'</div></div>';
   }).join("");
-  for(const el of document.querySelectorAll("#enchList .recipe")) el.onclick=()=>doEnchant(el.dataset.k);
+  for(const el of document.querySelectorAll("#enchList .recipe[data-k]")) el.onclick=()=>doEnchant(el.dataset.k);
+  for(const el of document.querySelectorAll("#enchList .recipe[data-repair]")) el.onclick=()=>repairGear(el.dataset.repair);
 }
 function toggleEnch(){
   if(craftOpen) toggleCraft();
@@ -6234,14 +6517,20 @@ const hud=document.getElementById("hud");
 const startbtn=document.getElementById("startbtn");
 const continuebtn=document.getElementById("continuebtn");
 const newworldbtn=document.getElementById("newworldbtn");
+const settingsPanel=document.getElementById("settingsPanel");
+const settingsBtn=document.getElementById("settingsBtn");
+const saveNowBtn=document.getElementById("saveNowBtn");
+let settingsReturnFocus=null;
 /* 标题屏上的"品牌/说明"元素: 暂停和死亡时收起, 只在首屏显示 */
 function setTitleChrome(show){
   const d=show?"":"none";
+  overlay.classList.toggle("main-menu",!!show);
+  overlay.classList.toggle("world-ready",!!show && worldGenReady);
   for(const id of ["brandmark","titleEn","subtitle","help","legal"]){
     const el=document.getElementById(id); if(el) el.style.display=d;
   }
 }
-function enterGame(){ overlay.style.display="none"; hud.style.display="block"; beginOnboarding(); }
+function enterGame(){ closeSettings(false); overlay.classList.remove("pause-menu"); document.getElementById("saveStatus").textContent=""; overlay.style.display="none"; hud.style.display="block"; beginOnboarding(); }
 /* 完整帮助浮层: H 键或点击标题切换; 打开时若在指针锁定中先释放, 方便阅读 */
 function chronicleHTML(){
   const rt=facTier(faction.rome), et=facTier(faction.egypt);
@@ -6289,6 +6578,58 @@ function toggleFullHelp(){
   if(show) tutEvent("help");
   if(show && document.pointerLockElement) document.exitPointerLock();
 }
+function refreshSettingsUI(){
+  if(!settingsPanel) return;
+  const level=Math.max(0,Math.min(GFX_PRESETS.length-1,gfxLevel|0));
+  settingsPanel.querySelectorAll("[data-gfx]").forEach(b=>b.setAttribute("aria-pressed",String(+b.dataset.gfx===level)));
+  const gs=document.getElementById("gfxStatus");
+  if(gs) gs.textContent="当前："+GFX_NAMES[level]+(level>0&&!shadow.ok?" · 此设备不支持阴影":"")+" · 按 O 可循环切换";
+  const mt=document.getElementById("musicToggle");
+  if(mt){ mt.setAttribute("aria-pressed",String(!!musicOn)); mt.textContent="音乐："+(musicOn?"开启":"关闭"); }
+  const mv=document.getElementById("musicVolume"), out=document.getElementById("musicVolumeValue");
+  if(mv) mv.value=String(Math.round(musicVolume*100));
+  if(out) out.textContent=Math.round(musicVolume*100)+"%";
+}
+function openSettings(){
+  if(!settingsPanel || settingsPanel.classList.contains("on")) return false;
+  settingsReturnFocus=document.activeElement;
+  refreshSettingsUI();
+  settingsPanel.classList.add("on"); settingsPanel.setAttribute("aria-hidden","false");
+  if(document.pointerLockElement) document.exitPointerLock();
+  const close=document.getElementById("settingsClose"); if(close) close.focus();
+  return true;
+}
+function closeSettings(restoreFocus=true){
+  if(!settingsPanel || !settingsPanel.classList.contains("on")) return false;
+  settingsPanel.classList.remove("on"); settingsPanel.setAttribute("aria-hidden","true");
+  const target=settingsReturnFocus; settingsReturnFocus=null;
+  if(restoreFocus && target && target.isConnected && target.focus) target.focus();
+  return true;
+}
+function showFullHelpFromMenu(){
+  if(settingsPanel.classList.contains("on")) closeSettings(false);
+  const help=document.getElementById("fullhelp");
+  if(help.style.display!=="flex") toggleFullHelp();
+}
+function saveAudioPrefs(){
+  try{ localStorage.setItem("sandsea_music_v1",musicOn?"1":"0"); localStorage.setItem("sandsea_music_volume_v1",String(musicVolume)); }catch(e){}
+}
+function setMusicEnabled(on){
+  musicOn=!!on; saveAudioPrefs(); applyMusicAudioPrefs(); refreshSettingsUI(); return musicOn;
+}
+function setMusicVolume(value){
+  const n=Number(value); musicVolume=Number.isFinite(n)?Math.max(0,Math.min(1,n/100)):musicVolume;
+  saveAudioPrefs(); applyMusicAudioPrefs(); refreshSettingsUI(); return musicVolume;
+}
+settingsPanel.addEventListener("click",e=>{ if(e.target===settingsPanel) closeSettings(); });
+settingsPanel.addEventListener("keydown",e=>{
+  if(e.key!=="Tab") return;
+  const nodes=[...settingsPanel.querySelectorAll("button:not(:disabled),input:not(:disabled)")];
+  if(!nodes.length) return;
+  const first=nodes[0], last=nodes[nodes.length-1];
+  if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); }
+  else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); }
+});
 /* ---- 🧭 新手引导(第八轮·本地) ----
    8 步, 每步由真实操作推进(不是计时翻页): 环顾 → 走 8 格 → 跳 → 挖 3 块 → 放 1 块 → 切到铁剑 → 开合成台 → 看完整帮助。
    屏幕上方常驻卡片(步骤/按键/进度条), 需要切物品栏时对应格子闪烁; N 或点 ✕ 随时跳过。完成 +20 经验。
@@ -6370,6 +6711,18 @@ document.getElementById("fullhelp").addEventListener("click",e=>{
   // 点击半透明背景或标题栏关闭; 点正文不关, 方便阅读
   if(e.target.id==="fullhelp" || e.target.classList.contains("fh-title")) toggleFullHelp();
 });
+settingsBtn.setAttribute("aria-haspopup","dialog"); settingsBtn.setAttribute("aria-controls","settingsPanel");
+settingsBtn.addEventListener("click",openSettings);
+document.getElementById("settingsClose").addEventListener("click",()=>closeSettings());
+document.getElementById("controlsBtn").addEventListener("click",showFullHelpFromMenu);
+document.getElementById("openFullHelpBtn").addEventListener("click",showFullHelpFromMenu);
+document.getElementById("settingsPanel").querySelectorAll("[data-gfx]").forEach(b=>b.addEventListener("click",()=>setGfx(+b.dataset.gfx)));
+document.getElementById("musicToggle").addEventListener("click",()=>setMusicEnabled(!musicOn));
+document.getElementById("musicVolume").addEventListener("input",e=>setMusicVolume(e.target.value));
+saveNowBtn.addEventListener("click",()=>{
+  const saved=saveGame();
+  document.getElementById("saveStatus").textContent=saved?"✓ 世界已保存":"⚠ 当前无法保存";
+});
 function pauseGame(){
   softLock=false;
   for(const k in keys) keys[k]=false;
@@ -6378,6 +6731,7 @@ function pauseGame(){
   startbtn.textContent="继续游戏";
   startbtn.disabled=false;
   setTitleChrome(false);
+  overlay.classList.add("pause-menu");
   continuebtn.style.display="none"; newworldbtn.style.display="none";
   overlay.style.display="flex"; hud.style.display="none";
 }
@@ -6388,6 +6742,15 @@ function enterSoft(){ // 指针锁定不可用时的降级模式(用鼠标指针
   showName("拖动模式：移动鼠标瞄准，左键点击攻击/破坏，按住拖动转视角，右键放置");
 }
 document.addEventListener("keydown",e=>{
+  if(settingsPanel.classList.contains("on")){
+    if(e.code==="Escape"){ e.preventDefault(); closeSettings(); }
+    return;
+  }
+  const fullHelpEl=document.getElementById("fullhelp");
+  if(fullHelpEl.style.display==="flex"){
+    if(e.code==="Escape" || e.code==="KeyH"){ e.preventDefault(); toggleFullHelp(); }
+    return;
+  }
   if(e.code==="KeyO" && !e.repeat){ e.preventDefault(); const g=setGfx(gfxLevel+1);
     showName("🎨 画质: "+GFX_NAMES[g]+(g>0&&!shadow.ok?"（设备不支持阴影）":"")+"  · 按 O 切换"); return; }
   if(e.code==="F1"){ e.preventDefault(); if(!e.repeat) setPhotoMode(!photoMode); return; }   // 拍照模式: 隐藏 HUD
@@ -6426,7 +6789,7 @@ document.addEventListener("keydown",e=>{
   if(e.code==="Escape" && sxEl && sxEl.classList.contains("on")){ closeSphinxPanel(); return; }
   if(e.code==="Escape" && softLock){ pauseGame(); return; }
   if(!playing()) return;
-  if(e.code==="KeyM" && !e.repeat){ musicOn=!musicOn; showName("音乐: "+(musicOn?"开":"关")); }
+  if(e.code==="KeyM" && !e.repeat){ const on=setMusicEnabled(!musicOn); showName("音乐: "+(on?"开":"关")); }
   if(["Space","KeyW","KeyA","KeyS","KeyD","ShiftLeft","ShiftRight"].includes(e.code)) e.preventDefault();
   if(!e.repeat){
     const now=performance.now();
@@ -6514,7 +6877,7 @@ newworldbtn.addEventListener("click",()=>{
   for(const [,c] of world) if(c.mesh) destroyMesh(c.mesh);
   world.clear(); meshQueue.length=0; queued.clear();
   mobs.length=0; arrows.length=0; drops.length=0; particles.length=0;
-  hp=maxHp=20; lvl=1; xp=0; armor=0; cores=0; kills=0; dayCount=1; dmgMul=1; dead=false; setSunblade(false); setMace(false); for(const k in enchState) enchState[k]=0; vaultKeys.trial=0; vaultKeys.omen=0; vaultKeys.omenDay={};
+  hp=maxHp=20; lvl=1; xp=0; armor=0; cores=0; kills=0; dayCount=1; dmgMul=1; dead=false; setSunblade(false); setMace(false); for(const k in gearWear) gearWear[k]=0; updateGearHud(); for(const k in enchState) enchState[k]=0; vaultKeys.trial=0; vaultKeys.omen=0; vaultKeys.omenDay={};
   for(const k in potions) potions[k]=0; for(const k in potionFx) potionFx[k]=0;   // 第五轮·云端
   fishState.on=false; fishState.fish=0; fishState.caught=0;
   for(const k in chests) delete chests[k]; bundleState.owned=false; bundleState.items={};   // 第六轮·云端
@@ -6608,8 +6971,9 @@ function doBreak(){
     const dirM=currentAim(), rmM=raycastMob(4.2, dirM);
     if(rmM){
       const mightMul=(blessKind==="might"&&blessT>0)?1.35:1, omenMul=(typeof omenMeleeMul==="function")?omenMeleeMul():1;
-      const mr=maceStrike(rmM.m, dirM, dmgMul*mightMul*omenMul*enchMeleeMul("mace"), maceFall());
+      const mr=maceStrike(rmM.m, dirM, dmgMul*mightMul*omenMul*enchMeleeMul("mace")*gearPowerMul("mace"), maceFall());
       enchOnHit(rmM.m, mr.dmg, "mace");
+      wearGear("mace",mr.smash?2:1);
       return;
     }
   } else { swingT=0.3; triggerViewSwing(); }
@@ -6621,10 +6985,11 @@ function doBreak(){
     const mightMul=(blessKind==="might"&&blessT>0)?1.35:1;   // 战意祝福: 近战增伤
     const omenMul=(typeof omenMeleeMul==="function")?omenMeleeMul():1;   // 连锁: 马尔斯天象 → 近战更狠
     const d=Math.hypot(rm.m.x-player.x, rm.m.z-player.z)||1e-6;
-    const sun=isSword&&sunblade, eMul=enchMeleeMul(held), hitDmg=Math.round((sun?16:isSword?12:5)*dmgMul*mightMul*omenMul*eMul);
+    const sun=isSword&&sunblade, eMul=enchMeleeMul(held)*gearPowerMul(held), hitDmg=Math.round((sun?16:isSword?12:5)*dmgMul*mightMul*omenMul*eMul);
     hurtMob(rm.m, hitDmg, (rm.m.x-player.x)/d*(isSword?10:8), (rm.m.z-player.z)/d*(isSword?10:8));
     enchOnHit(rm.m, hitDmg, held);
     if(sun) sunbladeHit(rm.m, dir, dmgMul*mightMul*omenMul*eMul);
+    if(isSword) wearGear("sword",1);
     return;
   }
   if(isSword && sunblade) sunbladeTrail(dir);
@@ -6771,7 +7136,7 @@ function updateParticles(dt){
 
 /* ---------- 音效 ---------- */
 let actx2=null;
-function initAudio(){ if(!actx2){ try{ actx2=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } }
+function initAudio(){ if(!actx2){ try{ actx2=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } if(actx2) applyMusicAudioPrefs(); }
 function sfxBreak(){
   if(!actx2) return;
   const t=actx2.currentTime, len=0.09;
@@ -6956,10 +7321,27 @@ function sfxRocket(){
   src.connect(f).connect(g).connect(actx2.destination); src.start(t);
 }
 /* ---------- 环境音乐 ---------- */
-let musicOn=true, musicT=5;
+let musicOn=true, musicT=5, musicVolume=0.8, musicBus=null;
+try{
+  const mo=localStorage.getItem("sandsea_music_v1"); if(mo==="0") musicOn=false; else if(mo==="1") musicOn=true;
+  const mv=localStorage.getItem("sandsea_music_volume_v1");
+  if(mv!==null && Number.isFinite(Number(mv))) musicVolume=Math.max(0,Math.min(1,Number(mv)));
+}catch(e){}
 const MUSIC_NOTES=[261.63,293.66,329.63,392,440,523.25,587.33];
+function ensureMusicBus(){
+  if(!actx2) return null;
+  if(!musicBus){ musicBus=actx2.createGain(); musicBus.gain.value=musicOn?musicVolume:0; musicBus.connect(actx2.destination); }
+  return musicBus;
+}
+function applyMusicAudioPrefs(){
+  const bus=ensureMusicBus(); if(!bus) return false;
+  const t=actx2.currentTime, value=musicOn?musicVolume:0;
+  bus.gain.cancelScheduledValues(t); bus.gain.setTargetAtTime(value,t,0.06);
+  return true;
+}
 function musicTick(dt){
   if(!musicOn||!actx2) return;
+  const bus=ensureMusicBus(); if(!bus) return;
   musicT-=dt;
   if(musicT>0) return;
   musicT=1.7+Math.random()*2.8;
@@ -6971,7 +7353,7 @@ function musicTick(dt){
     g.gain.setValueAtTime(0,t+dl);
     g.gain.linearRampToValueAtTime(vol,t+dl+0.4);
     g.gain.exponentialRampToValueAtTime(0.0008,t+dl+2.4);
-    o.connect(g).connect(actx2.destination); o.start(t+dl); o.stop(t+dl+2.5);
+    o.connect(g).connect(bus); o.start(t+dl); o.stop(t+dl+2.5);
   };
   mk(n,0,0.05);
   if(Math.random()<0.45) mk(n*1.5,0.12,0.028);
@@ -9153,6 +9535,8 @@ function shootArrow(){
   arrowCd=0.5;
   const [dx,dy,dz]=currentAim();
   makeArrow(player.x+dx*0.5, player.y+EYE-0.08, player.z+dz*0.5, dx*34, dy*34, dz*34, false);
+  arrows[arrows.length-1].gearMul=gearPowerMul("bow");
+  wearGear("bow",1);
   sfxBow();
 }
 function fireGun(){                                // 机关枪: 命中式扫射(hitscan)
@@ -9292,7 +9676,7 @@ function updateArrows(dt){
         }
         if(hitMob){
           if(a.rocket){ explode(px,py,pz,1.6); }
-          else hurtMob(hitMob,Math.round(7*dmgMul),a.vx*0.12,a.vz*0.12);
+          else hurtMob(hitMob,Math.round(7*dmgMul*(Number.isFinite(a.gearMul)?a.gearMul:1)),a.vx*0.12,a.vz*0.12);
           arrows.splice(i,1); consumed=true; break;
         }
       }
@@ -9496,8 +9880,21 @@ function rebuildHotbar(){
       c.getContext("2d").drawImage(ITEMS[id].icon,0,0);
       slot.appendChild(c);
     }
+    if(typeof id==="string" && GEAR_DEFS[id]){
+      const meter=document.createElement("span"); meter.className="gearMeter"; meter.dataset.gear=id;
+      meter.appendChild(document.createElement("i")); slot.appendChild(meter);
+    }
     hb.appendChild(slot);
   });
+  updateGearHud();
+}
+function updateGearHud(){
+  for(const meter of document.querySelectorAll("#hotbar .gearMeter")){
+    const k=meter.dataset.gear, max=gearMax(k), left=gearRemaining(k), pct=max?Math.round(left/max*100):0;
+    const fill=meter.firstElementChild; if(fill){ fill.style.width=pct+"%"; fill.style.backgroundColor=pct>50?"#75d078":pct>20?"#e8c65b":"#e37753"; }
+    const label=k==="sword"&&sunblade?"拉之烈阳剑":GEAR_DEFS[k].name;
+    meter.title=label+" · 耐久 "+left+"/"+max+(pct===0?" · 威力保底 70%":"");
+  }
 }
 let nameTimer=null;
 function showName(txt){
@@ -9510,7 +9907,8 @@ function selectSlot(i){
   selSlot=i;
   document.querySelectorAll(".slot").forEach((s,j)=>s.classList.toggle("sel",j===i));
   const e=HOTBAR_ITEMS[i];
-  showName(typeof e==="number" ? BLOCKS[e].name : ITEMS[e].name);
+  const base=typeof e==="number" ? BLOCKS[e].name : ITEMS[e].name;
+  showName(base+(typeof e==="string"&&GEAR_DEFS[e]?" · 耐久 "+gearRemaining(e)+"/"+gearMax(e):""));
   drawViewmodel();
 }
 
@@ -10436,6 +10834,7 @@ function setGfx(level){
   try{ localStorage.setItem("sandsea_gfx", String(gfxLevel)); }catch(e){}
   setupShadow();
   post.dirty=true;                          // 后处理目标下一帧按新档位重建
+  refreshSettingsUI();
   return gfxLevel;
 }
 /* 太阳/月亮: 方位角随一天转一圈, 太阳高度跟随 sunH(与天色/亮度一致), 最高约 62°——斜射才有立体的长影。
@@ -11581,6 +11980,7 @@ function collectSave(){
     sunblade,                                    // 第五轮·本地: 拉之烈阳剑(老存档无此字段 → 铁剑)
     mace:maceOwned,                              // 第五轮·本地: 塞特之锤(老存档无此字段 → 没有)
     ench:Object.assign({},enchState),            // 第五轮·本地: 附魔词条(老存档无此字段 → 全 0)
+    gearWear:Object.assign({},gearWear),         // 第十二轮·本地: 剑/锤/弓磨损计数(老存档无此字段 → 满耐久)
     trialVault:{trial:vaultKeys.trial, omen:vaultKeys.omen, omenDay:vaultKeys.omenDay},   // 第九轮·本地: 试炼/不祥钥匙 + 各厅不祥试炼通关日
     potions:Object.assign({},potions),           // 第五轮·云端: 药水库存(老存档无此字段 → 全 0; 生效中的效果不存档)
     fish:{ n:fishState.fish, caught:fishState.caught, cooked:fishState.cooked|0 },   // 第五轮·云端: 钓鱼(老存档无此字段 → 0); 第七轮·云端: 烤鱼
@@ -11673,6 +12073,7 @@ function loadGame(){
   if(s.dmgMul) dmgMul=s.dmgMul;
   setSunblade(!!s.sunblade);
   setMace(!!s.mace);
+  restoreGearWear(s.gearWear);
   for(const D of ENCH_DEFS) enchState[D.k]=Math.max(0,Math.min(D.max,(s.ench&&s.ench[D.k])|0));
   { const V=s.trialVault||{}; vaultKeys.trial=Math.max(0,V.trial|0); vaultKeys.omen=Math.max(0,V.omen|0); vaultKeys.omenDay=(V.omenDay&&typeof V.omenDay==="object")?V.omenDay:{}; }
   for(const P of POTIONS){ potions[P.k]=Math.max(0,(s.potions&&s.potions[P.k])|0); if(P.k in potionFx) potionFx[P.k]=0; }   // 第五轮·云端: 老存档无 potions → 全 0
@@ -11853,6 +12254,8 @@ drawViewmodel();
   // 两遍: 先生成全部区块数据, 再建网格。边生成边建网格时, 外一圈的邻区块还不存在,
   // 区块边界上会多出朝向"空气"的面(水面上一道道亮线, 地形里是看不见的冗余面)。
   const nGen=list.length, total=nGen*2;
+  const loadLabel=document.getElementById("menuLoadLabel"), loadPct=document.getElementById("menuLoadPct");
+  const loadFill=document.getElementById("menuLoadFill"), loadTrack=document.querySelector("#menuLoading .menu-load-track");
   let i=0;
   (function step(){
     const t0=performance.now();
@@ -11861,12 +12264,19 @@ drawViewmodel();
       const c=ensureData(ccx,ccz);
       if(i>nGen && d<=RENDER && !c.mesh) buildChunkMesh(c);
     }
-    startbtn.textContent=`生成世界中… ${Math.round(i/total*100)}%`;
+    const pct=Math.round(i/total*100);
+    startbtn.textContent="正在生成世界…";
+    if(loadPct) loadPct.textContent=pct+"%";
+    if(loadFill) loadFill.style.width=pct+"%";
+    if(loadTrack) loadTrack.setAttribute("aria-valuenow",String(pct));
+    if(loadLabel) loadLabel.textContent=i<nGen?"正在塑造沙海地形":"正在绘制遗迹与光影";
     if(i<total) setTimeout(step,0);
     else {
       pcx=cx; pcz=cz;
       for(let k=0;k<7;k++) spawnMob(k%2?"pig":"sheep",8,30); // 初始动物
       worldGenReady=true;                     // 之后的 setBlock 才算玩家改动
+      overlay.classList.add("world-ready");
+      if(loadLabel) loadLabel.textContent="沙海已就绪 · 现在启程";
       startbtn.disabled=false;
       startbtn.textContent="进入世界";
       refreshMenu();
@@ -12787,6 +13197,8 @@ window.__game = {
   get dayCount(){ return dayCount; },
   get blockDiffSize(){ return blockDiff.size; },
   get renderDist(){ return RENDER; },
+  get settings(){ return { gfx:gfxLevel, gfxName:GFX_NAMES[gfxLevel], music:musicOn, musicVolume:+musicVolume.toFixed(2), dialogOpen:settingsPanel.classList.contains("on") }; },
+  openSettings, closeSettings:()=>closeSettings(), setGfx, setMusicEnabled, setMusicVolume,
   get biome(){ return biomeAt(Math.floor(player.x), Math.floor(player.z)); },        // 当前所在群系 id
   get biomeName(){ return BIOME_NAME[biomeAt(Math.floor(player.x), Math.floor(player.z))]; },
   get codex(){ return { seen:[...bioSeen], total:CODEX_TOTAL, names:[...bioSeen].map(b=>BIOME_NAME[b]) }; },
@@ -12909,6 +13321,38 @@ function selftest(){
       try{ now=localStorage.getItem(SAVE_KEY); probe=localStorage.getItem(probeKey); }catch(e){}
       ok("自测还原后玩家存档未被动", now===liveSave, "beforeLen="+(liveSave?liveSave.length:0)+" afterLen="+(now?now.length:0));
       ok("自测哨兵键不会残留", probe==null, "probe="+probe);
+    }
+
+    // 首屏菜单: 动态沙丘装饰与可访问的真实生成进度语义
+    {
+      const menu=document.getElementById("overlay"), track=document.querySelector("#menuLoading .menu-load-track"), fill=document.getElementById("menuLoadFill");
+      const dunes=menu&&getComputedStyle(menu,"::after");
+      const pass=!!menu && menu.classList.contains("main-menu") && !!track && track.getAttribute("role")==="progressbar"
+        && track.getAttribute("aria-valuemin")==="0" && track.getAttribute("aria-valuemax")==="100" && !!fill && dunes && dunes.content!=="none";
+      ok("主菜单:动态沙丘背景与可访问生成进度存在",pass,"role="+(track&&track.getAttribute("role"))+" range="+(track&&track.getAttribute("aria-valuemin"))+".."+(track&&track.getAttribute("aria-valuemax")));
+    }
+
+    // 暂停/设置枢纽: 四档画质、键盘可关闭弹窗、音乐偏好隔离存储, 且暂停时显示手动保存
+    {
+      const panel=settingsPanel, options=[...panel.querySelectorAll("[data-gfx]")], oldOn=musicOn, oldVol=musicVolume;
+      const overlayDisplay=overlay.style.display, hudDisplay=hud.style.display;
+      const pauseWas=overlay.classList.contains("pause-menu");
+      openSettings();
+      const selected=options.filter(b=>b.getAttribute("aria-pressed")==="true");
+      const shell=panel.classList.contains("on") && panel.getAttribute("aria-hidden")==="false"
+        && panel.querySelector('[role="dialog"][aria-modal="true"]') && options.length===4
+        && selected.length===1 && +selected[0].dataset.gfx===gfxLevel;
+      document.dispatchEvent(new KeyboardEvent("keydown",{code:"Escape",key:"Escape",bubbles:true,cancelable:true}));
+      const escClosed=!panel.classList.contains("on") && panel.getAttribute("aria-hidden")==="true"
+        && overlay.style.display===overlayDisplay && hud.style.display===hudDisplay;
+      setMusicEnabled(!oldOn); setMusicVolume(37);
+      let prefsOK=false; try{ prefsOK=localStorage.getItem("sandsea_music_v1")===(!oldOn?"1":"0") && Math.abs(Number(localStorage.getItem("sandsea_music_volume_v1"))-0.37)<0.001; }catch(e){}
+      setMusicEnabled(oldOn); setMusicVolume(oldVol*100);
+      if(!pauseWas) overlay.classList.add("pause-menu");
+      const manualSaveShown=getComputedStyle(saveNowBtn).display!=="none";
+      if(!pauseWas) overlay.classList.remove("pause-menu");
+      ok("设置枢纽:四档画质、Esc关闭、音乐偏好持久化与暂停保存入口",shell && escClosed && prefsOK && manualSaveShown,
+        "qualityButtons="+options.length+" selected="+(selected[0]&&selected[0].dataset.gfx)+" esc="+escClosed+" prefs="+prefsOK+" save="+manualSaveShown);
     }
 
     // 1. 世界生成
@@ -13043,6 +13487,11 @@ function selftest(){
           const W=villageWaypoints(P), [tX,tZ]=villageTraderSpot(P);
           const stand=(X,Z)=>SOLID(at2(X,hv,Z)) && !SOLID(at2(X,hv+1,Z)) && !SOLID(at2(X,hv+2,Z));
           const badW=W.filter(w=>!stand(w.x,w.z)).map(w=>w.kind+"@"+w.x+","+w.z);
+          const doorCells=new Set(P.houses.map(H=>P.toW(H,0,-2).join(","))), blockedPosts=[];
+          for(const c of [-2,2]) for(const pu of [-1,1]) for(const pv of [0,2]){
+            const [X,Z]=P.toW(P.market,c+pu,pv); if(doorCells.has(X+","+Z)) blockedPosts.push(X+","+Z);
+          }
+          ok("集市棚柱不挡房屋门口", blockedPosts.length===0, blockedPosts.join(" ")||"ok");
           ok("村民地点(门口/集市/水井/栈桥)与摊主位都能站人", badW.length===0 && stand(tX,tZ) && W.some(w=>w.kind==="market") && W.some(w=>w.kind==="well") && W.filter(w=>w.kind==="door").length===P.houses.length,
              badW.join(" ")||("wps="+W.length));
           // 真的刷几个村民/摊主: 都落在地面(h+1)的地点上, 不在屋顶或灯柱顶
@@ -14056,6 +14505,40 @@ function selftest(){
            poor && lv5 && spent && capped && mul && saved && legacyZero, "poor="+poor+" lv5="+lv5+" spent="+spent+" cap="+capped+" mul="+mul+" saved="+saved+" legacy="+legacyZero);
         ok("附魔效果: 火焰附加 II 点燃 4 秒、横扫之刃 III 溅射 45%(2.5 格外不中)、击退 II 加推力; 非近战武器不触发", fx && noWeapon,
            "n="+n+" nb="+nb.hp+" fr="+fr.hp+" burn="+t.sunBurn+" kbx="+t.kbx.toFixed(1)+" noWeapon="+noWeapon);
+      }
+      // ---- 第十二轮·本地: 装备耐久 / 修理闭环 ----
+      {
+        const g0=Object.assign({},gearWear), bag0=new Map(bag), ar0=arrows.length, ac0=arrowCd, mace0=maceOwned;
+        let wearOK=false, floorOK=false, saveOK=false, loadOK=false, legacyOK=false, badOK=false, repairOK=false, denyOK=false, shotOK=false, hudOK=false, maceWearOK=false;
+        try{
+          restoreGearWear({});
+          wearGear("sword",7); wearOK=gearWear.sword===7 && gearPowerMul("sword")<1;
+          maceOwned=true; wearGear("mace",4); maceWearOK=gearWear.mace===4 && gearPowerMul("mace")<1; maceOwned=mace0;
+          gearWear.sword=gearMax("sword"); floorOK=gearRemaining("sword")===0 && gearPowerMul("sword")===0.7;
+          const savedGear=collectSave().gearWear; saveOK=savedGear.sword===gearWear.sword && savedGear.mace===4 && savedGear.bow===0;
+          restoreGearWear(savedGear); loadOK=gearWear.sword===gearMax("sword") && gearWear.mace===4 && gearWear.bow===0;
+          restoreGearWear({}); legacyOK=Object.values(gearWear).every(v=>v===0);
+          restoreGearWear({sword:-8,mace:"bad",bow:1e9}); badOK=gearWear.sword===0 && gearWear.mace===0 && gearWear.bow===gearMax("bow");
+          bag.clear(); bag.set(IRON_ORE,20); bag.set(GOLD_ORE,20); bag.set(GEM_ORE,20); bag.set(PLANKS,20);
+          restoreGearWear({sword:19,mace:21,bow:23}); maceOwned=true;
+          const swordFixed=repairGear("sword") && gearWear.sword===0;
+          const maceFixed=repairGear("mace") && gearWear.mace===0; maceOwned=mace0;
+          const bowFixed=repairGear("bow") && gearWear.bow===0;
+          repairOK=swordFixed&&maceFixed&&bowFixed;
+          bag.clear(); gearWear.bow=20; denyOK=!repairGear("bow")&&gearWear.bow===20;
+          gearWear.bow=gearMax("bow"); arrowCd=0; shootArrow();
+          shotOK=gearWear.bow===gearMax("bow") && arrows.length===ar0+1 && arrows[arrows.length-1].gearMul===0.7;
+          hudOK=!!document.querySelector('#hotbar .gearMeter[data-gear="sword"]') && !!document.querySelector('#hotbar .gearMeter[data-gear="bow"]');
+          ok("装备耐久: 剑/锤/弓磨损持久化; 旧档默认为满耐久, 非法值安全限幅; 归零保留装备且威力最低 70%",
+             wearOK&&maceWearOK&&floorOK&&saveOK&&loadOK&&legacyOK&&badOK, "sword="+wearOK+" mace="+maceWearOK+" floor="+floorOK+" save="+saveOK+" load="+loadOK+" legacy="+legacyOK+" bad="+badOK);
+          ok("武器祭坛修理: 剑/锤/弓按配方全额修复; 材料不足不会修改耐久", repairOK&&denyOK,
+             "repair="+repairOK+" denied="+denyOK);
+          ok("弓的耐久 HUD 与发射快照: 快捷栏存在状态条, 破损弓发出的箭按 70% 伤害结算并消耗耐久",
+             shotOK&&hudOK, "shot="+shotOK+" hud="+hudOK);
+        }finally{
+          Object.assign(gearWear,g0); maceOwned=mace0; bag.clear(); for(const [k,v] of bag0) bag.set(k,v);
+          arrows.length=ar0; arrowCd=ac0; updateGearHud();
+        }
       }
       // ---- 第六轮·本地: 地下石像回廊 + 守墓石像 + 卡之石 ----
       {

@@ -459,3 +459,29 @@
 - **驾驶 HUD**：`#hud` 内新增画布 `#driveHud`，`tickDriveHud()` 每帧调用、≤30fps 重绘，只在骑乘时显示。全部载具：航向刻度带 + 速度（按位移算，瞬移不计）。客机/悬浮摩托：人工地平线 + 俯仰刻度、海拔、离地高度（水面也算地面）、爬升率。汽车/马/战车/骆驼：左下速度表盘，骆驼显示冲刺冷却。
 - **倒影加实体**：`renderReflection()` 在地形/植物之后再画 40 格内、水面以上的生物/载具/箭矢。
 - **验证**：selftest **330/330**（新增 1 条），另一随机种子同样通过；客机海上、汽车陆地实拍。
+
+## 本地进度（2026-09-28：第十二轮·装备耐久与祭坛修理闭环）
+
+- **装备成长**：铁剑/拉之烈阳剑、塞特之锤、弓加入耐久；普通剑 240 次有效命中、烈阳剑 360、重锤 140（震地重击计 2）、弓 200 次发射。只在有效近战命中/成功发射时磨损。
+- **平衡与反馈**：快捷栏提供绿/黄/红耐久条；选中装备显示剩余次数。低于 20% 提醒修理；磨损归零不销毁装备，伤害最低保留 70%，避免战斗软锁。弓矢在发射时快照弓的威力状态。
+- **修理**：复用 J 神庙武器祭坛；铁剑/烈阳剑/塞特之锤/弓各有不同材料配方，一次修满；材料不足不会扣耐久或材料。
+- **存档兼容**：`gearWear` 随存档读写；旧存档默认满耐久，异常数据限幅；新世界清空磨损。
+- **验证**：完整 `window.__game.selftest()` **334/334**；新增覆盖耐久磨损、威力下限、材料不足、修理、存档/旧档、弓箭快照及热键栏状态条；`git diff --check` 通过。
+
+## 本地进度（2026-09-28：第十三轮·首屏氛围与载入过渡）
+
+- **视觉**：主菜单加入纯 CSS 暮色天光、星点与缓动沙丘；徽记/标题/说明/按钮分层入场，主 CTA 采用半透明磨砂卡片与清晰键盘焦点态。不增加 WebGL draw call、贴图或外部依赖。
+- **载入反馈**：`#menuLoading` 订阅既有 `initialLoad()` 两遍区块生成进度：前半“塑造沙海地形”，后半“绘制遗迹与光影”；真实百分比同步到视觉条和 `role=progressbar` 的 `aria-valuenow`，完成显示 100% 与“沙海已就绪”。按钮仍按原时机禁用/启用。
+- **状态契约**：首屏 `#overlay.main-menu` 才启用装饰/入场动画；`setTitleChrome(false)` 同时清除 `main-menu`/`world-ready`，暂停与死亡继续使用原有遮罩，不继承主菜单动效。短横屏压缩版保留主按钮与前两行控制提示，隐藏细则/扩展帮助以免滚动。
+- **兼容**：新增 `prefers-reduced-motion: reduce` 规则；桌面与窄屏 CSS 适配；不碰战斗、世界生成算法、渲染/水面着色器、村落、存档、快捷键或触屏游戏控件。
+- **验证**：`node tools/headless.mjs selftest` **335/335**；无头截图检查 1280×720 就绪态及 844×390 横屏就绪态；浏览器冒烟确认真实进度/ARIA 达 100%、桌面 overlay 不溢出、暂停时首屏类/进度 UI 隐藏；`git diff --check` 通过。
+- **后续 AI 接手**：主菜单样式在 `games/minecraft/index.html` 标题 CSS 段，节点在 `#overlay`，状态/进度更新分别在 `setTitleChrome()` 与 `initialLoad()`。不要把菜单 CSS 动画搬进 `frame()`；若继续做主菜单转场，维持 `main-menu` 状态隔离并继续覆盖 `prefers-reduced-motion` 与短横屏。
+
+## 本地进度（2026-09-28：第十四轮·暂停与设置完整枢纽）
+
+- **暂停枢纽**：主菜单与暂停遮罩提供「设置」和「操作说明」；暂停态额外显示「立即保存」，调用既有 `saveGame()` 并在菜单内回报结果。进入游戏时清除暂停态和旧保存提示；未改动继续/新世界/存档数据流程。
+- **画质面板**：提供低/中/高/极致四档及简短说明；选中态同步 `gfxLevel`，复用既有 `setGfx()`、`sandsea_gfx`、`O` 快捷键与自动低帧降级，不另造画质状态。
+- **音乐偏好**：设置面板提供背景音乐开关及 0–100 音量滑杆；分别持久化到 `sandsea_music_v1`、`sandsea_music_volume_v1`。背景旋律经过独立 WebAudio gain bus；现有 `M` 快捷键与面板同步，游戏音效音量保持不变。新增键为偏好设置，不写入 `SAVE_KEY`。
+- **可用性/视觉**：设置弹窗使用 `role=dialog`、`aria-modal`、Esc/关闭按钮/背景关闭、焦点返回与 Tab 焦点圈；操作面板列出常用键并可打开既有完整帮助。桌面和短横屏首屏无滚动；设置卡片在 1280×720、844×390、390×844 检查，短屏可滚动且滚动条为暗金配色。
+- **自动验证**：`node tools/headless.mjs selftest` **336/336**；UI 冒烟的 `opened/gfxApplied/musicApplied/volumeApplied/escapeClosed/saveVisible/overlayUnchanged/restored` 全部为 `true`。另在一次性 Chromium profile 实际点击「立即保存」，验证存档含有效 `seed` 且成功状态提示出现；偏好恢复后冒烟全项通过。桌面/横屏主菜单量测 `scrollHeight == viewport height`；`git diff --check` 通过。无头截图检查桌面菜单、短横屏菜单、桌面设置及两种手机方向。
+- **范围与后续 AI 接手**：只改 `games/minecraft/index.html`；未改世界生成/战斗/水面植被渲染/存档 schema/外部资源。关键锚点：`#menuActions`、`#settingsPanel`；控制器 `refreshSettingsUI/openSettings/closeSettings/setMusicEnabled/setMusicVolume`；音频 bus `ensureMusicBus/applyMusicAudioPrefs`；`setGfx()` 负责同步四档按钮；自测对应“设置枢纽”断言。继续改这部分前先查 Issue #11 最新认领，保留设置偏好独立于世界存档、音效不受背景音乐滑杆影响；当前分支为 `work/sandsea-pause-settings-20260929`，PR/协作状态见 Issue #11。
