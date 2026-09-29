@@ -114,3 +114,16 @@ Persistent handoff notes for future agents. Add a new entry for each user-visibl
 - Direct device touch and screenshot inspection were not available for every game; see the owning agent's verification notes if further detail is needed.
 
 **Delivery:** Commit `7053c43` (`feat(games): enrich combat feedback and exploration variety`) was pushed to `origin/main`.
+
+## 2026-09-28 — 沙海奇境: weapon durability and altar repair (local round 12)
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only. No new controls, blocks, atlas tiles or external dependencies.
+
+| Change | Player-visible behavior |
+| --- | --- |
+| Weapon wear | Sword / 拉之烈阳剑, 塞特之锤 and bow now lose durability on successful melee hits, heavy smashes and arrow launches. Durability is shown by a green / yellow / red meter in the hotbar; selecting a weapon shows remaining uses. |
+| Condition feedback | Damage scales down gradually with wear, but remains at least 70% at zero durability; gear is never destroyed. A warning appears below 20%. |
+| Repair at the J altar | The existing 神庙武器祭坛 panel now shows each owned weapon's condition and distinct material costs. One repair restores full durability; insufficient materials change neither gear nor inventory. |
+| Save compatibility | `gearWear` is saved and restored. Older saves start with full durability, malformed wear values are clamped, and a new world resets wear. |
+
+**Verification:** `node tools/headless.mjs selftest` **334/334**; screenshot inspected for the altar panel and all three hotbar meters; `git diff --check` passed.
