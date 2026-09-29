@@ -2,6 +2,16 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-09-28 — 沙海奇境: village market doorway clearance
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only. A deterministic village-layout reliability fix; no new controls, blocks, or save fields.
+
+| Change | Player-visible behavior |
+| --- | --- |
+| Market-post clearance | If one of the market canopy posts would occupy a house's villager standing cell just outside its doorway, the whole market is moved by one grid cell along a deterministic candidate direction. Candidate positions are rejected if the stall footprint overlaps a reserved house footprint. All unaffected villages retain their original market position. |
+
+**Verification:** `node tools/headless.mjs selftest` **331/331**. An additional browser-side layout audit checked **1,024** deterministic village centers across both 6- and 8-slot layouts: no market post overlapped a doorway; 40 conflicting layouts were moved exactly one cell; no layout required a larger move. The new self-test also directly checks the market-post/doorway invariant.
+
 ## 2026-09-28 — 沙海奇境 第十一轮（云端）：载具驾驶 HUD + 倒影里的生物与载具
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) only. No gameplay/physics changes; no new keys, blocks or atlas tiles.
