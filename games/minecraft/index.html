@@ -176,7 +176,7 @@
   /* 主菜单首屏：纯 CSS 天光与沙丘，不增加 WebGL draw call 或外部素材 */
   #overlay.main-menu { isolation:isolate; background:
     radial-gradient(ellipse 82% 42% at 55% 76%,rgba(216,126,69,.44),transparent 72%),
-    linear-gradient(180deg,#101831 0%,#292746 43%,#794b47 75%,#d28a4e 100%); }
+    linear-gradient(180deg,#101831 0%,#292746 43%,#794b47 75%,#d28a4e 100%); padding-top:14px; padding-bottom:14px; }
   #overlay.main-menu::before, #overlay.main-menu::after { content:""; position:absolute; inset:0; z-index:0; pointer-events:none; }
   #overlay.main-menu::before { background:
     radial-gradient(circle at 76% 28%,rgba(255,229,170,.94) 0 2.2%,rgba(255,190,120,.40) 3.8%,transparent 15%),
@@ -245,7 +245,7 @@
     #overlay.main-menu #menuLoading { padding:5px 8px 6px; font-size:9px; }
     #overlay.main-menu .menu-load-head { margin-bottom:4px; }
     #overlay.main-menu .menu-load-track { height:4px; }
-    #overlay.main-menu #help { margin-top:6px; padding:4px 8px; font-size:9px; line-height:1.35; }
+    #overlay.main-menu #help { display:none; }
     #overlay.main-menu #help span, #overlay.main-menu #legal { display:none; }
   }
   @media (prefers-reduced-motion:reduce) {
@@ -254,6 +254,70 @@
     #overlay.main-menu #startbtn:not(:disabled) { animation:none !important; }
     #overlay.main-menu .btn, #overlay.main-menu #menu a, #menuLoadFill { transition:none !important; }
   }
+  /* 第十四轮·完整暂停与设置枢纽 */
+  #menuActions { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin-top:2px; }
+  #overlay.main-menu #menuActions .btn, #overlay.pause-menu #menuActions .btn { min-width:104px; width:auto; padding:7px 13px; font-size:13px; }
+  #saveNowBtn { display:none; }
+  #overlay.pause-menu #saveNowBtn { display:inline-flex; }
+  #saveStatus { min-height:14px; color:#d8efc7; font-size:11px; text-align:center; }
+  #settingsPanel { position:fixed; inset:0; z-index:70; display:none; place-items:center; padding:14px;
+    background:rgba(7,5,10,.76); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); }
+  #settingsPanel.on { display:grid; }
+  .sp-card { width:min(720px,96vw); max-height:88vh; overflow:auto; padding:19px 21px; border:1px solid rgba(255,220,150,.35); border-radius:16px;
+    color:#f7ead2; background:radial-gradient(circle at 50% 0%,rgba(65,48,28,.98),rgba(15,12,19,.99));
+    box-shadow:0 20px 60px rgba(0,0,0,.65),inset 0 1px 0 rgba(255,255,255,.1); scrollbar-width:thin; scrollbar-color:#927448 rgba(255,255,255,.06); }
+  .sp-card::-webkit-scrollbar { width:8px; }
+  .sp-card::-webkit-scrollbar-track { background:rgba(255,255,255,.04); border-radius:8px; }
+  .sp-card::-webkit-scrollbar-thumb { background:#927448; border:2px solid rgba(22,17,12,.85); border-radius:8px; }
+  .sp-card :focus-visible { outline:3px solid #ffe7a2; outline-offset:3px; }
+  .sp-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:4px; }
+  .sp-head h2 { margin:0; color:#ffe1a0; font-size:23px; letter-spacing:1px; }
+  .sp-close { width:38px; height:38px; border:1px solid #ffffff35; border-radius:10px; background:#ffffff10; color:#fff0d2; font-size:23px; cursor:pointer; }
+  .sp-intro { margin:0 0 14px; color:#cbbd9f; font-size:12px; line-height:1.6; }
+  .sp-grid { display:grid; grid-template-columns:1fr 1fr; gap:11px; }
+  .sp-section { min-width:0; padding:12px; border:1px solid #ffffff20; border-radius:11px; background:linear-gradient(145deg,#ffffff0d,#ffffff05); }
+  .sp-section h3 { margin:0 0 9px; color:#ffd98e; font-size:15px; }
+  .sp-quality { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; }
+  .sp-quality button, .sp-action { min-height:38px; border:1px solid #ffffff25; border-radius:8px; padding:7px 9px; color:#f6e9d0; background:#ffffff0b; cursor:pointer; font:inherit; text-align:left; }
+  .sp-quality button[aria-pressed="true"] { border-color:#ffd36f; color:#ffe4a6; background:linear-gradient(135deg,#c8893433,#ffd36f22); box-shadow:inset 0 0 0 1px #ffd36f44; }
+  .sp-quality button span { display:block; font-size:13px; font-weight:700; }
+  .sp-quality button small { display:block; margin-top:2px; color:#b9ad98; font-size:10px; line-height:1.35; }
+  #gfxStatus { min-height:17px; margin-top:8px; color:#c8e7b5; font-size:11px; }
+  .sp-audio-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  #musicToggle { min-height:36px; border:1px solid #ffffff2e; border-radius:8px; padding:7px 11px; color:#f6e9d0; background:#ffffff0b; cursor:pointer; font:inherit; }
+  #musicToggle[aria-pressed="true"] { border-color:#a8d78c; color:#d8f2c3; background:#7ab35c24; }
+  .sp-volume { display:flex; align-items:center; gap:9px; margin-top:12px; color:#e6d7bb; font-size:12px; }
+  .sp-volume input { min-width:0; flex:1; accent-color:#f0bd64; }
+  #musicVolumeValue { min-width:38px; color:#ffe0a0; text-align:right; font-variant-numeric:tabular-nums; }
+  .sp-note { margin:8px 0 0; color:#a99d89; font-size:10px; line-height:1.5; }
+  .sp-controls { display:grid; grid-template-columns:1fr 1fr; gap:5px 12px; margin:0; font-size:11px; }
+  .sp-controls div { display:flex; justify-content:space-between; gap:7px; padding:4px 0; border-bottom:1px solid #ffffff12; }
+  .sp-controls dt { color:#bdb19b; }
+  .sp-controls dd { margin:0; color:#ffe5b2; font-weight:700; text-align:right; }
+  #openFullHelpBtn { width:100%; margin-top:9px; text-align:center; }
+  .sp-footer { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:12px; color:#a99d89; font-size:10px; }
+  @media (max-width:620px) {
+    .sp-card { padding:15px 13px; }
+    .sp-grid { grid-template-columns:1fr; gap:8px; }
+    .sp-section { padding:10px; }
+    .sp-head h2 { font-size:20px; }
+    #overlay.main-menu #menuActions .btn, #overlay.pause-menu #menuActions .btn { min-width:94px; padding:6px 9px; font-size:12px; }
+  }
+  @media (max-height:520px) and (orientation:landscape) {
+    #settingsPanel { padding:7px; }
+    .sp-card { max-height:96vh; padding:9px 12px; }
+    .sp-intro, .sp-footer, .sp-section[aria-labelledby="saveHeading"] { display:none; }
+    .sp-grid { gap:6px; }
+    .sp-section { padding:7px; }
+    .sp-section h3 { margin-bottom:5px; }
+    .sp-quality { gap:5px; }
+    .sp-quality button, .sp-action { min-height:31px; padding:4px 7px; }
+    .sp-quality button small { font-size:9px; }
+    .sp-controls { gap:2px 8px; }
+    .sp-controls div { padding:3px 0; }
+    #openFullHelpBtn { margin-top:5px; }
+  }
+  @media (prefers-reduced-motion:reduce) { #settingsPanel *, #menuActions .btn { scroll-behavior:auto !important; transition:none !important; } }
   /* ---------- 移动端触屏 UI ---------- */
   #touchui { position:fixed; inset:0; display:none; z-index:20; pointer-events:none;
              padding-bottom:env(safe-area-inset-bottom); padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right); }
@@ -441,6 +505,48 @@
   </div>
 </div>
 
+<div id="settingsPanel" aria-hidden="true">
+  <section class="sp-card" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" tabindex="-1">
+    <header class="sp-head"><h2 id="settingsTitle">⚙ 游戏设置</h2><button id="settingsClose" class="sp-close" type="button" aria-label="关闭设置">×</button></header>
+    <p class="sp-intro">设置会单独保存在此浏览器，不改变世界存档；低帧率时游戏仍可能自动降低画质。</p>
+    <div class="sp-grid">
+      <section class="sp-section" aria-labelledby="gfxHeading">
+        <h3 id="gfxHeading">画面质量</h3>
+        <div class="sp-quality" role="group" aria-label="选择画质档位">
+          <button type="button" data-gfx="0" aria-pressed="false"><span>低 · 省性能</span><small>关闭阴影与后处理</small></button>
+          <button type="button" data-gfx="1" aria-pressed="false"><span>中 · 均衡</span><small>阴影、泛光与抗锯齿</small></button>
+          <button type="button" data-gfx="2" aria-pressed="false"><span>高 · 推荐</span><small>光束、反射与高阶阴影</small></button>
+          <button type="button" data-gfx="3" aria-pressed="false"><span>极致 · 画面优先</span><small>高精度阴影与远景柔化</small></button>
+        </div>
+        <div id="gfxStatus" aria-live="polite"></div>
+      </section>
+      <section class="sp-section" aria-labelledby="audioHeading">
+        <h3 id="audioHeading">环境音乐</h3>
+        <div class="sp-audio-row"><span>沙海氛围旋律</span><button id="musicToggle" type="button" aria-pressed="true">音乐：开启</button></div>
+        <label class="sp-volume" for="musicVolume">音量<input id="musicVolume" type="range" min="0" max="100" step="1" value="80"><output id="musicVolumeValue" for="musicVolume">80%</output></label>
+        <p class="sp-note">音量仅影响程序生成的背景旋律，快捷键 <b>M</b> 可快速静音；音效不受影响。</p>
+      </section>
+      <section class="sp-section" aria-labelledby="controlsHeading">
+        <h3 id="controlsHeading">常用操作</h3>
+        <dl class="sp-controls">
+          <div><dt>移动 / 跳跃</dt><dd>W A S D / 空格</dd></div>
+          <div><dt>挖掘 / 攻击</dt><dd>鼠标左键</dd></div>
+          <div><dt>放置 / 使用</dt><dd>鼠标右键</dd></div>
+          <div><dt>物品栏 / 合成</dt><dd>1–9 / B</dd></div>
+          <div><dt>切换画质 / 音乐</dt><dd>O / M</dd></div>
+          <div><dt>暂停 / 全部帮助</dt><dd>Esc / H</dd></div>
+        </dl>
+        <button id="openFullHelpBtn" class="sp-action" type="button">打开完整玩法与快捷键说明</button>
+      </section>
+      <section class="sp-section" aria-labelledby="saveHeading">
+        <h3 id="saveHeading">世界与存档</h3>
+        <p class="sp-note" style="margin:0">游戏会自动保存；暂停时也可点「立即保存」。此处的画质和音乐偏好独立于世界存档。</p>
+      </section>
+    </div>
+    <footer class="sp-footer"><span>画质：<b>O</b> 循环切换 · 音乐：<b>M</b> 静音</span><span>按 <b>Esc</b> 或点 × 返回</span></footer>
+  </section>
+</div>
+
 <div id="chronicle" onclick="toggleChronicle()"><div class="cr-card"></div></div>
 <div id="bazaar-panel" onclick="closeBazaarPanel()"><div class="bz-card" onclick="event.stopPropagation()"></div></div>
 <div id="pottery-panel" onclick="closePotteryPanel()"><div class="pt-card" onclick="event.stopPropagation()"></div></div>
@@ -457,6 +563,12 @@
     <button id="startbtn" class="btn" disabled>生成世界中… 0%</button>
     <button id="continuebtn" class="btn sub" style="display:none">继续上次的世界</button>
     <button id="newworldbtn" class="btn sub" style="display:none">开启新世界</button>
+    <div id="menuActions">
+      <button id="settingsBtn" class="btn sub" type="button">⚙ 设置</button>
+      <button id="controlsBtn" class="btn sub" type="button">⌨ 操作说明</button>
+      <button id="saveNowBtn" class="btn sub" type="button">💾 立即保存</button>
+    </div>
+    <div id="saveStatus" role="status" aria-live="polite"></div>
     <a href="../../index.html" style="display:inline-block;margin-top:12px;color:#ffe08a;text-decoration:none;font-size:14px">← 返回游戏厅</a>
     <div id="menuLoading" aria-label="世界生成进度">
       <div class="menu-load-head"><span id="menuLoadLabel">正在塑造沙海地形</span><b id="menuLoadPct">0%</b></div>
@@ -6351,6 +6463,10 @@ const hud=document.getElementById("hud");
 const startbtn=document.getElementById("startbtn");
 const continuebtn=document.getElementById("continuebtn");
 const newworldbtn=document.getElementById("newworldbtn");
+const settingsPanel=document.getElementById("settingsPanel");
+const settingsBtn=document.getElementById("settingsBtn");
+const saveNowBtn=document.getElementById("saveNowBtn");
+let settingsReturnFocus=null;
 /* 标题屏上的"品牌/说明"元素: 暂停和死亡时收起, 只在首屏显示 */
 function setTitleChrome(show){
   const d=show?"":"none";
@@ -6360,7 +6476,7 @@ function setTitleChrome(show){
     const el=document.getElementById(id); if(el) el.style.display=d;
   }
 }
-function enterGame(){ overlay.style.display="none"; hud.style.display="block"; beginOnboarding(); }
+function enterGame(){ closeSettings(false); overlay.classList.remove("pause-menu"); document.getElementById("saveStatus").textContent=""; overlay.style.display="none"; hud.style.display="block"; beginOnboarding(); }
 /* 完整帮助浮层: H 键或点击标题切换; 打开时若在指针锁定中先释放, 方便阅读 */
 function chronicleHTML(){
   const rt=facTier(faction.rome), et=facTier(faction.egypt);
@@ -6408,6 +6524,58 @@ function toggleFullHelp(){
   if(show) tutEvent("help");
   if(show && document.pointerLockElement) document.exitPointerLock();
 }
+function refreshSettingsUI(){
+  if(!settingsPanel) return;
+  const level=Math.max(0,Math.min(GFX_PRESETS.length-1,gfxLevel|0));
+  settingsPanel.querySelectorAll("[data-gfx]").forEach(b=>b.setAttribute("aria-pressed",String(+b.dataset.gfx===level)));
+  const gs=document.getElementById("gfxStatus");
+  if(gs) gs.textContent="当前："+GFX_NAMES[level]+(level>0&&!shadow.ok?" · 此设备不支持阴影":"")+" · 按 O 可循环切换";
+  const mt=document.getElementById("musicToggle");
+  if(mt){ mt.setAttribute("aria-pressed",String(!!musicOn)); mt.textContent="音乐："+(musicOn?"开启":"关闭"); }
+  const mv=document.getElementById("musicVolume"), out=document.getElementById("musicVolumeValue");
+  if(mv) mv.value=String(Math.round(musicVolume*100));
+  if(out) out.textContent=Math.round(musicVolume*100)+"%";
+}
+function openSettings(){
+  if(!settingsPanel || settingsPanel.classList.contains("on")) return false;
+  settingsReturnFocus=document.activeElement;
+  refreshSettingsUI();
+  settingsPanel.classList.add("on"); settingsPanel.setAttribute("aria-hidden","false");
+  if(document.pointerLockElement) document.exitPointerLock();
+  const close=document.getElementById("settingsClose"); if(close) close.focus();
+  return true;
+}
+function closeSettings(restoreFocus=true){
+  if(!settingsPanel || !settingsPanel.classList.contains("on")) return false;
+  settingsPanel.classList.remove("on"); settingsPanel.setAttribute("aria-hidden","true");
+  const target=settingsReturnFocus; settingsReturnFocus=null;
+  if(restoreFocus && target && target.isConnected && target.focus) target.focus();
+  return true;
+}
+function showFullHelpFromMenu(){
+  if(settingsPanel.classList.contains("on")) closeSettings(false);
+  const help=document.getElementById("fullhelp");
+  if(help.style.display!=="flex") toggleFullHelp();
+}
+function saveAudioPrefs(){
+  try{ localStorage.setItem("sandsea_music_v1",musicOn?"1":"0"); localStorage.setItem("sandsea_music_volume_v1",String(musicVolume)); }catch(e){}
+}
+function setMusicEnabled(on){
+  musicOn=!!on; saveAudioPrefs(); applyMusicAudioPrefs(); refreshSettingsUI(); return musicOn;
+}
+function setMusicVolume(value){
+  const n=Number(value); musicVolume=Number.isFinite(n)?Math.max(0,Math.min(1,n/100)):musicVolume;
+  saveAudioPrefs(); applyMusicAudioPrefs(); refreshSettingsUI(); return musicVolume;
+}
+settingsPanel.addEventListener("click",e=>{ if(e.target===settingsPanel) closeSettings(); });
+settingsPanel.addEventListener("keydown",e=>{
+  if(e.key!=="Tab") return;
+  const nodes=[...settingsPanel.querySelectorAll("button:not(:disabled),input:not(:disabled)")];
+  if(!nodes.length) return;
+  const first=nodes[0], last=nodes[nodes.length-1];
+  if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); }
+  else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); }
+});
 /* ---- 🧭 新手引导(第八轮·本地) ----
    8 步, 每步由真实操作推进(不是计时翻页): 环顾 → 走 8 格 → 跳 → 挖 3 块 → 放 1 块 → 切到铁剑 → 开合成台 → 看完整帮助。
    屏幕上方常驻卡片(步骤/按键/进度条), 需要切物品栏时对应格子闪烁; N 或点 ✕ 随时跳过。完成 +20 经验。
@@ -6489,6 +6657,18 @@ document.getElementById("fullhelp").addEventListener("click",e=>{
   // 点击半透明背景或标题栏关闭; 点正文不关, 方便阅读
   if(e.target.id==="fullhelp" || e.target.classList.contains("fh-title")) toggleFullHelp();
 });
+settingsBtn.setAttribute("aria-haspopup","dialog"); settingsBtn.setAttribute("aria-controls","settingsPanel");
+settingsBtn.addEventListener("click",openSettings);
+document.getElementById("settingsClose").addEventListener("click",()=>closeSettings());
+document.getElementById("controlsBtn").addEventListener("click",showFullHelpFromMenu);
+document.getElementById("openFullHelpBtn").addEventListener("click",showFullHelpFromMenu);
+document.getElementById("settingsPanel").querySelectorAll("[data-gfx]").forEach(b=>b.addEventListener("click",()=>setGfx(+b.dataset.gfx)));
+document.getElementById("musicToggle").addEventListener("click",()=>setMusicEnabled(!musicOn));
+document.getElementById("musicVolume").addEventListener("input",e=>setMusicVolume(e.target.value));
+saveNowBtn.addEventListener("click",()=>{
+  const saved=saveGame();
+  document.getElementById("saveStatus").textContent=saved?"✓ 世界已保存":"⚠ 当前无法保存";
+});
 function pauseGame(){
   softLock=false;
   for(const k in keys) keys[k]=false;
@@ -6497,6 +6677,7 @@ function pauseGame(){
   startbtn.textContent="继续游戏";
   startbtn.disabled=false;
   setTitleChrome(false);
+  overlay.classList.add("pause-menu");
   continuebtn.style.display="none"; newworldbtn.style.display="none";
   overlay.style.display="flex"; hud.style.display="none";
 }
@@ -6507,6 +6688,15 @@ function enterSoft(){ // 指针锁定不可用时的降级模式(用鼠标指针
   showName("拖动模式：移动鼠标瞄准，左键点击攻击/破坏，按住拖动转视角，右键放置");
 }
 document.addEventListener("keydown",e=>{
+  if(settingsPanel.classList.contains("on")){
+    if(e.code==="Escape"){ e.preventDefault(); closeSettings(); }
+    return;
+  }
+  const fullHelpEl=document.getElementById("fullhelp");
+  if(fullHelpEl.style.display==="flex"){
+    if(e.code==="Escape" || e.code==="KeyH"){ e.preventDefault(); toggleFullHelp(); }
+    return;
+  }
   if(e.code==="KeyO" && !e.repeat){ e.preventDefault(); const g=setGfx(gfxLevel+1);
     showName("🎨 画质: "+GFX_NAMES[g]+(g>0&&!shadow.ok?"（设备不支持阴影）":"")+"  · 按 O 切换"); return; }
   if(e.code==="F1"){ e.preventDefault(); if(!e.repeat) setPhotoMode(!photoMode); return; }   // 拍照模式: 隐藏 HUD
@@ -6545,7 +6735,7 @@ document.addEventListener("keydown",e=>{
   if(e.code==="Escape" && sxEl && sxEl.classList.contains("on")){ closeSphinxPanel(); return; }
   if(e.code==="Escape" && softLock){ pauseGame(); return; }
   if(!playing()) return;
-  if(e.code==="KeyM" && !e.repeat){ musicOn=!musicOn; showName("音乐: "+(musicOn?"开":"关")); }
+  if(e.code==="KeyM" && !e.repeat){ const on=setMusicEnabled(!musicOn); showName("音乐: "+(on?"开":"关")); }
   if(["Space","KeyW","KeyA","KeyS","KeyD","ShiftLeft","ShiftRight"].includes(e.code)) e.preventDefault();
   if(!e.repeat){
     const now=performance.now();
@@ -6892,7 +7082,7 @@ function updateParticles(dt){
 
 /* ---------- 音效 ---------- */
 let actx2=null;
-function initAudio(){ if(!actx2){ try{ actx2=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } }
+function initAudio(){ if(!actx2){ try{ actx2=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } if(actx2) applyMusicAudioPrefs(); }
 function sfxBreak(){
   if(!actx2) return;
   const t=actx2.currentTime, len=0.09;
@@ -7077,10 +7267,27 @@ function sfxRocket(){
   src.connect(f).connect(g).connect(actx2.destination); src.start(t);
 }
 /* ---------- 环境音乐 ---------- */
-let musicOn=true, musicT=5;
+let musicOn=true, musicT=5, musicVolume=0.8, musicBus=null;
+try{
+  const mo=localStorage.getItem("sandsea_music_v1"); if(mo==="0") musicOn=false; else if(mo==="1") musicOn=true;
+  const mv=localStorage.getItem("sandsea_music_volume_v1");
+  if(mv!==null && Number.isFinite(Number(mv))) musicVolume=Math.max(0,Math.min(1,Number(mv)));
+}catch(e){}
 const MUSIC_NOTES=[261.63,293.66,329.63,392,440,523.25,587.33];
+function ensureMusicBus(){
+  if(!actx2) return null;
+  if(!musicBus){ musicBus=actx2.createGain(); musicBus.gain.value=musicOn?musicVolume:0; musicBus.connect(actx2.destination); }
+  return musicBus;
+}
+function applyMusicAudioPrefs(){
+  const bus=ensureMusicBus(); if(!bus) return false;
+  const t=actx2.currentTime, value=musicOn?musicVolume:0;
+  bus.gain.cancelScheduledValues(t); bus.gain.setTargetAtTime(value,t,0.06);
+  return true;
+}
 function musicTick(dt){
   if(!musicOn||!actx2) return;
+  const bus=ensureMusicBus(); if(!bus) return;
   musicT-=dt;
   if(musicT>0) return;
   musicT=1.7+Math.random()*2.8;
@@ -7092,7 +7299,7 @@ function musicTick(dt){
     g.gain.setValueAtTime(0,t+dl);
     g.gain.linearRampToValueAtTime(vol,t+dl+0.4);
     g.gain.exponentialRampToValueAtTime(0.0008,t+dl+2.4);
-    o.connect(g).connect(actx2.destination); o.start(t+dl); o.stop(t+dl+2.5);
+    o.connect(g).connect(bus); o.start(t+dl); o.stop(t+dl+2.5);
   };
   mk(n,0,0.05);
   if(Math.random()<0.45) mk(n*1.5,0.12,0.028);
@@ -10573,6 +10780,7 @@ function setGfx(level){
   try{ localStorage.setItem("sandsea_gfx", String(gfxLevel)); }catch(e){}
   setupShadow();
   post.dirty=true;                          // 后处理目标下一帧按新档位重建
+  refreshSettingsUI();
   return gfxLevel;
 }
 /* 太阳/月亮: 方位角随一天转一圈, 太阳高度跟随 sunH(与天色/亮度一致), 最高约 62°——斜射才有立体的长影。
@@ -12871,6 +13079,8 @@ window.__game = {
   get dayCount(){ return dayCount; },
   get blockDiffSize(){ return blockDiff.size; },
   get renderDist(){ return RENDER; },
+  get settings(){ return { gfx:gfxLevel, gfxName:GFX_NAMES[gfxLevel], music:musicOn, musicVolume:+musicVolume.toFixed(2), dialogOpen:settingsPanel.classList.contains("on") }; },
+  openSettings, closeSettings:()=>closeSettings(), setGfx, setMusicEnabled, setMusicVolume,
   get biome(){ return biomeAt(Math.floor(player.x), Math.floor(player.z)); },        // 当前所在群系 id
   get biomeName(){ return BIOME_NAME[biomeAt(Math.floor(player.x), Math.floor(player.z))]; },
   get codex(){ return { seen:[...bioSeen], total:CODEX_TOTAL, names:[...bioSeen].map(b=>BIOME_NAME[b]) }; },
@@ -13002,6 +13212,29 @@ function selftest(){
       const pass=!!menu && menu.classList.contains("main-menu") && !!track && track.getAttribute("role")==="progressbar"
         && track.getAttribute("aria-valuemin")==="0" && track.getAttribute("aria-valuemax")==="100" && !!fill && dunes && dunes.content!=="none";
       ok("主菜单:动态沙丘背景与可访问生成进度存在",pass,"role="+(track&&track.getAttribute("role"))+" range="+(track&&track.getAttribute("aria-valuemin"))+".."+(track&&track.getAttribute("aria-valuemax")));
+    }
+
+    // 暂停/设置枢纽: 四档画质、键盘可关闭弹窗、音乐偏好隔离存储, 且暂停时显示手动保存
+    {
+      const panel=settingsPanel, options=[...panel.querySelectorAll("[data-gfx]")], oldOn=musicOn, oldVol=musicVolume;
+      const overlayDisplay=overlay.style.display, hudDisplay=hud.style.display;
+      const pauseWas=overlay.classList.contains("pause-menu");
+      openSettings();
+      const selected=options.filter(b=>b.getAttribute("aria-pressed")==="true");
+      const shell=panel.classList.contains("on") && panel.getAttribute("aria-hidden")==="false"
+        && panel.querySelector('[role="dialog"][aria-modal="true"]') && options.length===4
+        && selected.length===1 && +selected[0].dataset.gfx===gfxLevel;
+      document.dispatchEvent(new KeyboardEvent("keydown",{code:"Escape",key:"Escape",bubbles:true,cancelable:true}));
+      const escClosed=!panel.classList.contains("on") && panel.getAttribute("aria-hidden")==="true"
+        && overlay.style.display===overlayDisplay && hud.style.display===hudDisplay;
+      setMusicEnabled(!oldOn); setMusicVolume(37);
+      let prefsOK=false; try{ prefsOK=localStorage.getItem("sandsea_music_v1")===(!oldOn?"1":"0") && Math.abs(Number(localStorage.getItem("sandsea_music_volume_v1"))-0.37)<0.001; }catch(e){}
+      setMusicEnabled(oldOn); setMusicVolume(oldVol*100);
+      if(!pauseWas) overlay.classList.add("pause-menu");
+      const manualSaveShown=getComputedStyle(saveNowBtn).display!=="none";
+      if(!pauseWas) overlay.classList.remove("pause-menu");
+      ok("设置枢纽:四档画质、Esc关闭、音乐偏好持久化与暂停保存入口",shell && escClosed && prefsOK && manualSaveShown,
+        "qualityButtons="+options.length+" selected="+(selected[0]&&selected[0].dataset.gfx)+" esc="+escClosed+" prefs="+prefsOK+" save="+manualSaveShown);
     }
 
     // 1. 世界生成

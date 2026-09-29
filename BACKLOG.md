@@ -476,3 +476,12 @@
 - **兼容**：新增 `prefers-reduced-motion: reduce` 规则；桌面与窄屏 CSS 适配；不碰战斗、世界生成算法、渲染/水面着色器、村落、存档、快捷键或触屏游戏控件。
 - **验证**：`node tools/headless.mjs selftest` **335/335**；无头截图检查 1280×720 就绪态及 844×390 横屏就绪态；浏览器冒烟确认真实进度/ARIA 达 100%、桌面 overlay 不溢出、暂停时首屏类/进度 UI 隐藏；`git diff --check` 通过。
 - **后续 AI 接手**：主菜单样式在 `games/minecraft/index.html` 标题 CSS 段，节点在 `#overlay`，状态/进度更新分别在 `setTitleChrome()` 与 `initialLoad()`。不要把菜单 CSS 动画搬进 `frame()`；若继续做主菜单转场，维持 `main-menu` 状态隔离并继续覆盖 `prefers-reduced-motion` 与短横屏。
+
+## 本地进度（2026-09-28：第十四轮·暂停与设置完整枢纽）
+
+- **暂停枢纽**：主菜单与暂停遮罩提供「设置」和「操作说明」；暂停态额外显示「立即保存」，调用既有 `saveGame()` 并在菜单内回报结果。进入游戏时清除暂停态和旧保存提示；未改动继续/新世界/存档数据流程。
+- **画质面板**：提供低/中/高/极致四档及简短说明；选中态同步 `gfxLevel`，复用既有 `setGfx()`、`sandsea_gfx`、`O` 快捷键与自动低帧降级，不另造画质状态。
+- **音乐偏好**：设置面板提供背景音乐开关及 0–100 音量滑杆；分别持久化到 `sandsea_music_v1`、`sandsea_music_volume_v1`。背景旋律经过独立 WebAudio gain bus；现有 `M` 快捷键与面板同步，游戏音效音量保持不变。新增键为偏好设置，不写入 `SAVE_KEY`。
+- **可用性/视觉**：设置弹窗使用 `role=dialog`、`aria-modal`、Esc/关闭按钮/背景关闭、焦点返回与 Tab 焦点圈；操作面板列出常用键并可打开既有完整帮助。桌面和短横屏首屏无滚动；设置卡片在 1280×720、844×390、390×844 检查，短屏可滚动且滚动条为暗金配色。
+- **自动验证**：`node tools/headless.mjs selftest` **336/336**；UI 冒烟的 `opened/gfxApplied/musicApplied/volumeApplied/escapeClosed/saveVisible/overlayUnchanged/restored` 全部为 `true`。另在一次性 Chromium profile 实际点击「立即保存」，验证存档含有效 `seed` 且成功状态提示出现；偏好恢复后冒烟全项通过。桌面/横屏主菜单量测 `scrollHeight == viewport height`；`git diff --check` 通过。无头截图检查桌面菜单、短横屏菜单、桌面设置及两种手机方向。
+- **范围与后续 AI 接手**：只改 `games/minecraft/index.html`；未改世界生成/战斗/水面植被渲染/存档 schema/外部资源。关键锚点：`#menuActions`、`#settingsPanel`；控制器 `refreshSettingsUI/openSettings/closeSettings/setMusicEnabled/setMusicVolume`；音频 bus `ensureMusicBus/applyMusicAudioPrefs`；`setGfx()` 负责同步四档按钮；自测对应“设置枢纽”断言。继续改这部分前先查 Issue #11 最新认领，保留设置偏好独立于世界存档、音效不受背景音乐滑杆影响；当前分支为 `work/sandsea-pause-settings-20260929`，PR/协作状态见 Issue #11。

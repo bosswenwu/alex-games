@@ -139,3 +139,16 @@ Persistent handoff notes for future agents. Add a new entry for each user-visibl
 | Responsive/accessibility polish | The menu adapts to compact landscape viewports, keeps the primary action and key controls visible, provides keyboard focus outlines, and disables ambient/entrance motion for `prefers-reduced-motion`. Pause/death overlays retain their prior styling and behavior. |
 
 **Verification:** `node tools/headless.mjs selftest` **335/335**; inspected headless screenshots at 1280×720 and 844×390 landscape; browser smoke verified ready progress/ARIA at 100%, no desktop overlay overflow, and pause-state class isolation; `git diff --check` passed.
+
+## 2026-09-28 — 沙海奇境: pause hub and persistent settings (local round 14)
+
+**Scope:** `games/minecraft/index.html` only. No world-save schema changes, new assets, block IDs, gameplay hotkeys, or external dependencies.
+
+| Change | Player-visible behavior |
+| --- | --- |
+| Pause hub | The title and pause menus expose Settings and Controls; pausing also exposes an immediate-save button using the existing save path. Resume/new-world behavior is unchanged. |
+| Graphics | Four visual presets (low/medium/high/ultra) have a selected-state panel and reuse existing `setGfx`, `sandsea_gfx`, `O` shortcut, and performance auto-downgrade. |
+| Background music | Music on/off and a 0–100 volume slider persist independently in `sandsea_music_v1` and `sandsea_music_volume_v1`. Music uses its own WebAudio gain bus; sound effects are unchanged, and `M` stays synchronized. |
+| Accessibility/responsive UI | Dialog semantics, focus return/trap, close button/backdrop/Esc, concise controls list with a link to full help, and compact landscape/portrait layouts. Short-landscape title menu remains within the viewport. |
+
+**Verification:** `node tools/headless.mjs selftest` **336/336**; browser UI smoke confirmed the settings/persistence/Esc checks, and a real click in a disposable Chromium profile wrote a valid save (`seed` present) and showed success; inspected screenshots at 1280×720, 844×390 and 390×844; title-menu scroll metrics equal viewport dimensions at 1280×720 and 844×390; `git diff --check` passed.
