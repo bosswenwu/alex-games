@@ -217,3 +217,16 @@ Persistent handoff notes for future agents. Add a new entry for each user-visibl
 | Debug/test contract | `window.__game.sandStep` reports cooldown/window/ready/distance and `useSandStep(x,z)` triggers a testable step. Four self-tests cover movement, the precise damage boundary, cooldown/window expiry and absence of new save fields. |
 
 **Verification:** `node tools/headless.mjs selftest` **342/342** (the four new Sandstep assertions plus all regressions); headless `KeyC` smoke moved 3.2 blocks and reported `cd=4.5`, `evade=0.35`, with both help surfaces present; `git diff --check` passed. Real-time dodge timing remains a desktop point-test item.
+
+
+## 2026-09-29 — 沙海奇境：Sandstep touch control and HUD feedback (round 16.2)
+
+**Scope:** `games/minecraft/index.html` only. This finishes the player-facing input/feedback slice; it does not change the Sandstep movement, landing collision checks, cooldown, enemy damage boundary, rendering, or world-save schema.
+
+| Change | Player-visible behavior | Files |
+| --- | --- | --- |
+| Touch control | Adds a 60 px Sandstep button to the existing touch controls, positioned beside the task card and above the tutorial card on landscape screens. It calls the same `sandStep()` path as **C**. | `games/minecraft/index.html` |
+| Status feedback | Desktop HUD shows ready/evading/cooldown/success. The touch button mirrors the state with a short success highlight. Successful activation and cooldown no longer create bottom toasts over hearts/hotbar; blocked-use reasons retain their existing feedback. | `games/minecraft/index.html` |
+| Runtime-only state | The 1 s success highlight is cleared on pause/death/respawn/new world and is not saved. `window.__game.sandStep` exposes status fields for smoke tests. | `games/minecraft/index.html` |
+
+**Verification:** `node tools/headless.mjs selftest` **356/356** both on the default world and `?seed=424242`; seeded Chromium touch-event smoke at 844×390 triggered the visible control, moved 3.33 blocks, and confirmed the button stays inside the viewport without overlapping the tutorial card. A second touch during cooldown produced no movement and no cooldown toast. Desktop smoke at 1280×720 showed the HUD status with touch controls off; both screenshots inspected; `git diff --check` passed. Simulated browser touch is not a substitute for real-device feel testing.
