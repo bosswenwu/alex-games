@@ -2931,6 +2931,27 @@ const FS_PREC=`
 // 方块光颜色(线性空间, 暖橙烛光)与强度: 夜里强、黄昏中等、正午只剩一点(白天日光本身就亮)
 const BL_COL_GLSL="vec3(1.0, 0.72, 0.40)";
 const blockLightK=sunH=>2.4-2.05*smoothstep(-0.05,0.35,sunH);
+/* 手持光源(第十三轮·云端): 快捷栏选中且背包里有的发光方块 → 玩家手边一盏动态点光(颜色/强度按方块);
+   灯笼/岩浆/熔炉带火苗般的闪烁。强度跟方块光一样随时间段变(正午几乎看不出)。拍照模式/死亡/「低」画质不亮 */
+const HELD_LIGHT={[LANTERN]:[1.0,0.72,0.40,1.0,1], [LAVA]:[1.0,0.55,0.25,0.9,1], [MAGMA]:[1.0,0.55,0.25,0.7,1],
+  [FURNACE_LIT]:[1.0,0.66,0.35,0.8,1], [CRYSTAL]:[0.55,0.85,1.0,0.7,0], [SALTCRYSTAL]:[0.85,0.9,1.0,0.6,0],
+  [AMETHYST]:[0.8,0.55,1.0,0.6,0], [NEON]:[1.0,0.4,0.9,0.7,0], [GLOWVEIN]:[0.5,1.0,0.8,0.6,0], [KAHEART]:[1.0,0.85,0.45,0.8,0],
+  [WINDOW]:[1.0,0.8,0.5,0.5,0]};
+const _held={v:new Float32Array(4), c:new Float32Array(3), id:-1};
+function heldLightState(blK, now){
+  const id=HOTBAR_ITEMS[selSlot];
+  const d=(typeof id==="number" && !dead && gfxLevel>0) ? HELD_LIGHT[id] : null;
+  const has=d && bagCount(id)>0;
+  _held.id=has?id:-1;
+  if(!has){ _held.v[3]=0; return _held; }
+  const t=(now||0)/1000;
+  const flick=d[4] ? 0.9+0.06*Math.sin(t*11.3)+0.04*Math.sin(t*23.7+1.3) : 1;
+  const yaw=player.yaw||0;
+  _held.v[0]=player.x+Math.sin(yaw)*0.35+Math.cos(yaw)*0.3; _held.v[1]=player.y+EYE-0.45; _held.v[2]=player.z-Math.cos(yaw)*0.35+Math.sin(yaw)*0.3;   // 眼前偏右手
+  _held.v[3]=d[3]*blK*0.6*flick;
+  _held.c[0]=d[0]; _held.c[1]=d[1]; _held.c[2]=d[2];
+  return _held;
+}
 const _mainSrc = [`
   attribute vec3 aPos; attribute vec2 aUV; attribute float aL; attribute float aF;
   uniform mat4 uPV, uLightPV; uniform vec3 uOffset; uniform vec2 uUVOff; uniform vec3 uEye;
@@ -2970,6 +2991,8 @@ const _mainSrc = [`
   uniform sampler2D uTex;
   uniform vec3 uTint, uSunDir, uSunCol, uAmbCol;
   uniform float uDay, uAlpha, uBlk, uSandFx, uClipY, uWet;
+  uniform vec4 uHeld;                                // 手持光源(第十三轮·云端): xyz=减去 uWOrig 的世界坐标(同 vRel+uEyeL), w=强度(0=没拿)
+  uniform vec3 uHeldC;
   uniform int uMode;
   ${SKY_GLSL}
   ${FOG_GLSL}
@@ -3067,7 +3090,23 @@ const _mainSrc = [`
         }
       }
       // 方块光: 灯笼/岩浆/水晶周围的暖色光池(夜里明显, 正午几乎看不出); 平滑衰减, 墙角随 AO 略暗
-      if(vBL > 0.0) light += ${BL_COL_GLSL} * (uBlk * pow(vBL, 3.2) * mix(1.0, ao, 0.5));
+      // 第十三轮·云端: 光池随时间和位置轻轻摇曳(平滑噪声缓缓流动, 约 ±8%), 灯笼/岩浆的光像火苗一样有呼吸
+      vec3 wq = vRel + uEyeL;
+      if(vBL > 0.0){
+        float flk = 1.0 + 0.16*(gNoise(wq.xz*0.3 + wq.y*0.21 + uTime*vec2(2.7, -1.9)) - 0.5);
+        light += ${BL_COL_GLSL} * (uBlk * pow(vBL, 3.2) * mix(1.0, ao, 0.5) * flk);
+      }
+      // 手持光源(第十三轮·云端, 光影包式 dynamic lights): 手里拿着灯笼/水晶等发光方块时, 身边约 11 格被照亮;
+      // 平方衰减 × 近似反平方 + 朝向光源的面更亮, 不投影(洞穴墙后也会略微透光, 与原版光影包一致)
+      if(uHeld.w > 0.0){
+        vec3 hv = uHeld.xyz - wq;
+        float hd = length(hv);
+        float hf = clamp(1.0 - hd/11.0, 0.0, 1.0);
+        if(hf > 0.0){
+          float hn = vKind < 0.5 ? 0.35 + 0.65*max(dot(vN, hv/max(hd, 0.001)), 0.0) : 0.8;
+          light += uHeldC * (uHeld.w * hf*hf/(1.0 + 0.15*hd*hd) * hn * mix(1.0, ao, 0.4));   // 近处亮、四五格外只剩余晖
+        }
+      }
       // 浅水底的焦散光纹(只在露天水域: 天光可见度门控, 洞穴里不出现)
       vec3 wp = vRel + uEyeL;
       if(vKind < 1.5 && vSky > 0.8 && wp.y < ${GLSL_F(WATER_Y)}+0.9){
@@ -3241,7 +3280,7 @@ const blobVbo=gl.createBuffer();
 const U = {}; // uniform 位置
 for(const n of ["uPV","uOffset","uUVOff","uEye","uFogNear","uFogFar","uTex","uFogCol","uDay","uAlpha","uMode","uTint",
                  "uLightPV","uShadowBias","uShadow","uSunDir","uSunCol","uAmbCol","uShadowOn","uShadowTexel","uPCF",
-                 "uWTime","uWind","uWOrig","uCloudShadow","uBlk","uSandFx","uClipY","uWet"])
+                 "uWTime","uWind","uWOrig","uCloudShadow","uBlk","uSandFx","uClipY","uWet","uHeld","uHeldC"])
   U[n]=gl.getUniformLocation(mainProg,n);
 // 水面程序 uniform
 const UW = {};
@@ -10120,6 +10159,7 @@ const skyProg = makeShader(`
       col = mix(col, mc, disc*uMoonVis*hor);
     }
     col += uMoonCol * 0.10 * pow(max(cosM, 0.0), 300.0) * uMoonVis * hor;
+    col += uMoonCol * vec3(0.80, 0.88, 1.0) * 0.07 * pow(max(cosM, 0.0), 22.0) * uMoonVis * hor;   // 第十三轮·云端: 月光辉光(宽而柔的冷光)
     // 太阳: 抗锯齿圆盘 + 临边昏暗 + 贴身日冕(盘外的大日晕由 skyCol 负责)
     float cosS = dot(ray, uSkySun);
     if(cosS > 0.99){
@@ -10132,6 +10172,15 @@ const skyProg = makeShader(`
     // 云盖在日月星之上(云会遮住太阳)
     vec4 cl = clouds(ray);
     col = mix(col, cl.rgb, cl.a);
+    // 22° 月晕(第十三轮·云端): 薄云(云量中等)时月亮周围一圈淡淡的冰晶光环, 内缘偏暖、外缘偏冷; 晴天/阴天不出现
+    if(uMoonVis > 0.01){
+      float hk = smoothstep(0.2, 0.5, uCover) * (1.0 - smoothstep(0.8, 0.98, uCover));
+      if(hk > 0.0){
+        float da = acos(clamp(cosM, -1.0, 1.0)) - 0.384;
+        float ring = exp(-da*da/0.00018);
+        col += mix(vec3(1.0, 0.86, 0.72), vec3(0.72, 0.84, 1.0), smoothstep(-0.012, 0.012, da)) * (0.06*ring*hk*uMoonVis*hor);
+      }
+    }
     gl_FragColor = vec4(col, 1.0);
   }`);
 const USK={}; for(const n of ["uFwd","uRight","uUp","uMoonDir","uSunDisc","uMoonCol","uTanH","uAspect","uPix","uNight","uSunVis","uSunR","uMoonVis"]) USK[n]=gl.getUniformLocation(skyProg,n);
@@ -11384,6 +11433,7 @@ function render(now){
   gl.uniform1f(U.uBlk,blK);
   gl.uniform1f(U.uSandFx, gfxLevel>0 ? 1 : 0);     // 沙面闪光: 「低」档关
   gl.uniform1f(U.uWet, gfxLevel>0 ? wetK : 0);     // 第十二轮·云端: 雨天湿地面(「低」档关)
+  { const H=heldLightState(blK, now), o=_sky.worig; gl.uniform4f(U.uHeld,H.v[0]-o[0],H.v[1]-o[1],H.v[2]-o[2],H.v[3]); gl.uniform3fv(U.uHeldC,H.c); }   // 第十三轮·云端: 手持光源(着色器里的坐标以 worig 为原点)
   gl.uniform1f(U.uShadowOn,shadow.ok?1:0);
   gl.uniform1f(U.uPCF,shadow.pcf);
   gl.uniform1f(U.uShadowTexel,shadow.ok?1/shadow.size:0);
@@ -11778,6 +11828,7 @@ function tick(now){
     if(t){ t.textContent="渲染异常: "+(err&&err.message||err); t.style.display="block"; }
   }
 }
+let _stSkipRender=false;   // 自测只推进逻辑时跳过渲染(软件渲染下每帧要数秒); 渲染另由「渲染一帧无异常」覆盖
 function frame(now){
   let dt=clamp((now-lastT)/1000,0,0.05); lastT=now;
   fpsC++; if(now-fpsT>500){ fps=Math.round(fpsC*1000/(now-fpsT)); fpsC=0; fpsT=now; autoScalePerf(); }
@@ -12021,7 +12072,7 @@ XYZ: ${player.x.toFixed(1)} / ${player.y.toFixed(1)} / ${player.z.toFixed(1)}
 模式: ${player.flying?"飞行":"行走"}${player.sprint?" 疾跑":""}`;
     }
   }
-  render(now);
+  if(!_stSkipRender) render(now);
 }
 
 /* =========================================================
@@ -13723,7 +13774,8 @@ function selftest(){
         if(spawnMob(b,6,14)) bossSpawned++;
       }
       for(let i=0;i<60;i++) updateMobs(0.033);
-      for(const m of mobs) drawEntity(m);
+      const vp=gl.getParameter(gl.VIEWPORT); gl.viewport(0,0,1,1);   // 只验证绘制路径不抛错: 缩到 1 像素, 免得软件渲染下全屏填充数分钟
+      try{ for(const m of mobs) drawEntity(m); } finally { gl.viewport(vp[0],vp[1],vp[2],vp[3]); }
     }catch(e){ bossErr=e.message; }
     ok("Boss 生成与 AI 流程无异常", !bossErr, bossErr||("已生成 "+bossSpawned+" 个 Boss"));
     mobs.length=0;
@@ -13753,6 +13805,7 @@ function selftest(){
       // 新世界出生在村口, 正前方可能恰被路灯/墙/村民挡住 → 四个朝向依次试, 有一个能走开即可(每次试前回到原位)
       const start={x:player.x,y:player.y,z:player.z,yaw:player.yaw};
       const wasSoft=softLock; softLock=true;
+      _stSkipRender=true;   // 只测摇杆驱动位移, 不必画 30 帧
       for(let k=0;k<4 && moved<=1;k++){
         player.x=start.x; player.y=start.y; player.z=start.z; player.vx=player.vz=0; player.yaw=start.yaw+k*Math.PI/2;
         touchState.active=true; touchState.moveX=0; touchState.moveY=-1;   // 摇杆推到最前
@@ -13763,6 +13816,7 @@ function selftest(){
       }
       softLock=wasSoft; player.yaw=start.yaw;
     }catch(e){ touchErr=e.message; }
+    _stSkipRender=false;
     ok("模拟触屏摇杆能驱动玩家移动", !touchErr && moved>1, touchErr||("位移="+moved.toFixed(2)+"m"));
 
     // 8. 关卡系统: 推进 → 完成 → 索引前进
@@ -15002,6 +15056,34 @@ function selftest(){
         ok("砂岩熔炉: 注册/配方/自发光; 燃料耗尽即停、金 2:1、成品格不同类不吞燃料; 生鱼烤熟回 12 血; 拆炉退回; 有火变亮熄火变回; 存档含 furnaces",
            reg && s1 && s2 && s3 && s4 && fishOk && spillOk && lit && unlit && saved && brokeOk,
            "reg="+reg+" s1="+s1+" s2="+s2+" s3="+s3+" s4="+s4+" fish="+fishOk+" spill="+spillOk+" lit="+lit+" unlit="+unlit+" saved="+saved+" broke="+brokeOk);
+      }
+      { // 第十三轮·云端: 手持光源 + 方块光摇曳 + 月光辉光/22° 月晕 —— 拿灯笼才亮、夜里比正午亮、背包没有/拿武器/「低」画质/死亡不亮; 着色器接口就绪
+        const sS=selSlot, itS=HOTBAR_ITEMS[sS], hadL=bag.has(LANTERN), nL=bagCount(LANTERN), hadC=bag.has(CRYSTAL), nC=bagCount(CRYSTAL), gS=gfxLevel, dS=dead;
+        let r={};
+        try{
+          gfxLevel=Math.max(1,gS); dead=false;
+          HOTBAR_ITEMS[sS]=LANTERN; bag.set(LANTERN,2);
+          const hn=heldLightState(blockLightK(-0.1), 0); r.night=hn.v[3]; r.warm=hn.c[0]>hn.c[2];
+          r.near=Math.hypot(hn.v[0]-player.x, hn.v[1]-(player.y+EYE), hn.v[2]-player.z)<1;
+          r.noon=heldLightState(blockLightK(1), 0).v[3];
+          r.flick=heldLightState(blockLightK(-0.1), 1234).v[3]!==heldLightState(blockLightK(-0.1), 1777).v[3];
+          HOTBAR_ITEMS[sS]=CRYSTAL; bag.set(CRYSTAL,1);
+          const hc=heldLightState(blockLightK(-0.1), 0); r.cool=hc.v[3]>0 && hc.c[2]>hc.c[0];
+          bag.delete(CRYSTAL); r.empty=heldLightState(blockLightK(-0.1), 0).v[3];
+          HOTBAR_ITEMS[sS]="sword"; r.sword=heldLightState(blockLightK(-0.1), 0).v[3];
+          HOTBAR_ITEMS[sS]=LANTERN; gfxLevel=0; r.low=heldLightState(blockLightK(-0.1), 0).v[3];
+          gfxLevel=Math.max(1,gS); dead=true; r.dead=heldLightState(blockLightK(-0.1), 0).v[3];
+        } finally {
+          HOTBAR_ITEMS[sS]=itS; gfxLevel=gS; dead=dS;
+          if(hadL) bag.set(LANTERN,nL); else bag.delete(LANTERN);
+          if(hadC) bag.set(CRYSTAL,nC); else bag.delete(CRYSTAL);
+          heldLightState(blockLightK(sunH), 0);
+        }
+        const skySrc=gl.getAttachedShaders(skyProg).map(sh=>gl.getShaderSource(sh)).join("\n");
+        const unifOk=!!U.uHeld && !!U.uHeldC && /手持光源/.test(_mainSrc[1]) && /光池随时间和位置轻轻摇曳/.test(_mainSrc[1]) && /月光辉光/.test(skySrc) && /22° 月晕/.test(skySrc);
+        ok("第十三轮: 拿发光方块身边有动态光(灯笼暖/水晶冷, 夜>正午, 灯笼闪烁); 没货/拿武器/低画质/死亡不亮; 方块光摇曳与月晕着色器就绪",
+           r.night>0.5 && r.warm && r.near && r.noon>0 && r.noon<r.night*0.4 && r.flick && r.cool && r.empty===0 && r.sword===0 && r.low===0 && r.dead===0 && unifOk,
+           JSON.stringify(r)+" unif="+unifOk);
       }
       { // 第十二轮·云端: 倒影随最近水面 + 雨天湿地面 —— 放一块水测 pickReflY; 湿度随天气渐变; 着色器接口就绪
         const bx=Math.floor(player.x)+3, bz=Math.floor(player.z), gyW=groundY(bx,bz);

@@ -16,7 +16,21 @@ Persistent handoff notes for future agents. Add a new entry for each user-visibl
 **Verification (`tools/headless.mjs`, SwiftShader):**
 - `vm.Script` compile-check of the inline script: clean.
 - Geyser-site check (mimics the unchanged self-test: first vent of the first vent-bearing chunk) on 6 seeds → all intact (`gen=true`, `other=true`). Seed 2718281's first vent moved from the covered `-523,-521` to the intact `-488,-536`.
-- `?selftest=1` on repro + varied seeds (2718281 / 314159 / 8675309 / 1 / 42) — see PR for the run.
+- `?selftest=1` after merging main (5d9b12a, incl. round 13 + selftest speedup): seeds 2718281 / 314159 / 8675309 / 424242 / 1 all **343/343**. On main without this fix, seed 2718281 fails the geyser assertion (342/343, `site=-523,-521 bio=10`).
+
+## 2026-09-29 — 沙海奇境 第十三轮·云端：手持动态光 + 方块光摇曳 + 月光辉光/22° 月晕
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only, desktop. Rendering only; no new keys, blocks, atlas tiles or save fields. Did not touch the C-key Sandstep / `foeStrike()` / global key handler (Manus) or the hotbar logic (only reads `HOTBAR_ITEMS[selSlot]`).
+
+| Change | Player-visible behavior |
+| --- | --- |
+| Handheld dynamic light | With a light-emitting block selected in the hotbar (and at least one in the bag), a point light at the player's right hand lights the surroundings: bright within ~2 blocks, fading out by ~5–11 blocks, and brighter on faces turned toward the player. Lantern / lava / magma / lit furnace give warm light with a flame-like flicker; crystal, salt crystal, amethyst, neon, glow vein and Ka-heart use their own cool/colored tints. Strength follows the existing block-light curve (strong at night, barely visible at noon). Off on 低 quality, in death, or with no item in the bag. It casts no shadow, so a little light leaks through walls, as in shader-pack dynamic lights. |
+| Block-light flicker | The warm pools around lanterns/lava/crystals now "breathe" by about ±8%, using smooth noise that drifts with world position and time, so neighbouring lamps don't pulse in sync. |
+| Moonlight atmosphere | The night sky gets a wide, soft, cool glow around the moon. Under thin cloud (medium cover) a faint 22° ice-crystal halo rings the moon, warm on the inside edge and cool on the outside; it does not appear on clear or overcast nights. |
+
+**How:** `mainProg` new uniforms `uHeld` (hand position relative to `uWOrig`, + intensity) and `uHeldC`; JS `HELD_LIGHT` table + `heldLightState(blK, now)` next to `blockLightK`, set once per frame in the main-pass uniform block (the reflection pass reuses it). Flicker is in the `mainProg` block-light line. Moon glow and halo are in `skyProg` (halo after the cloud layer, gated by `uCover`).
+
+**Verification:** `CHROME_PATH=… node tools/headless.mjs selftest` **343/343** (342 on main + 1 new round-13 assertion: warm lantern/cool crystal, night > noon, flicker over time, and no light with an empty bag, a weapon, 低 quality or when dead; shader hooks present). Headless SwiftShader screenshots (seed 424242, 极致, midnight): the same spot holding a lantern vs. holding the sword, showing the warm pool on the sand and cactus; and the night sky at cloud cover 0.4, showing the moon glow and the 22° halo. Not verified by screenshot: the flicker animation itself (checked numerically in the self-test only), colored-crystal tints on screen, and mobile (desktop-only scope). A first attempt passed world coordinates while the shader works relative to the 1024-block origin; the light landed in the wrong place until that was fixed before the screenshots above.
 
 ## 2026-09-29 — 沙海奇境 第十二轮（云端）：倒影跟着最近水面 + 雨天湿地面 + 雨滴涟漪/水花
 
