@@ -1336,9 +1336,7 @@ function buildStructures(bx,bz,put){
   for(let sx=c0x; sx<=c1x; sx++) for(let sz=c0z; sz<=c1z; sz++){
     const s=structureAt(sx,sz);
     if(!s) continue;
-    const RADII={city:34,pyramid:30,airport:32,racetrack:30,park:22,rainbow:22,crater:18,bazaar:17,factory:16,oasis:15,
-                 colosseum:20,forum:16,castrum:19,aqueduct:38,palace:20,wreck:16,caravan:12,grotto:14,village:VIL_N+1};
-    const rad = RADII[s.type]||12;
+    const rad = STRUCT_RAD[s.type]||12;
     if(s.x+rad<bx || s.x-rad>=bx+CS || s.z+rad<bz || s.z-rad>=bz+CS) continue;
     drawStructure(s,put);
   }
@@ -2123,6 +2121,20 @@ function drawStructure(s,put){
    每个相交区块都完整重画一遍, put() 裁掉区块外部分 → 跨区块拼接无缝、同种子完全确定。 */
 const VIL_RP=26, VIL_FADE=6, VIL_RING=9.5, VIL_WALL=24;   // 平台半径 / 过渡带 / 环路半径 / 苔石墙半径
 const VIL_N=VIL_RP+VIL_FADE;
+// 各类建筑的清场包围盒半径(建筑只在中心 ±rad 的区块里施工, 见 buildStructures 的区块剔除, 所以 rad 是它全部方块的界)。
+// 定义在 VIL_N 之后, 供 buildStructures 与 structureCovers 共用(避免与地热喷口选址各写一份 → 走样)。
+const STRUCT_RAD={city:34,pyramid:30,airport:32,racetrack:30,park:22,rainbow:22,crater:18,bazaar:17,factory:16,oasis:15,
+                  colosseum:20,forum:16,castrum:19,aqueduct:38,palace:20,wreck:16,caravan:12,grotto:14,village:VIL_N+1};
+// 世界坐标(x,z)是否落在附近某座建筑的清场包围盒内。用于地热喷口选址: 会被建筑铺盖的点不算喷口位, 保持 geyserSites 与真实方块一致。
+function structureCovers(x,z){
+  const sx=Math.floor(x/CELL), sz=Math.floor(z/CELL);
+  for(let dx=-1;dx<=1;dx++) for(let dz=-1;dz<=1;dz++){
+    const s=structureAt(sx+dx,sz+dz); if(!s) continue;
+    const rad=STRUCT_RAD[s.type]||12;
+    if(Math.abs(s.x-x)<=rad && Math.abs(s.z-z)<=rad) return true;
+  }
+  return false;
+}
 const _vilPlanCache=new Map();
 // 村落选址: 河道穿过会把水塘/房子切碎, 地势起伏过大会垫成高台/挖成深坑, 这两种格子退回普通绿洲
 function villageSiteOK(x,z,h){
@@ -9427,7 +9439,8 @@ function geyserSites(cx,cz){
     for(let i=0;i<n;i++){
       const x=bx+2+Math.floor(hash2(cx*17+i*31, cz*13-i*7)*12), z=bz+2+Math.floor(hash2(cx*29-i*5, cz*23+i*11)*12);
       const h=heightAt(x,z), b2=biomeAt(x,z);
-      if(h<=WATER_Y+1 || (b2!==BIO_VOLCANO && b2!==BIO_SALTLAKE) || v.some(q=>Math.abs(q.x-x)+Math.abs(q.z-z)<3)) continue;
+      // 会被大型建筑铺盖/清场的点不算喷口位: 否则 geyserSites 报了个点, 真实区块里却被建筑覆盖(喷口先放、建筑随后盖掉), 生成与列表不一致。
+      if(h<=WATER_Y+1 || (b2!==BIO_VOLCANO && b2!==BIO_SALTLAKE) || structureCovers(x,z) || v.some(q=>Math.abs(q.x-x)+Math.abs(q.z-z)<3)) continue;
       v.push({x, y:h, z, bio:b2, ph:hash2(x*3+1,z*5-2)*GEY_PERIOD});
     }
   }
