@@ -14485,7 +14485,9 @@ function selftest(){
         reject("死亡",()=>{dead=true;},()=>{dead=false;});
         const craft=document.getElementById("craftPanel"), craftC=craft.className, craftD=craft.style.display;
         reject("面板打开",()=>{craft.classList.add("on"); craft.style.display="flex";},()=>{craft.className=craftC; craft.style.display=craftD;});
+        const yawR=player.yaw; if(spot) player.yaw=Math.atan2(spot.dx,-spot.dz);   // 真实按键走视线方向: 对准已知可走的方向, 免得随机朝向正对墙而没触发
         resetStep(); const repeatBefore={x:player.x,z:player.z}; sandStepState.cd=0; document.dispatchEvent(new KeyboardEvent("keydown",{code:"KeyC",bubbles:true})); const once={x:player.x,z:player.z,cd:sandStepState.cd}; document.dispatchEvent(new KeyboardEvent("keydown",{code:"KeyC",repeat:true,bubbles:true}));
+        player.yaw=yawR;
         ok("沙步: 按住 C 的重复 keydown 只触发一次且冷却期不再位移",once.cd>=4.49 && player.x===once.x && player.z===once.z,"from="+repeatBefore.x.toFixed(2)+","+repeatBefore.z.toFixed(2)+" onceCd="+once.cd.toFixed(2));
         softLock=sl0; locked=locked0; dead=dead0; riding=ride0; player.flying=fly0; grappleTarget=gt0; player.onGround=og0; document.getElementById("overlay").style.display=ov0; restoreB();
         const sv=collectSave();
@@ -15145,7 +15147,9 @@ function selftest(){
            JSON.stringify(r)+" unif="+unifOk);
       }
       { // 第十二轮·云端: 倒影随最近水面 + 雨天湿地面 —— 放一块水测 pickReflY; 湿度随天气渐变; 着色器接口就绪
-        const bx=Math.floor(player.x)+3, bz=Math.floor(player.z), gyW=groundY(bx,bz);
+        let bx=Math.floor(player.x)+3; const bz=Math.floor(player.z);
+        for(let i=0;i<40 && groundY(bx,bz)<=0;i++) bx+=3;   // 树冠/水面上 groundY=-1(玩家位置由前面的测试随机留下): 挪到实地再测
+        const gyW=groundY(bx,bz);
         let pickOk=false, fallOk=false;
         if(gyW>0){
           const wy=gyW+6, olds=[]; for(let y=wy;y<=wy+2;y++) olds.push(getBlock(bx,y,bz));
