@@ -2,6 +2,12 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-09-29 — 沙海奇境 第十六轮·Manus：沙步 v1.1 边界加固
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only. The C-key Sandstep now explicitly refuses to activate while a gameplay panel is open, while airborne, riding, grappling, in water/lava, dead, paused, or otherwise not grounded; repeated keydown events cannot retrigger it. Collision-safe landing remains unchanged in distance and AABB semantics, and the player still follows WASD or view direction as documented. No other key, save field, enemy AI, `foeStrike()` damage logic, shader, or rendering code changed.
+
+**Verification:** Added `ok(...)` selftests for a temporary solid wall, four-sided no-landing space (including no movement/cooldown/evade window), each disabled state including pause, WASD/view direction, and repeat-key behavior. Every test restores player/runtime state and temporary blocks. SwiftShader headless runs: default seed **355/355**, `?seed=2718281` **355/355**, `?seed=424242` **355/355**. Real-device dodge timing remains **待真机点测**.
+
 ## 2026-09-29 — 沙海奇境：地热喷口选址避开建筑（多种子自测巡检，bug 修复会话）
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) only. Generation fix for the geothermal-vent (间歇泉) placement; no test assertions loosened or removed. Did not touch the C-key dodge / `foeStrike()` / global key handler (Manus) or any shader/render/water code (cloud). (The village door-standing seed bug found in the same sweep was fixed independently on main by PR #37.)

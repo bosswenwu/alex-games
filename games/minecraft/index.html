@@ -4929,6 +4929,15 @@ const EYE=1.62, PW=0.3, PH=1.8;
 /* 第十五轮·玩家侧沙步：不写存档、不动敌人 AI；只在 foeStrike 入口规避明确的敌方攻击。 */
 const SANDSTEP_DIST=3.2, SANDSTEP_WINDOW=0.35, SANDSTEP_CD=4.5;
 const sandStepState={cd:0, evadeT:0, dodged:false, lastDist:0};
+function sandStepPanelOpen(){
+  const ids=["craftPanel","enchPanel","potionPanel","chestPanel","furnacePanel","npcPanel","fullhelp","settingsPanel",
+    "bazaar-panel","pottery-panel","mythic-panel","lamp-panel","sphinx-panel"];
+  return ids.some(id=>{
+    const el=document.getElementById(id); if(!el) return false;
+    const cs=getComputedStyle(el);
+    return el.classList.contains("on") || (cs.display!=="none" && cs.visibility!=="hidden" && +cs.opacity>0 && id!=="fullhelp" && id!=="settingsPanel");
+  }) || document.getElementById("overlay")?.style.display!=="none";
+}
 function sandStepDirection(overrideX,overrideZ){
   if(Number.isFinite(overrideX) && Number.isFinite(overrideZ)){
     const n=Math.hypot(overrideX,overrideZ);
@@ -4947,7 +4956,7 @@ function sandStepLanding(x,y,z,dx,dz){
   return null;
 }
 function sandStep(dirX,dirZ,force){
-  if(!force && (!playing() || dead || riding || player.flying || grappleTarget || inWater() || inLava() || !player.onGround)){
+  if(!force && (!playing() || sandStepPanelOpen() || dead || riding || player.flying || grappleTarget || inWater() || inLava() || !player.onGround)){
     if(playing() && !dead) showName("💨 沙步只能在陆地上使出");
     return false;
   }
@@ -6902,7 +6911,7 @@ document.addEventListener("keydown",e=>{
       lastSpace=now;
     }
     if(e.code==="KeyW"){ if(now-lastW<260) player.sprint=true; lastW=now; }
-    if(e.code==="KeyC"){ e.preventDefault(); sandStep(); }                  // 第十五轮·沙步：短位移 + 仅敌击规避窗
+    if(e.code==="KeyC" && !e.repeat){ e.preventDefault(); sandStep(); }      // 第十六轮·沙步：重复 keydown 不重复触发
     if(e.code>="Digit1"&&e.code<="Digit9") selectSlot(+e.code.slice(5)-1);
     if(e.code==="Digit0" && HOTBAR_ITEMS.length>9) selectSlot(9);   // 第 10 格(塞特之锤)
     if(e.code==="KeyE") toggleRide();
@@ -14426,9 +14435,59 @@ function selftest(){
            "dodged="+dodged+" directHp="+hp);
         tickSandStep(SANDSTEP_WINDOW+0.02); hp=999;
         const hitAfterWindow=foeStrike(10,0,0,null)===true && hp<999;
-        const locked=sandStep(spot&&spot.dx,spot&&spot.dz,true)===false && sandStepState.cd>0;
-        ok("沙步闪避窗结束后敌击恢复；冷却期间不能连用", hitAfterWindow && locked,
-           "hit="+hitAfterWindow+" locked="+locked+" cd="+sandStepState.cd.toFixed(2));
+        const cooldownLocked=sandStep(spot&&spot.dx,spot&&spot.dz,true)===false && sandStepState.cd>0;
+        ok("沙步闪避窗结束后敌击恢复；冷却期间不能连用", hitAfterWindow && cooldownLocked,
+           "hit="+hitAfterWindow+" locked="+cooldownLocked+" cd="+sandStepState.cd.toFixed(2));
+        // 第十六轮·沙步 v1.1：边界补测。临时方块和现场均在 finally/本地恢复。
+        const B0=new Map(), touch=(x,y,z,id)=>{ const k=x+","+y+","+z; if(!B0.has(k)) B0.set(k,getBlock(x,y,z)); setBlock(x,y,z,id); };
+        const restoreB=()=>{ for(const [k,id] of B0){ const [x,y,z]=k.split(",").map(Number); setBlock(x,y,z,id); } B0.clear(); };
+        const resetStep=()=>{ sandStepState.cd=0; sandStepState.evadeT=0; sandStepState.dodged=false; player.x=spot?spot.x:P0.x; player.y=spot?spot.y:P0.y; player.z=spot?spot.z:P0.z; player.onGround=true; };
+        let wallOK=false, noFootOK=false;
+        if(spot){
+          resetStep();
+          const wx=Math.floor(spot.x+spot.dx*1.2), wz=Math.floor(spot.z+spot.dz*1.2);
+          for(let side=-1;side<=1;side++) for(let yy=0;yy<2;yy++) touch(wx+Math.round(spot.dz*side),spot.y+yy,wz-Math.round(spot.dx*side),SANDSTONE);
+          sandStep(spot.dx,spot.dz,true);
+          wallOK=Math.floor(player.x)!==wx || Math.floor(player.z)!==wz;
+          ok("沙步: 正前方实心墙阻挡时不穿墙",wallOK,"landing="+player.x.toFixed(2)+","+player.z.toFixed(2)+" wall="+wx+","+wz);
+          restoreB(); resetStep();
+          for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]) for(let yy=0;yy<2;yy++) touch(Math.floor(spot.x)+dx,spot.y+yy,Math.floor(spot.z)+dz,SANDSTONE);
+          const xNo=player.x,zNo=player.z, sNo={cd:sandStepState.cd,evadeT:sandStepState.evadeT}, playingNo=softLock;
+          softLock=true;
+          const noUse=sandStep(0,-1,false);
+          softLock=playingNo;
+          noFootOK=!noUse && player.x===xNo && player.z===zNo && sandStepState.cd===sNo.cd && sandStepState.evadeT===sNo.evadeT;
+          ok("沙步: 四周无落脚点时不移动且不开冷却/闪避窗",noFootOK,"used="+noUse+" pos="+player.x.toFixed(2)+","+player.z.toFixed(2)+" cd="+sandStepState.cd.toFixed(2));
+          restoreB(); resetStep();
+        } else {
+          ok("沙步: 正前方实心墙阻挡时不穿墙",false,"没有可用测试落点");
+          ok("沙步: 四周无落脚点时不移动且不开冷却/闪避窗",false,"没有可用测试落点");
+        }
+        const k0=Object.assign({},keys), yaw0=player.yaw;
+        for(const k in keys) keys[k]=false; player.yaw=0;
+        const viewDir=sandStepDirection(), viewOK=Math.abs(viewDir[0])<1e-6 && viewDir[1]<-0.99;
+        keys.KeyW=true; const wDir=sandStepDirection(); keys.KeyW=false; keys.KeyD=true; const dDir=sandStepDirection();
+        const inputOK=wDir[1]<-0.99 && Math.abs(wDir[0])<1e-6 && dDir[0]>.99 && Math.abs(dDir[1])<1e-6;
+        ok("沙步: 静止时朝视线方向、按住 WASD 时朝输入方向",viewOK&&inputOK,"view="+viewDir.map(v=>v.toFixed(2))+" W="+wDir.map(v=>v.toFixed(2))+" D="+dDir.map(v=>v.toFixed(2)));
+        Object.assign(keys,k0); player.yaw=yaw0;
+        const sl0=softLock, locked0=locked, dead0=dead, ride0=riding, fly0=player.flying, gt0=grappleTarget, og0=player.onGround, ov0=document.getElementById("overlay").style.display;
+        locked=false; softLock=false; document.getElementById("overlay").style.display="flex"; resetStep();
+        const pauseBefore={x:player.x,z:player.z,cd:sandStepState.cd,evadeT:sandStepState.evadeT}; const pauseUse=sandStep();
+        ok("沙步禁用状态: 暂停",!pauseUse && player.x===pauseBefore.x && player.z===pauseBefore.z && sandStepState.cd===pauseBefore.cd && sandStepState.evadeT===pauseBefore.evadeT,"used="+pauseUse+" pos="+player.x.toFixed(2)+","+player.z.toFixed(2));
+        softLock=true; document.getElementById("overlay").style.display="none";
+        const reject=(label,setup,teardown)=>{ resetStep(); setup(); const before={x:player.x,z:player.z,cd:sandStepState.cd,evadeT:sandStepState.evadeT}; const used=sandStep(); const good=!used&&player.x===before.x&&player.z===before.z&&sandStepState.cd===before.cd&&sandStepState.evadeT===before.evadeT; teardown&&teardown(); ok("沙步禁用状态: "+label,good,"used="+used+" pos="+player.x.toFixed(2)+","+player.z.toFixed(2)); };
+        reject("空中",()=>{player.onGround=false;},()=>{player.onGround=true;});
+        reject("骑乘载具或坐骑",()=>{riding={def:{}};},()=>{riding=null;});
+        reject("钩爪牵引中",()=>{grappleTarget={x:player.x+3,y:player.y,z:player.z};},()=>{grappleTarget=null;});
+        const fluidX=Math.floor(player.x), fluidY=Math.floor(player.y+0.4), fluidZ=Math.floor(player.z), fluidOld=getBlock(fluidX,fluidY,fluidZ);
+        reject("水中",()=>{setBlock(fluidX,fluidY,fluidZ,WATER);},()=>{setBlock(fluidX,fluidY,fluidZ,fluidOld);});
+        reject("岩浆中",()=>{setBlock(fluidX,fluidY,fluidZ,LAVA);},()=>{setBlock(fluidX,fluidY,fluidZ,fluidOld);});
+        reject("死亡",()=>{dead=true;},()=>{dead=false;});
+        const craft=document.getElementById("craftPanel"), craftC=craft.className, craftD=craft.style.display;
+        reject("面板打开",()=>{craft.classList.add("on"); craft.style.display="flex";},()=>{craft.className=craftC; craft.style.display=craftD;});
+        resetStep(); const repeatBefore={x:player.x,z:player.z}; sandStepState.cd=0; document.dispatchEvent(new KeyboardEvent("keydown",{code:"KeyC",bubbles:true})); const once={x:player.x,z:player.z,cd:sandStepState.cd}; document.dispatchEvent(new KeyboardEvent("keydown",{code:"KeyC",repeat:true,bubbles:true}));
+        ok("沙步: 按住 C 的重复 keydown 只触发一次且冷却期不再位移",once.cd>=4.49 && player.x===once.x && player.z===once.z,"from="+repeatBefore.x.toFixed(2)+","+repeatBefore.z.toFixed(2)+" onceCd="+once.cd.toFixed(2));
+        softLock=sl0; locked=locked0; dead=dead0; riding=ride0; player.flying=fly0; grappleTarget=gt0; player.onGround=og0; document.getElementById("overlay").style.display=ov0; restoreB();
         const sv=collectSave();
         ok("沙步不改变世界存档结构", !Object.prototype.hasOwnProperty.call(sv,"sandStep"),
            "sandStep="+("sandStep" in sv));
