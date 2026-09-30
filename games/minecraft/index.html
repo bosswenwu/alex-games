@@ -14435,9 +14435,9 @@ function selftest(){
            "dodged="+dodged+" directHp="+hp);
         tickSandStep(SANDSTEP_WINDOW+0.02); hp=999;
         const hitAfterWindow=foeStrike(10,0,0,null)===true && hp<999;
-        const locked=sandStep(spot&&spot.dx,spot&&spot.dz,true)===false && sandStepState.cd>0;
-        ok("沙步闪避窗结束后敌击恢复；冷却期间不能连用", hitAfterWindow && locked,
-           "hit="+hitAfterWindow+" locked="+locked+" cd="+sandStepState.cd.toFixed(2));
+        const cooldownLocked=sandStep(spot&&spot.dx,spot&&spot.dz,true)===false && sandStepState.cd>0;
+        ok("沙步闪避窗结束后敌击恢复；冷却期间不能连用", hitAfterWindow && cooldownLocked,
+           "hit="+hitAfterWindow+" locked="+cooldownLocked+" cd="+sandStepState.cd.toFixed(2));
         // 第十六轮·沙步 v1.1：边界补测。临时方块和现场均在 finally/本地恢复。
         const B0=new Map(), touch=(x,y,z,id)=>{ const k=x+","+y+","+z; if(!B0.has(k)) B0.set(k,getBlock(x,y,z)); setBlock(x,y,z,id); };
         const restoreB=()=>{ for(const [k,id] of B0){ const [x,y,z]=k.split(",").map(Number); setBlock(x,y,z,id); } B0.clear(); };
