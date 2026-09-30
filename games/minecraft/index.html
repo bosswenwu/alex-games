@@ -336,6 +336,12 @@
   #btnBreak { right:112px; bottom:66px;  width:74px; height:74px; background:rgba(255,120,90,.30); }
   #btnPlace { right:24px;  bottom:60px;  width:74px; height:74px; background:rgba(120,200,255,.30); }
   #btnFly   { right:112px; bottom:150px; width:60px; height:60px; font-size:12px; }
+  #btnDodge { left:250px; top:82px; width:60px; height:60px; font-size:10px; line-height:1.15; white-space:pre-line;
+              background:rgba(218,166,83,.38); border-color:rgba(255,220,150,.66); }
+  #btnDodge.is-ready { box-shadow:0 0 0 2px rgba(255,224,158,.2),0 2px 9px rgba(0,0,0,.3); }
+  #btnDodge.is-cooldown { opacity:.74; }
+  #btnDodge.is-active { background:rgba(241,176,73,.58); border-color:rgba(255,226,162,.86); }
+  #btnDodge.is-success { background:rgba(109,190,125,.64); border-color:rgba(190,255,198,.9); }
   #btnSlotL { left:26px; bottom:176px; width:52px; height:52px; font-size:20px; }
   #btnSlotR { left:120px; bottom:176px; width:52px; height:52px; font-size:20px; }
   #rotateHint { position:fixed; inset:0; z-index:60; display:none; align-items:center; justify-content:center;
@@ -475,6 +481,7 @@
   <div id="btnBreak" class="tbtn">挖掘</div>
   <div id="btnPlace" class="tbtn">使用</div>
   <div id="btnFly"   class="tbtn">飞行</div>
+  <div id="btnDodge" class="tbtn" role="button" aria-label="沙步闪避：就绪">C<br>沙步</div>
   <div id="btnSlotL" class="tbtn">‹</div>
   <div id="btnSlotR" class="tbtn">›</div>
 </div>
@@ -4928,7 +4935,7 @@ const player={x:8.5, y:60, z:8.5, vx:0, vy:0, vz:0, kbx:0, kbz:0, yaw:0, pitch:0
 const EYE=1.62, PW=0.3, PH=1.8;
 /* 第十五轮·玩家侧沙步：不写存档、不动敌人 AI；只在 foeStrike 入口规避明确的敌方攻击。 */
 const SANDSTEP_DIST=3.2, SANDSTEP_WINDOW=0.35, SANDSTEP_CD=4.5;
-const sandStepState={cd:0, evadeT:0, dodged:false, lastDist:0};
+const sandStepState={cd:0, evadeT:0, dodged:false, lastDist:0, feedbackT:0};
 function sandStepPanelOpen(){
   const ids=["craftPanel","enchPanel","potionPanel","chestPanel","furnacePanel","npcPanel","fullhelp","settingsPanel",
     "bazaar-panel","pottery-panel","mythic-panel","lamp-panel","sphinx-panel"];
@@ -4961,7 +4968,6 @@ function sandStep(dirX,dirZ,force){
     return false;
   }
   if(sandStepState.cd>0){
-    if(!force) showName("💨 沙步冷却中 · "+sandStepState.cd.toFixed(1)+" 秒");
     return false;
   }
   const [dx,dz]=sandStepDirection(dirX,dirZ), x0=player.x, z0=player.z;
@@ -4970,7 +4976,7 @@ function sandStep(dirX,dirZ,force){
   player.x=landing.x; player.z=landing.z;
   player.kbx+=dx*1.5; player.kbz+=dz*1.5;
   sandStepState.cd=SANDSTEP_CD; sandStepState.evadeT=SANDSTEP_WINDOW;
-  sandStepState.dodged=false; sandStepState.lastDist=landing.d;
+  sandStepState.dodged=false; sandStepState.lastDist=landing.d; sandStepState.feedbackT=0;
   for(let i=0;i<12;i++){
     const r=Math.random(), side=(Math.random()-.5)*0.45;
     particles.push({x:x0+(landing.x-x0)*r+side*dz, y:player.y+0.06+Math.random()*0.35, z:z0+(landing.z-z0)*r-side*dx,
@@ -4978,13 +4984,34 @@ function sandStep(dirX,dirZ,force){
       life:0.24+Math.random()*0.22, size:0.06+Math.random()*0.05, u:4*TS, v:0, l:1.05});
   }
   sfxBrush();
-  if(!force) showName("💨 沙步！敌击规避 "+SANDSTEP_WINDOW.toFixed(2)+" 秒 · 冷却 "+SANDSTEP_CD.toFixed(1)+" 秒");
+  refreshSandStepButton();
   return true;
 }
 function tickSandStep(dt){
   sandStepState.cd=Math.max(0,sandStepState.cd-dt);
   sandStepState.evadeT=Math.max(0,sandStepState.evadeT-dt);
+  sandStepState.feedbackT=Math.max(0,sandStepState.feedbackT-dt);
   if(sandStepState.evadeT<=0) sandStepState.dodged=false;
+  refreshSandStepButton();
+}
+function sandStepStatusLabel(){
+  if(sandStepState.feedbackT>0) return "闪避成功";
+  if(sandStepState.evadeT>0) return "闪避中";
+  if(sandStepState.cd>0) return sandStepState.cd.toFixed(1)+"s";
+  return "就绪";
+}
+function refreshSandStepButton(){
+  const btn=document.getElementById("btnDodge"); if(!btn) return;
+  const phase=sandStepState.feedbackT>0?"success":sandStepState.evadeT>0?"active":sandStepState.cd>0?"cooldown":"ready";
+  const text=phase==="success"?"闪避\n成功":phase==="active"?"闪避中":phase==="cooldown"?"沙步\n"+sandStepState.cd.toFixed(1)+"s":"C\n沙步";
+  const state=phase+":"+text;
+  if(btn.dataset.stepState===state) return;
+  btn.dataset.stepState=state; btn.textContent=text;
+  btn.setAttribute("aria-label","沙步闪避："+sandStepStatusLabel());
+  btn.classList.toggle("is-ready",phase==="ready");
+  btn.classList.toggle("is-cooldown",phase==="cooldown");
+  btn.classList.toggle("is-active",phase==="active");
+  btn.classList.toggle("is-success",phase==="success");
 }
 function lookDir(){
   const cp=Math.cos(player.pitch), sp=Math.sin(player.pitch);
@@ -6367,10 +6394,13 @@ function updateStatsHUD(){
   const tod = sunH<0.02 ? "🌙夜" : "☀昼";
   const bio=BIOME_NAME[biomeAt(Math.floor(player.x),Math.floor(player.z))];
   const marks=landTypesSeen().size;
+  const sandStepColor=sandStepState.feedbackT>0?"#fff0a5":sandStepState.cd>0?"#e8d6b6":"#a9e6b0";
   st.innerHTML = `第 <b>${dayCount}</b> 天 ${tod} ${weatherName()}<br><span style="color:#a8e6a0">🌍 ${bio}</span>`
                + `<br><span class="kills">☠ 击杀 ${kills}</span>`
                + `<br><span style="color:#ffe0a0">📍 地标 ${marks}/${PAYOFF_N}</span>`
-               + (armor>0 ? `<br><span style="color:#9fd8ff">🛡 护甲 ${armor}/5</span>` : ``);
+               + (armor>0 ? `<br><span style="color:#9fd8ff">🛡 护甲 ${armor}/5</span>` : ``)
+               + `<br><span style="color:${sandStepColor}">💨 C 沙步 · ${sandStepStatusLabel()}</span>`;
+  refreshSandStepButton();
   const bb=document.getElementById("bossbar");
   if(boss){
     bb.style.display="block";
@@ -6397,6 +6427,7 @@ function damagePlayer(d,kx,kz){
 }
 function doDie(){
   dead=true; softLock=false;
+  sandStepState.feedbackT=0;
   grappleTarget=null;                             // 死亡时清掉钩爪状态, 避免复活后诡异位移
   for(const k in keys) keys[k]=false;
   document.getElementById("title").textContent="你死了！";
@@ -6409,6 +6440,7 @@ function doDie(){
 }
 function respawn(){
   dead=false; hp=maxHp; updateHearts();
+  sandStepState.feedbackT=0;
   killStreak=0; killStreakT=0;                     // 死亡清空连杀
   poisonT=0; poisonTickT=0;                        // 死亡清除中毒
   { const pt=document.getElementById("poisontint"); if(pt) pt.style.opacity=0; }
@@ -6533,6 +6565,7 @@ function initTouchUI(){
   const ui=document.getElementById("touchui");
   if(!ui) return;
   ui.classList.add("on");
+  refreshSandStepButton();
   document.body.style.touchAction="none";
   RENDER=Math.min(RENDER,4);                 // 移动端默认更近的渲染距离
   MOBILE_PARTICLE_SCALE=0.4;
@@ -6606,6 +6639,7 @@ function initTouchUI(){
   hold("btnPlace",()=>{ doPlace(); });
   hold("btnFly",  ()=>{ if(!riding){ player.flying=!player.flying; player.vy=0;
                           showName(player.flying?"飞行模式":"行走模式"); } });
+  hold("btnDodge",()=>{ sandStep(); });
   hold("btnSlotL",()=>{ const N=HOTBAR_ITEMS.length; selectSlot((selSlot-1+N)%N); });
   hold("btnSlotR",()=>{ const N=HOTBAR_ITEMS.length; selectSlot((selSlot+1)%N); });
 
@@ -6837,6 +6871,7 @@ saveNowBtn.addEventListener("click",()=>{
 });
 function pauseGame(){
   softLock=false;
+  sandStepState.feedbackT=0;
   for(const k in keys) keys[k]=false;
   mouseHeld=-1; dragLook=false;
   document.getElementById("title").textContent="游戏暂停";
@@ -6986,6 +7021,7 @@ newworldbtn.addEventListener("click",()=>{
   saveDisabled=false;
   deleteSave();
   SEED=(Date.now()%1000000);
+  sandStepState.feedbackT=0;
   _hCache.clear(); _bioCache.clear(); blockDiff.clear();
   for(const [,c] of world) if(c.mesh) destroyMesh(c.mesh);
   world.clear(); meshQueue.length=0; queued.clear();
@@ -8706,7 +8742,7 @@ function nightSpawnFor(bio, r){
 function foeStrike(dmg,kx,kz,m){
   // 沙步只躲经由敌方攻击入口的伤害；坠落、陷阱、毒、岩浆等仍直接走 damagePlayer。
   if(sandStepState.evadeT>0){
-    if(!sandStepState.dodged){ sandStepState.dodged=true; showName("💨 沙步闪避！"); }
+    if(!sandStepState.dodged){ sandStepState.dodged=true; sandStepState.feedbackT=1.0; refreshSandStepButton(); }
     return false;
   }
   const em=(m&&m.elite)?1.5:1;
@@ -13422,7 +13458,7 @@ window.__game = {
   get streak(){ return { cur:killStreak, best:bestStreak, elites:elitesSlain }; },
   get cores(){ return cores; }, get armor(){ return armor; },
   get poison(){ return +poisonT.toFixed(2); },
-  get sandStep(){ return {cd:+sandStepState.cd.toFixed(2), evade:+sandStepState.evadeT.toFixed(2), ready:sandStepState.cd<=0, distance:+sandStepState.lastDist.toFixed(2)}; },
+  get sandStep(){ return {cd:+sandStepState.cd.toFixed(2), evade:+sandStepState.evadeT.toFixed(2), feedback:+sandStepState.feedbackT.toFixed(2), status:sandStepStatusLabel(), ready:sandStepState.cd<=0, distance:+sandStepState.lastDist.toFixed(2)}; },
   useSandStep:(x,z)=>sandStep(x,z),
   get bounty(){ const b=curBounty(); return { id:b.id, desc:b.desc, prog:bountyProg, goal:b.goal, done:bountyDone }; },
   get bossBar(){ return bossBarState(); },
@@ -14409,7 +14445,7 @@ function selftest(){
     // ---- 第十五轮·玩家侧沙步：短位移 + 仅 foeStrike 闪避窗 ----
     {
       const P0={x:player.x,y:player.y,z:player.z,onGround:player.onGround,vx:player.vx,vz:player.vz,kbx:player.kbx,kbz:player.kbz};
-      const S0={cd:sandStepState.cd,evadeT:sandStepState.evadeT,dodged:sandStepState.dodged,lastDist:sandStepState.lastDist};
+      const S0={cd:sandStepState.cd,evadeT:sandStepState.evadeT,dodged:sandStepState.dodged,lastDist:sandStepState.lastDist,feedbackT:sandStepState.feedbackT};
       const H0={hp,maxHp,armor,blessT,particles:particles.length};
       try{
         // 在已生成区域中找一个脚底/头顶/前方都空的确定性测试位；不改世界或存档。
@@ -14423,13 +14459,16 @@ function selftest(){
           }
         }
         if(spot){ player.x=spot.x; player.y=spot.y; player.z=spot.z; player.onGround=true; }
-        sandStepState.cd=0; sandStepState.evadeT=0; sandStepState.dodged=false;
+        sandStepState.cd=0; sandStepState.evadeT=0; sandStepState.dodged=false; sandStepState.feedbackT=0;
         const used=!!spot && sandStep(spot.dx,spot.dz,true);
         const moved=Math.hypot(player.x-(spot?spot.x:P0.x),player.z-(spot?spot.z:P0.z));
         ok("沙步: 短位移成功并开启0.35秒敌击规避窗", used && moved>=1.8 && sandStepState.evadeT>0.3 && sandStepState.cd>=4.49,
            "used="+used+" moved="+moved.toFixed(2)+" evade="+sandStepState.evadeT.toFixed(2)+" cd="+sandStepState.cd.toFixed(2));
         maxHp=999; hp=999; armor=0; blessT=0;
         const dodged=foeStrike(10,0,0,{elite:false})===false && hp===999;
+        updateStatsHUD();
+        const feedbackOK=sandStepState.feedbackT>0 && document.getElementById("stats").innerHTML.includes("闪避成功") && document.getElementById("btnDodge").textContent.includes("成功");
+        ok("沙步: 成功反馈同步到 HUD 与触屏按钮",feedbackOK,"feedback="+sandStepState.feedbackT.toFixed(1)+" stats="+document.getElementById("stats").innerHTML.includes("闪避成功"));
         damagePlayer(10,0,0); const environmentStillHurts=hp<999;  // 环境/陷阱/坠落/毒均直走 damagePlayer
         ok("沙步只规避 foeStrike 敌击；直接伤害仍生效", dodged && environmentStillHurts,
            "dodged="+dodged+" directHp="+hp);
@@ -14441,7 +14480,7 @@ function selftest(){
         // 第十六轮·沙步 v1.1：边界补测。临时方块和现场均在 finally/本地恢复。
         const B0=new Map(), touch=(x,y,z,id)=>{ const k=x+","+y+","+z; if(!B0.has(k)) B0.set(k,getBlock(x,y,z)); setBlock(x,y,z,id); };
         const restoreB=()=>{ for(const [k,id] of B0){ const [x,y,z]=k.split(",").map(Number); setBlock(x,y,z,id); } B0.clear(); };
-        const resetStep=()=>{ sandStepState.cd=0; sandStepState.evadeT=0; sandStepState.dodged=false; player.x=spot?spot.x:P0.x; player.y=spot?spot.y:P0.y; player.z=spot?spot.z:P0.z; player.onGround=true; };
+        const resetStep=()=>{ sandStepState.cd=0; sandStepState.evadeT=0; sandStepState.dodged=false; sandStepState.feedbackT=0; player.x=spot?spot.x:P0.x; player.y=spot?spot.y:P0.y; player.z=spot?spot.z:P0.z; player.onGround=true; };
         let wallOK=false, noFootOK=false;
         if(spot){
           resetStep();
@@ -14494,7 +14533,7 @@ function selftest(){
         ok("沙步不改变世界存档结构", !Object.prototype.hasOwnProperty.call(sv,"sandStep"),
            "sandStep="+("sandStep" in sv));
       } finally {
-        Object.assign(player,P0); Object.assign(sandStepState,S0);
+        Object.assign(player,P0); Object.assign(sandStepState,S0); refreshSandStepButton(); updateStatsHUD();
         hp=H0.hp; maxHp=H0.maxHp; armor=H0.armor; blessT=H0.blessT; particles.length=H0.particles;
         updateHearts();
       }
