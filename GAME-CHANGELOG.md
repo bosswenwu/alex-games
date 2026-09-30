@@ -6,7 +6,7 @@ Persistent handoff notes for future agents. Add a new entry for each user-visibl
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) only. The C-key Sandstep now explicitly refuses to activate while a gameplay panel is open, while airborne, riding, grappling, in water/lava, dead, paused, or otherwise not grounded; repeated keydown events cannot retrigger it. Collision-safe landing remains unchanged in distance and AABB semantics, and the player still follows WASD or view direction as documented. No other key, save field, enemy AI, `foeStrike()` damage logic, shader, or rendering code changed.
 
-**Verification:** Added `ok(...)` selftests for a temporary solid wall, four-sided no-landing space (including no movement/cooldown/evade window), each disabled state, WASD/view direction, and repeat-key behavior. Every test restores player/runtime state and temporary blocks. SwiftShader headless runs: default seed **354/354**, `?seed=2718281` **354/354**, `?seed=424242` **354/354**. Real-device dodge timing remains **待真机点测**.
+**Verification:** Added `ok(...)` selftests for a temporary solid wall, four-sided no-landing space (including no movement/cooldown/evade window), each disabled state including pause, WASD/view direction, and repeat-key behavior. Every test restores player/runtime state and temporary blocks. SwiftShader headless runs: default seed **355/355**, `?seed=2718281` **355/355**, `?seed=424242` **355/355**. Real-device dodge timing remains **待真机点测**.
 
 ## 2026-09-29 — 沙海奇境：地热喷口选址避开建筑（多种子自测巡检，bug 修复会话）
 

@@ -14470,7 +14470,10 @@ function selftest(){
         const inputOK=wDir[1]<-0.99 && Math.abs(wDir[0])<1e-6 && dDir[0]>.99 && Math.abs(dDir[1])<1e-6;
         ok("沙步: 静止时朝视线方向、按住 WASD 时朝输入方向",viewOK&&inputOK,"view="+viewDir.map(v=>v.toFixed(2))+" W="+wDir.map(v=>v.toFixed(2))+" D="+dDir.map(v=>v.toFixed(2)));
         Object.assign(keys,k0); player.yaw=yaw0;
-        const sl0=softLock, dead0=dead, ride0=riding, fly0=player.flying, gt0=grappleTarget, og0=player.onGround, ov0=document.getElementById("overlay").style.display;
+        const sl0=softLock, locked0=locked, dead0=dead, ride0=riding, fly0=player.flying, gt0=grappleTarget, og0=player.onGround, ov0=document.getElementById("overlay").style.display;
+        locked=false; softLock=false; document.getElementById("overlay").style.display="flex"; resetStep();
+        const pauseBefore={x:player.x,z:player.z,cd:sandStepState.cd,evadeT:sandStepState.evadeT}; const pauseUse=sandStep();
+        ok("沙步禁用状态: 暂停",!pauseUse && player.x===pauseBefore.x && player.z===pauseBefore.z && sandStepState.cd===pauseBefore.cd && sandStepState.evadeT===pauseBefore.evadeT,"used="+pauseUse+" pos="+player.x.toFixed(2)+","+player.z.toFixed(2));
         softLock=true; document.getElementById("overlay").style.display="none";
         const reject=(label,setup,teardown)=>{ resetStep(); setup(); const before={x:player.x,z:player.z,cd:sandStepState.cd,evadeT:sandStepState.evadeT}; const used=sandStep(); const good=!used&&player.x===before.x&&player.z===before.z&&sandStepState.cd===before.cd&&sandStepState.evadeT===before.evadeT; teardown&&teardown(); ok("沙步禁用状态: "+label,good,"used="+used+" pos="+player.x.toFixed(2)+","+player.z.toFixed(2)); };
         reject("空中",()=>{player.onGround=false;},()=>{player.onGround=true;});
@@ -14484,7 +14487,7 @@ function selftest(){
         reject("面板打开",()=>{craft.classList.add("on"); craft.style.display="flex";},()=>{craft.className=craftC; craft.style.display=craftD;});
         resetStep(); const repeatBefore={x:player.x,z:player.z}; sandStepState.cd=0; document.dispatchEvent(new KeyboardEvent("keydown",{code:"KeyC",bubbles:true})); const once={x:player.x,z:player.z,cd:sandStepState.cd}; document.dispatchEvent(new KeyboardEvent("keydown",{code:"KeyC",repeat:true,bubbles:true}));
         ok("沙步: 按住 C 的重复 keydown 只触发一次且冷却期不再位移",once.cd>=4.49 && player.x===once.x && player.z===once.z,"from="+repeatBefore.x.toFixed(2)+","+repeatBefore.z.toFixed(2)+" onceCd="+once.cd.toFixed(2));
-        softLock=sl0; dead=dead0; riding=ride0; player.flying=fly0; grappleTarget=gt0; player.onGround=og0; document.getElementById("overlay").style.display=ov0; restoreB();
+        softLock=sl0; locked=locked0; dead=dead0; riding=ride0; player.flying=fly0; grappleTarget=gt0; player.onGround=og0; document.getElementById("overlay").style.display=ov0; restoreB();
         const sv=collectSave();
         ok("沙步不改变世界存档结构", !Object.prototype.hasOwnProperty.call(sv,"sandStep"),
            "sandStep="+("sandStep" in sv));
