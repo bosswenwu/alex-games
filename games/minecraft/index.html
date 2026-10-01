@@ -342,6 +342,9 @@
   #btnDodge.is-cooldown { opacity:.74; }
   #btnDodge.is-active { background:rgba(241,176,73,.58); border-color:rgba(255,226,162,.86); }
   #btnDodge.is-success { background:rgba(109,190,125,.64); border-color:rgba(190,255,198,.9); }
+  #btnDodge.is-counter { background:linear-gradient(145deg,rgba(255,207,91,.86),rgba(221,126,39,.78)); border-color:#fff0ad; color:#fff8d8;
+                         box-shadow:0 0 0 2px rgba(255,208,93,.34),0 0 16px rgba(255,164,48,.5); }
+  #btnDodge.is-riposte { background:rgba(255,225,127,.72); border-color:#fff4bd; color:#fff9df; }
   #btnSlotL { left:26px; bottom:176px; width:52px; height:52px; font-size:20px; }
   #btnSlotR { left:120px; bottom:176px; width:52px; height:52px; font-size:20px; }
   #rotateHint { position:fixed; inset:0; z-index:60; display:none; align-items:center; justify-content:center;
@@ -4933,9 +4936,28 @@ const matTrans=(x,y,z)=>new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, x,y,z,1]);
 const player={x:8.5, y:60, z:8.5, vx:0, vy:0, vz:0, kbx:0, kbz:0, yaw:0, pitch:0.15,
               onGround:false, flying:false, sprint:false, sneak:false};
 const EYE=1.62, PW=0.3, PH=1.8;
-/* 第十五轮·玩家侧沙步：不写存档、不动敌人 AI；只在 foeStrike 入口规避明确的敌方攻击。 */
+/* 沙步是纯运行态；第十七轮在命中预警冲锋时授予一次精准反击。 */
 const SANDSTEP_DIST=3.2, SANDSTEP_WINDOW=0.35, SANDSTEP_CD=4.5;
-const sandStepState={cd:0, evadeT:0, dodged:false, lastDist:0, feedbackT:0};
+const SAND_RIPOSTE_WINDOW=2.0, SAND_RIPOSTE_RATE=0.35, SAND_RIPOSTE_CAP=3;
+const SCARAB_TELEGRAPH_T=0.52, SCARAB_LUNGE_T=0.38, SCARAB_RECOVER_T=0.58;
+const SCARAB_CHARGE_RANGE=8.5, SCARAB_CHARGE_HIT_R=1.55, SCARAB_CHARGE_DAMAGE=2;
+const SCARAB_CHARGE_TAG="scarab-charge";
+const sandStepState={cd:0, evadeT:0, dodged:false, lastDist:0, feedbackT:0,
+                     counterT:0, counterTarget:null, counterHitT:0};
+function clearSandRiposte(){ sandStepState.counterT=0; sandStepState.counterTarget=null; sandStepState.counterHitT=0; }
+function sandRiposteDamage(target,baseDamage){
+  if(sandStepState.counterT<=0 || sandStepState.counterTarget!==target) return {damage:baseDamage,bonus:0};
+  const bonus=Math.min(SAND_RIPOSTE_CAP,Math.max(0,Math.round(baseDamage*SAND_RIPOSTE_RATE)));
+  sandStepState.counterT=0; sandStepState.counterTarget=null; sandStepState.counterHitT=bonus>0?0.9:0;
+  if(bonus>0){
+    for(let i=0;i<7;i++){ const a=i/7*6.283;
+      particles.push({x:target.x+Math.cos(a)*0.48,y:target.y+0.45,z:target.z+Math.sin(a)*0.48,
+        vx:Math.cos(a)*1.2,vy:1.1+Math.random()*0.6,vz:Math.sin(a)*1.2,life:0.26,size:0.085,u:15*TS,v:0,l:1.7});
+    }
+  }
+  refreshSandStepButton();
+  return {damage:baseDamage+bonus,bonus};
+}
 function sandStepPanelOpen(){
   const ids=["craftPanel","enchPanel","potionPanel","chestPanel","furnacePanel","npcPanel","fullhelp","settingsPanel",
     "bazaar-panel","pottery-panel","mythic-panel","lamp-panel","sphinx-panel"];
@@ -4973,6 +4995,7 @@ function sandStep(dirX,dirZ,force){
   const [dx,dz]=sandStepDirection(dirX,dirZ), x0=player.x, z0=player.z;
   const landing=sandStepLanding(x0,player.y,z0,dx,dz);
   if(!landing){ if(!force) showName("💨 前方没有可落脚的沙步空间"); return false; }
+  clearSandRiposte();
   player.x=landing.x; player.z=landing.z;
   player.kbx+=dx*1.5; player.kbz+=dz*1.5;
   sandStepState.cd=SANDSTEP_CD; sandStepState.evadeT=SANDSTEP_WINDOW;
@@ -4991,10 +5014,16 @@ function tickSandStep(dt){
   sandStepState.cd=Math.max(0,sandStepState.cd-dt);
   sandStepState.evadeT=Math.max(0,sandStepState.evadeT-dt);
   sandStepState.feedbackT=Math.max(0,sandStepState.feedbackT-dt);
+  sandStepState.counterT=Math.max(0,sandStepState.counterT-dt);
+  sandStepState.counterHitT=Math.max(0,sandStepState.counterHitT-dt);
+  if(sandStepState.counterT<=0 || (sandStepState.counterTarget && !mobs.includes(sandStepState.counterTarget))) sandStepState.counterTarget=null;
+  if(sandStepState.counterTarget===null) sandStepState.counterT=0;
   if(sandStepState.evadeT<=0) sandStepState.dodged=false;
   refreshSandStepButton();
 }
 function sandStepStatusLabel(){
+  if(sandStepState.counterT>0) return "反击机会 · "+sandStepState.counterT.toFixed(1)+"s";
+  if(sandStepState.counterHitT>0) return "反击命中";
   if(sandStepState.feedbackT>0) return "闪避成功";
   if(sandStepState.evadeT>0) return "闪避中";
   if(sandStepState.cd>0) return sandStepState.cd.toFixed(1)+"s";
@@ -5002,8 +5031,8 @@ function sandStepStatusLabel(){
 }
 function refreshSandStepButton(){
   const btn=document.getElementById("btnDodge"); if(!btn) return;
-  const phase=sandStepState.feedbackT>0?"success":sandStepState.evadeT>0?"active":sandStepState.cd>0?"cooldown":"ready";
-  const text=phase==="success"?"闪避\n成功":phase==="active"?"闪避中":phase==="cooldown"?"沙步\n"+sandStepState.cd.toFixed(1)+"s":"C\n沙步";
+  const phase=sandStepState.counterT>0?"counter":sandStepState.counterHitT>0?"riposte":sandStepState.feedbackT>0?"success":sandStepState.evadeT>0?"active":sandStepState.cd>0?"cooldown":"ready";
+  const text=phase==="counter"?"反击\n"+sandStepState.counterT.toFixed(1)+"s":phase==="riposte"?"反击\n命中":phase==="success"?"闪避\n成功":phase==="active"?"闪避中":phase==="cooldown"?"沙步\n"+sandStepState.cd.toFixed(1)+"s":"C\n沙步";
   const state=phase+":"+text;
   if(btn.dataset.stepState===state) return;
   btn.dataset.stepState=state; btn.textContent=text;
@@ -5012,6 +5041,8 @@ function refreshSandStepButton(){
   btn.classList.toggle("is-cooldown",phase==="cooldown");
   btn.classList.toggle("is-active",phase==="active");
   btn.classList.toggle("is-success",phase==="success");
+  btn.classList.toggle("is-counter",phase==="counter");
+  btn.classList.toggle("is-riposte",phase==="riposte");
 }
 function lookDir(){
   const cp=Math.cos(player.pitch), sp=Math.sin(player.pitch);
@@ -6394,7 +6425,7 @@ function updateStatsHUD(){
   const tod = sunH<0.02 ? "🌙夜" : "☀昼";
   const bio=BIOME_NAME[biomeAt(Math.floor(player.x),Math.floor(player.z))];
   const marks=landTypesSeen().size;
-  const sandStepColor=sandStepState.feedbackT>0?"#fff0a5":sandStepState.cd>0?"#e8d6b6":"#a9e6b0";
+  const sandStepColor=sandStepState.counterT>0?"#ffd16c":sandStepState.counterHitT>0||sandStepState.feedbackT>0?"#fff0a5":sandStepState.cd>0?"#e8d6b6":"#a9e6b0";
   st.innerHTML = `第 <b>${dayCount}</b> 天 ${tod} ${weatherName()}<br><span style="color:#a8e6a0">🌍 ${bio}</span>`
                + `<br><span class="kills">☠ 击杀 ${kills}</span>`
                + `<br><span style="color:#ffe0a0">📍 地标 ${marks}/${PAYOFF_N}</span>`
@@ -6428,6 +6459,7 @@ function damagePlayer(d,kx,kz){
 function doDie(){
   dead=true; softLock=false;
   sandStepState.feedbackT=0;
+  clearSandRiposte();
   grappleTarget=null;                             // 死亡时清掉钩爪状态, 避免复活后诡异位移
   for(const k in keys) keys[k]=false;
   document.getElementById("title").textContent="你死了！";
@@ -6441,6 +6473,7 @@ function doDie(){
 function respawn(){
   dead=false; hp=maxHp; updateHearts();
   sandStepState.feedbackT=0;
+  clearSandRiposte();
   killStreak=0; killStreakT=0;                     // 死亡清空连杀
   poisonT=0; poisonTickT=0;                        // 死亡清除中毒
   { const pt=document.getElementById("poisontint"); if(pt) pt.style.opacity=0; }
@@ -6872,6 +6905,7 @@ saveNowBtn.addEventListener("click",()=>{
 function pauseGame(){
   softLock=false;
   sandStepState.feedbackT=0;
+  clearSandRiposte();
   for(const k in keys) keys[k]=false;
   mouseHeld=-1; dragLook=false;
   document.getElementById("title").textContent="游戏暂停";
@@ -7022,6 +7056,7 @@ newworldbtn.addEventListener("click",()=>{
   deleteSave();
   SEED=(Date.now()%1000000);
   sandStepState.feedbackT=0;
+  clearSandRiposte();
   _hCache.clear(); _bioCache.clear(); blockDiff.clear();
   for(const [,c] of world) if(c.mesh) destroyMesh(c.mesh);
   world.clear(); meshQueue.length=0; queued.clear();
@@ -7134,7 +7169,8 @@ function doBreak(){
     const mightMul=(blessKind==="might"&&blessT>0)?1.35:1;   // 战意祝福: 近战增伤
     const omenMul=(typeof omenMeleeMul==="function")?omenMeleeMul():1;   // 连锁: 马尔斯天象 → 近战更狠
     const d=Math.hypot(rm.m.x-player.x, rm.m.z-player.z)||1e-6;
-    const sun=isSword&&sunblade, eMul=enchMeleeMul(held)*gearPowerMul(held), hitDmg=Math.round((sun?16:isSword?12:5)*dmgMul*mightMul*omenMul*eMul);
+    const sun=isSword&&sunblade, eMul=enchMeleeMul(held)*gearPowerMul(held), baseHitDmg=Math.round((sun?16:isSword?12:5)*dmgMul*mightMul*omenMul*eMul);
+    const hitDmg=sandRiposteDamage(rm.m,baseHitDmg).damage;
     hurtMob(rm.m, hitDmg, (rm.m.x-player.x)/d*(isSword?10:8), (rm.m.z-player.z)/d*(isSword?10:8));
     enchOnHit(rm.m, hitDmg, held);
     if(sun) sunbladeHit(rm.m, dir, dmgMul*mightMul*omenMul*eMul);
@@ -8038,6 +8074,7 @@ function drawEntity(ent){
   if(ent.hurtT>0)       gl.uniform3f(U.uTint,1.7,0.35,0.35);
   else if(ent.fuse>0){  const f=0.5+0.5*Math.sin(ent.fuse*ent.fuse*22); gl.uniform3f(U.uTint,1+f*1.4,1+f*0.4,1+f*0.4); } // 苦力怕闪白
   else if(ent.burning)  gl.uniform3f(U.uTint,1.5,0.75,0.4);
+  else if(ent.type==="scarab" && ent.chargeState==="telegraph") gl.uniform3f(U.uTint,1.9,1.28,0.5); // 圣甲虫蓄力: 暖金高亮
   else if(ent.elite)    gl.uniform3f(U.uTint,1.5,1.22,0.55);   // 精英怪: 金光加身, 一眼可辨
   else if(ent.def.fly)  gl.uniform3f(U.uTint,1.1,1.0,0.9);     // 飞龙暖色
   else if(ent.def.boss) gl.uniform3f(U.uTint,1.15,0.9,1.15);   // 僵尸王偏紫,更威慑
@@ -8360,6 +8397,61 @@ function mobPlasma(m){                 // 机甲: 三连发等离子弹
   };
   shot();
 }
+function emitScarabTelegraph(m){
+  for(let i=0;i<8;i++){ const a=i/8*6.283, r=0.86;
+    particles.push({x:m.x+Math.cos(a)*r,y:m.y+0.22,z:m.z+Math.sin(a)*r,
+      vx:Math.cos(a)*0.18,vy:2.2,vz:Math.sin(a)*0.18,life:0.36,size:0.15,u:15*TS,v:0,l:2.05});
+  }
+}
+function scarabTargetInChargeLane(m){
+  const dx=player.x-m.x, dz=player.z-m.z, fx=Math.sin(m.chargeYaw), fz=-Math.cos(m.chargeYaw);
+  const along=dx*fx+dz*fz, across=Math.abs(dx*fz-dz*fx);
+  return along>=-0.28 && along<=SCARAB_CHARGE_HIT_R && across<=0.92 && player.y>m.y-1.3 && player.y<m.y+2.0;
+}
+function updateScarabCharge(m,dt,dx,dz,dist,speed,targetVisible){
+  if(m.chargeCd==null) m.chargeCd=Math.random()*1.4;
+  m.chargeCd=Math.max(0,m.chargeCd-dt);
+  const phase=m.chargeState||"idle";
+  if(phase==="telegraph"){
+    const aimYaw=Math.atan2(dx,-dz), turn=Math.atan2(Math.sin(aimYaw-m.chargeYaw),Math.cos(aimYaw-m.chargeYaw));
+    if(m.hurtT>0.12 || !targetVisible || dist>SCARAB_CHARGE_RANGE+1.2 || Math.abs(turn)>0.95){
+      m.chargeState="recover"; m.chargeRecoverT=0.28; m.charge=0; return m.def.speed*0.12;
+    }
+    m.tgtYaw=m.chargeYaw;
+    m.chargeWarnT-=dt; m.chargeFxT-=dt;
+    if(m.chargeFxT<=0){ emitScarabTelegraph(m); m.chargeFxT=0.14; }
+    if(m.chargeWarnT<=0){
+      m.chargeState="lunge"; m.charge=SCARAB_LUNGE_T; m.chargeHit=false; m.swingT=0.3;
+      if(m.onGround) m.vy=Math.max(m.vy,2.5);
+    }
+    return m.chargeState==="lunge"?m.def.speed*2.45:0;
+  }
+  if(phase==="lunge"){
+    m.tgtYaw=m.chargeYaw;
+    if(!m.chargeHit && targetVisible && scarabTargetInChargeLane(m)){
+      m.chargeHit=true; m.swingT=0.3;
+      const n=dist||1;
+      foeStrike(SCARAB_CHARGE_DAMAGE,dx/n*7,dz/n*7,m,SCARAB_CHARGE_TAG);
+    }
+    m.charge=Math.max(0,(m.charge||0)-dt);
+    if(m.charge<=0){ m.chargeState="recover"; m.chargeRecoverT=SCARAB_RECOVER_T; }
+    return m.chargeState==="lunge"?m.def.speed*2.45:m.def.speed*0.12;
+  }
+  if(phase==="recover"){
+    m.tgtYaw=m.chargeYaw;
+    m.chargeRecoverT=(m.chargeRecoverT||0)-dt;
+    if(m.chargeRecoverT<=0){ m.chargeState="idle"; m.chargeCd=1.2+Math.random()*1.2; }
+    return m.def.speed*0.12;
+  }
+  if(speed>0 && m.chargeCd<=0 && dist>1.3 && dist<SCARAB_CHARGE_RANGE && targetVisible){
+    m.chargeState="telegraph"; m.chargeWarnT=SCARAB_TELEGRAPH_T; m.chargeYaw=Math.atan2(dx,-dz);
+    m.chargeFxT=0; m.chargeHit=false;
+    m.chargeCd=SCARAB_TELEGRAPH_T+SCARAB_LUNGE_T+SCARAB_RECOVER_T+1.2;
+    m.tgtYaw=m.chargeYaw; m.swingT=0.3;
+    return 0;
+  }
+  return speed;
+}
 function updateMobs(dt){
   const pendingBoom=[];
   for(let i=mobs.length-1;i>=0;i--){
@@ -8443,6 +8535,8 @@ function updateMobs(dt){
             m.atkCd=1.5; m.swingT=0.3;
             foeStrike(5, dx/dist*9, dz/dist*9, m);
           }
+        } else if(m.type==="scarab"){
+          speed=D.speed;                              // 圣甲虫只用带预警的冲锋，避免提示期内偷咬
         } else if(m.type==="sandworm"){            // 沙虫: 钻沙潜行逼近 → 破沙而出爆发
           m.erupt=(m.erupt||0)-dt;
           m.burrowed = !(m.erupt>0);               // 出土(erupt>0)时露头可被攻击, 其余时间埋在沙里
@@ -8511,12 +8605,14 @@ function updateMobs(dt){
         if(!m.pause) speed=D.speed*0.5;
       }
     }
-    // 圣甲虫: 一冲一冲地突进扑击(而非匀速追), 让甲虫群像乱窜的虫潮 —— 丰富敌人行为
-    if(m.type==="scarab" && speed>0){
-      const cd=Math.hypot(player.x-m.x, player.z-m.z);
-      m.chargeCd=(m.chargeCd==null?Math.random()*1.4:m.chargeCd)-dt;
-      if((m.charge||0)>0){ m.charge-=dt; speed=D.speed*2.4; }                                   // 突进冲刺
-      else if(m.chargeCd<=0 && cd>1.3 && cd<11){ m.chargeCd=1.2+Math.random()*1.2; m.charge=0.33; if(m.onGround) m.vy=Math.max(m.vy,3.0); } // 起跳扑击
+    // 圣甲虫: 先锁定方向并扬起琥珀沙环，再沿固定线路冲锋；命中后有短暂收招。
+    if(m.type==="scarab"){
+      if(m.chargeCd==null) m.chargeCd=Math.random()*1.4;
+      const phase=m.chargeState||"idle";
+      const wantsSight=phase==="telegraph" || (phase==="lunge"&&!m.chargeHit&&dist<SCARAB_CHARGE_HIT_R+1) ||
+        (phase==="idle"&&speed>0&&m.chargeCd<=dt&&dist>1.3&&dist<SCARAB_CHARGE_RANGE);
+      const visible=!wantsSight || mobCanSeePlayer(m);
+      speed=updateScarabCharge(m,dt,dx,dz,dist,speed,visible);
     }
     // 平滑转向 + 移动
     let dyaw=m.tgtYaw-m.yaw;
@@ -8739,10 +8835,14 @@ function nightSpawnFor(bio, r){
 }
 /* 敌人攻击统一走这里以吃难度加成; 环境/陷阱/摔落伤害仍直接走 damagePlayer, 不随天数膨胀。
    传入攻击者 m 时, 精英怪额外 +50% 伤害。 */
-function foeStrike(dmg,kx,kz,m){
+function foeStrike(dmg,kx,kz,m,attackTag){
   // 沙步只躲经由敌方攻击入口的伤害；坠落、陷阱、毒、岩浆等仍直接走 damagePlayer。
   if(sandStepState.evadeT>0){
     if(!sandStepState.dodged){ sandStepState.dodged=true; sandStepState.feedbackT=1.0; refreshSandStepButton(); }
+    if(attackTag===SCARAB_CHARGE_TAG && m && m.type==="scarab" && !sandStepState.counterTarget){
+      sandStepState.counterT=SAND_RIPOSTE_WINDOW; sandStepState.counterTarget=m; sandStepState.counterHitT=0;
+      refreshSandStepButton();
+    }
     return false;
   }
   const em=(m&&m.elite)?1.5:1;
@@ -9258,7 +9358,7 @@ function setMace(on){
 }
 function maceFall(){ return (fallStart!==null && !player.onGround) ? Math.max(0,fallStart-player.y) : 0; }
 function maceStrike(m,dir,mul,fall){                   // doBreak 里瞄到生物后调用; 返回 {dmg, smash, aoe}
-  const dmg=Math.round(maceDamage(fall)*mul), smash=fall>=MACE_SMASH_MIN;
+  const baseDmg=Math.round(maceDamage(fall)*mul), dmg=sandRiposteDamage(m,baseDmg).damage, smash=fall>=MACE_SMASH_MIN;
   const d=Math.hypot(m.x-player.x,m.z-player.z)||1e-6;
   hurtMob(m, dmg, (m.x-player.x)/d*(smash?14:9), (m.z-player.z)/d*(smash?14:9));
   let aoe=0;
@@ -9269,7 +9369,7 @@ function maceStrike(m,dir,mul,fall){                   // doBreak 里瞄到生�
       const dx=o.x-m.x, dz=o.z-m.z, dd=Math.hypot(dx,dz);
       if(dd>MACE_AOE_R || Math.abs(o.y-m.y)>2.5) continue;
       const k=dd>1e-3?1/dd:0;
-      hurtMob(o, Math.round(dmg*0.4), dx*k*16, dz*k*16, true); o.vy=Math.max(o.vy,7);
+      hurtMob(o, Math.round(baseDmg*0.4), dx*k*16, dz*k*16, true); o.vy=Math.max(o.vy,7);
       aoe++;
     }
     for(let i=0;i<36;i++){ const a=i/36*6.283, r=0.6+Math.random()*MACE_AOE_R;   // 沙浪: 以目标为圆心向外扬尘
@@ -13458,7 +13558,9 @@ window.__game = {
   get streak(){ return { cur:killStreak, best:bestStreak, elites:elitesSlain }; },
   get cores(){ return cores; }, get armor(){ return armor; },
   get poison(){ return +poisonT.toFixed(2); },
-  get sandStep(){ return {cd:+sandStepState.cd.toFixed(2), evade:+sandStepState.evadeT.toFixed(2), feedback:+sandStepState.feedbackT.toFixed(2), status:sandStepStatusLabel(), ready:sandStepState.cd<=0, distance:+sandStepState.lastDist.toFixed(2)}; },
+  get sandStep(){ return {cd:+sandStepState.cd.toFixed(2), evade:+sandStepState.evadeT.toFixed(2), feedback:+sandStepState.feedbackT.toFixed(2),
+    counter:+sandStepState.counterT.toFixed(2), counterTarget:sandStepState.counterTarget&&sandStepState.counterTarget.type||null,
+    counterHit:+sandStepState.counterHitT.toFixed(2), status:sandStepStatusLabel(), ready:sandStepState.cd<=0, distance:+sandStepState.lastDist.toFixed(2)}; },
   useSandStep:(x,z)=>sandStep(x,z),
   get bounty(){ const b=curBounty(); return { id:b.id, desc:b.desc, prog:bountyProg, goal:b.goal, done:bountyDone }; },
   get bossBar(){ return bossBarState(); },
@@ -14445,7 +14547,8 @@ function selftest(){
     // ---- 第十五轮·玩家侧沙步：短位移 + 仅 foeStrike 闪避窗 ----
     {
       const P0={x:player.x,y:player.y,z:player.z,onGround:player.onGround,vx:player.vx,vz:player.vz,kbx:player.kbx,kbz:player.kbz};
-      const S0={cd:sandStepState.cd,evadeT:sandStepState.evadeT,dodged:sandStepState.dodged,lastDist:sandStepState.lastDist,feedbackT:sandStepState.feedbackT};
+      const S0={cd:sandStepState.cd,evadeT:sandStepState.evadeT,dodged:sandStepState.dodged,lastDist:sandStepState.lastDist,feedbackT:sandStepState.feedbackT,
+        counterT:sandStepState.counterT,counterTarget:sandStepState.counterTarget,counterHitT:sandStepState.counterHitT};
       const H0={hp,maxHp,armor,blessT,particles:particles.length};
       try{
         // 在已生成区域中找一个脚底/头顶/前方都空的确定性测试位；不改世界或存档。
@@ -14459,7 +14562,7 @@ function selftest(){
           }
         }
         if(spot){ player.x=spot.x; player.y=spot.y; player.z=spot.z; player.onGround=true; }
-        sandStepState.cd=0; sandStepState.evadeT=0; sandStepState.dodged=false; sandStepState.feedbackT=0;
+        sandStepState.cd=0; sandStepState.evadeT=0; sandStepState.dodged=false; sandStepState.feedbackT=0; clearSandRiposte();
         const used=!!spot && sandStep(spot.dx,spot.dz,true);
         const moved=Math.hypot(player.x-(spot?spot.x:P0.x),player.z-(spot?spot.z:P0.z));
         ok("沙步: 短位移成功并开启0.35秒敌击规避窗", used && moved>=1.8 && sandStepState.evadeT>0.3 && sandStepState.cd>=4.49,
@@ -14480,7 +14583,7 @@ function selftest(){
         // 第十六轮·沙步 v1.1：边界补测。临时方块和现场均在 finally/本地恢复。
         const B0=new Map(), touch=(x,y,z,id)=>{ const k=x+","+y+","+z; if(!B0.has(k)) B0.set(k,getBlock(x,y,z)); setBlock(x,y,z,id); };
         const restoreB=()=>{ for(const [k,id] of B0){ const [x,y,z]=k.split(",").map(Number); setBlock(x,y,z,id); } B0.clear(); };
-        const resetStep=()=>{ sandStepState.cd=0; sandStepState.evadeT=0; sandStepState.dodged=false; sandStepState.feedbackT=0; player.x=spot?spot.x:P0.x; player.y=spot?spot.y:P0.y; player.z=spot?spot.z:P0.z; player.onGround=true; };
+        const resetStep=()=>{ sandStepState.cd=0; sandStepState.evadeT=0; sandStepState.dodged=false; sandStepState.feedbackT=0; clearSandRiposte(); player.x=spot?spot.x:P0.x; player.y=spot?spot.y:P0.y; player.z=spot?spot.z:P0.z; player.onGround=true; };
         let wallOK=false, noFootOK=false;
         if(spot){
           resetStep();
@@ -15783,17 +15886,68 @@ function selftest(){
 
     // ---- 敌人行为差异化: 圣甲虫突进扑击 ----
     {
-      const hpS=hp,mS=maxHp,pS=poisonT, mlen=mobs.length, px=player.x,py=player.y,pz=player.z;
+      const hpS=hp,mS=maxHp,pS=poisonT, mlen=mobs.length, plen=particles.length, px=player.x,py=player.y,pz=player.z;
       try{
         maxHp=999; hp=999; poisonT=0;
         const sc={type:"scarab",def:MOB_DEFS.scarab,x:player.x+5,y:player.y,z:player.z,vx:0,vy:0,vz:0,kbx:0,kbz:0,
-          yaw:0,tgtYaw:0,hp:MOB_DEFS.scarab.hp,hurtT:0,animT:0,t:0,atkCd:0,burnT:0,swingT:0,groanT:0,fleeT:0,onGround:true,pause:false,burning:false,held:null};
+          yaw:0,tgtYaw:0,hp:MOB_DEFS.scarab.hp,hurtT:0,animT:0,t:0,atkCd:0,burnT:0,swingT:0,groanT:0,fleeT:0,onGround:true,pause:false,burning:false,held:null,chargeCd:0,chargeState:"idle"};
         mobs.length=0; mobs.push(sc);
+        const dx=player.x-sc.x,dz=player.z-sc.z,dist=Math.hypot(dx,dz),hp0=hp;
+        let speed=updateScarabCharge(sc,0.05,dx,dz,dist,MOB_DEFS.scarab.speed,true);
+        const sawTell=sc.chargeState==="telegraph"&&speed===0;
         let sawCharge=false;
-        for(let f=0; f<40 && !sawCharge; f++){ updateMobs(0.05); if((sc.charge||0)>0) sawCharge=true; }
-        ok("圣甲虫会突进扑击(charge)", sawCharge, "曾突进="+sawCharge);
+        for(let f=0;f<16&&!sawCharge;f++){
+          speed=updateScarabCharge(sc,0.05,dx,dz,dist,speed,true);
+          if(sc.chargeState==="lunge"&&sc.charge>0) sawCharge=true;
+        }
+        const tellFx=particles.length>=plen+8&&particles.slice(plen,plen+8).every(p=>p.u===15*TS&&p.l>=2&&p.size>=0.14);
+        ok("圣甲虫: 蓄力会生成高亮浮空预警粒子环",tellFx,"粒子数="+(particles.length-plen));
+        ok("圣甲虫: 先预警再锁向冲锋，预警阶段无伤害",sawTell&&sawCharge&&hp===hp0,
+           "预警="+sawTell+" 冲锋="+sawCharge+" 预警掉血="+(hp0-hp));
       } finally {
-        mobs.length=mlen; hp=hpS; maxHp=mS; poisonT=pS; player.x=px; player.y=py; player.z=pz; updateHearts();
+        mobs.length=mlen; particles.length=plen; hp=hpS; maxHp=mS; poisonT=pS; player.x=px; player.y=py; player.z=pz; updateHearts();
+      }
+    }
+
+    // 第十七轮·精准反击: 只由被沙步规避的圣甲虫标记冲锋授予，下一次同目标近战消费。
+    {
+      const hpS=hp,mS=maxHp,aS=armor,pS=poisonT,deadS=dead,mlen=mobs.length,plen=particles.length;
+      const S0=Object.assign({},sandStepState), P0={x:player.x,y:player.y,z:player.z,vx:player.vx,vy:player.vy,vz:player.vz,kbx:player.kbx,kbz:player.kbz}, hurt0=playerEnt.hurtT;
+      try{
+        maxHp=999; hp=999; armor=0; poisonT=0; dead=false;
+        const sc={type:"scarab",def:MOB_DEFS.scarab,x:player.x+1,y:player.y,z:player.z,vx:0,vy:0,vz:0,kbx:0,kbz:0,
+          yaw:0,tgtYaw:0,hp:100,hurtT:0,animT:0,t:0,atkCd:0,burnT:0,swingT:0,groanT:0,fleeT:0,onGround:true,pause:false,burning:false,held:null,
+          chargeCd:2,chargeState:"lunge",charge:SCARAB_LUNGE_T,chargeHit:false,chargeYaw:Math.atan2(-1,0)};
+        const other={type:"scarab",def:MOB_DEFS.scarab,x:player.x+2,y:player.y,z:player.z,hp:100,hurtT:0,kbx:0,kbz:0};
+        mobs.push(sc,other); clearSandRiposte(); sandStepState.evadeT=0.25; sandStepState.dodged=false;
+        const ordinaryBlocked=foeStrike(2,0,0,sc)===false&&sandStepState.counterT===0;
+        sandStepState.dodged=false;
+        const hp0=hp, dx=player.x-sc.x,dz=player.z-sc.z;
+        updateScarabCharge(sc,0.05,dx,dz,Math.hypot(dx,dz),MOB_DEFS.scarab.speed,true);
+        const taggedDodge=hp===hp0&&sc.chargeHit&&sandStepState.counterTarget===sc&&sandStepState.counterT===SAND_RIPOSTE_WINDOW;
+        updateStatsHUD();
+        const visible=document.getElementById("stats").innerHTML.includes("反击机会")&&document.getElementById("btnDodge").textContent.includes("反击");
+        ok("精准闪避: 仅标记冲锋可授予同目标反击，HUD/触屏同步提示",ordinaryBlocked&&taggedDodge&&visible,
+           "普通敌击无资格="+ordinaryBlocked+" 冲锋反击="+taggedDodge+" UI="+visible);
+        const wrong=sandRiposteDamage(other,5), wrongTarget=wrong.damage===5&&sandStepState.counterTarget===sc;
+        const right=sandRiposteDamage(sc,5), sameTarget=right.damage===7&&right.bonus===2&&sandStepState.counterT===0&&sandStepState.counterHitT>0;
+        ok("反击只强化同一目标一次(+35%，上取整)并立即消费",wrongTarget&&sameTarget,
+           "错目标="+wrong.damage+" 同目标="+right.damage+"(+"+right.bonus+")");
+        sandStepState.counterT=1; sandStepState.counterTarget=sc;
+        const capped=sandRiposteDamage(sc,50);
+        ok("精准反击奖励封顶+3",capped.damage===53&&capped.bonus===3,"高伤害="+capped.damage+" 奖励="+capped.bonus);
+        sandStepState.counterT=1; sandStepState.counterTarget=sc; mobs.splice(mobs.indexOf(sc),1); tickSandStep(0.05);
+        ok("反击窗口在超时或目标离场后失效",sandStepState.counterT===0&&sandStepState.counterTarget===null,
+           "timer="+sandStepState.counterT+" target="+(sandStepState.counterTarget===null));
+        mobs.push(sc); sandStepState.evadeT=0.25; sandStepState.counterT=1; sandStepState.counterTarget=sc;
+        hp=999; damagePlayer(1,0,0);
+        const envStillHurts=hp<999&&sandStepState.counterT===1&&sandStepState.counterTarget===sc;
+        const saved=collectSave(), runtimeOnly=!Object.keys(saved).some(k=>/sandStep|riposte|counter|scarabCharge/i.test(k));
+        ok("反击不规避环境伤害且不增加存档字段",envStillHurts&&runtimeOnly,"环境扣血="+(999-hp)+" runtimeOnly="+runtimeOnly);
+      } finally {
+        mobs.length=mlen; Object.assign(sandStepState,S0); Object.assign(player,P0); playerEnt.hurtT=hurt0;
+        hp=hpS; maxHp=mS; armor=aS; poisonT=pS; dead=deadS; particles.length=plen;
+        updateHearts(); refreshSandStepButton(); updateStatsHUD();
       }
     }
 

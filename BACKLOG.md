@@ -542,3 +542,14 @@
 - **验证**：默认世界与固定种子 `?seed=424242` 的完整 Chromium selftest 均为 **356/356**；固定种子 844×390 横屏真实触摸事件触发约 3.33 格移动，按钮显示“闪避中”、位于视口内且避开教程卡；冷却期再次按下不移动（0 格）且无冷却 toast。1280×720 桌面冒烟显示 HUD 状态行、未启用触屏层；目视检查两种截图，`git diff --check` 通过。此为浏览器模拟触摸，不等同真机手感测试。
 - **协作/发布**：代码分支 `work/sandsea-sandstep-feedback-20260929`；PR 链接与最终审阅状态以 Issue #11 最新留言为准。
 - **协作/发布**：代码分支 `work/sandsea-sandstep-feedback-20260929`；PR 链接与最终审阅状态以 Issue #11 最新留言为准。
+
+
+## Manus 进度（2026-09-30：第十七轮·圣甲虫预警与精准反击）
+
+- **范围**：仅 `games/minecraft/index.html`。圣甲虫状态机、预警视觉、标记冲锋攻击、沙步反击状态及确定性测试；无新增快捷键、方块、依赖、存档字段或其他敌人 AI。
+- **状态机/锚点**：`updateScarabCharge()` 管理 `idle → telegraph → lunge → recover`；`emitScarabTelegraph()` 产生 8 个亮色浮空粒子，`drawEntity()` 在 `chargeState==="telegraph"` 时暖金高亮。伤害继续经 `foeStrike()`，标记常量 `SCARAB_CHARGE_TAG` 仅在沙步闪避窗成功规避时授予机会。
+- **反击规则/锚点**：`sandStepState.counterT/counterTarget/counterHitT` 为纯运行态；`sandRiposteDamage()` 绑定同一目标一次消费，约 +35%、最多 +3，近战单体主目标接入 `doBreak()` / `maceStrike()`，AOE 保持基础结算。清理入口覆盖计时/目标离场及暂停、死亡、重生、新世界。
+- **确定性回归**：默认种子及 `?seed=424242` 完整 selftest 各 **362/362 PASS**；覆盖预警粒子、先预警后冲锋、精准闪避资格、普通敌击无资格、错目标不消费、同目标一次消费、+3 封顶、超时/离场失效、环境伤害仍生效、存档 schema 不变。`git diff --check` 通过。
+- **视觉验证**：无头 Chromium / SwiftShader 下目视检查 1280×720 桌面预警、844×390 横屏反击按钮/HUD、390×844 竖屏旋转提示。横屏 60×60 沙步按钮位于任务卡右侧、在视口内；自动布景脚本捕获到 0 个 `window` error/unhandled rejection。截图不代表真人操作时机、真机触控或低端 GPU 表现。
+- **接手建议/限制**：该分支尚未合并；合并前真人确认约 0.52 秒预警、冲锋距离/命中线与 2 秒反击窗口手感。之后由 Issue #11 认领 P1：低/中/高画质粒子与帧耗、参数平衡；未认领前不要并行改敌人 AI。
+- **分支/PR**：`work/sandsea-scarab-telegraph-riposte-20260929`；[PR #51](https://github.com/bosswenwu/alex-games/pull/51) 等待审阅，未合并。Issue #11 留言同步本轮测试和下阶段建议。
