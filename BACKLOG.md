@@ -561,3 +561,4 @@
 - **真人点测待做**：[PR #51 合并后验收清单](docs/SANDSEA-PR51-POSTMERGE-ACCEPTANCE-2026-09-30.md) 已列 A1–A7 的近战/时机/真触屏/旧档场景、记录表及 P0/P1/P2 处置。无真人/真机验证，不回填“人工通过”；如出现问题从新 `main` 开修复 PR。
 - **P1 预备工具**：[性能与设备监控方案](docs/SANDSEA-P1-PERFORMANCE-BASELINE-2026-09-30.md) 与 `tools/sandsea-perf/` 包含可复现 SwiftShader 场景采样、真实设备被动监控、3 次样本同设备对比和 6 个模拟夹具单元测试。**仅工具/文档，不改游戏源码**；SwiftShader 只能冒烟/回归，真实设备性能与触控感仍待测。默认和固定种子 selftest 均 362/362；短时脚本 smoke 与设备监控器页面接口通过；短采样 `--compare` 返回 `NOT_COMPARABLE`，没有伪造正式 10s/30s×3 基线。
 - **协作边界**：本轮工具准备已在 Issue #11 单独声明；下一位 AI 若调整圣甲虫粒子或战斗数值，必须先读本清单和 Issue #11 最新认领，采集参考真机 before/after，仅修复复现问题。P2/P3/P4/P5 不随 P1 监控工具一并开工。
+- **发布**：[PR #52](https://github.com/bosswenwu/alex-games/pull/52) 已创建、**等待审阅且未合并**；分支 `work/sandsea-p1-perf-tooling-20260930`，只含 P1 工具与文档，不包含 P1 战斗参数改动。Issue #11 以实际 PR 链接交接。
