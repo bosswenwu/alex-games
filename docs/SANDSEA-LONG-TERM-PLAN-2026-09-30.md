@@ -16,7 +16,7 @@
 - **状态与兼容：**反击状态仅运行时；超时、目标离场、暂停、死亡、重生或新世界时清理；不改变存档 schema。
 - **回归结果：**完整 `node tools/headless.mjs selftest` 默认世界 **362/362 PASS**；固定种子 `?seed=424242` **362/362 PASS**。`git diff --check` 通过。
 - **视觉结果：**无头 Chromium / SwiftShader 截图并目视检查 1280×720 桌面预警、844×390 横屏触屏反击、390×844 竖屏旋转提示；脚本布景运行未报告窗口错误。截图模拟状态，不代表真人闪避时机或真机触控验证。
-- **交付状态：**当前分支为 `work/sandsea-scarab-telegraph-riposte-20260929`；本文件随该切片进入 PR。合并前仍需真人在桌面/触屏点测节奏与低端 GPU 帧耗。
+- **交付状态：**分支 `work/sandsea-scarab-telegraph-riposte-20260929` 的 [PR #51](https://github.com/bosswenwu/alex-games/pull/51) 等待审阅，尚未合并。合并前仍需真人在桌面/触屏点测节奏与低端 GPU 帧耗。
 
 ## 后续路线（每阶段另行认领、规格、测试和交付）
 

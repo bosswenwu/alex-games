@@ -552,4 +552,4 @@
 - **确定性回归**：默认种子及 `?seed=424242` 完整 selftest 各 **362/362 PASS**；覆盖预警粒子、先预警后冲锋、精准闪避资格、普通敌击无资格、错目标不消费、同目标一次消费、+3 封顶、超时/离场失效、环境伤害仍生效、存档 schema 不变。`git diff --check` 通过。
 - **视觉验证**：无头 Chromium / SwiftShader 下目视检查 1280×720 桌面预警、844×390 横屏反击按钮/HUD、390×844 竖屏旋转提示。横屏 60×60 沙步按钮位于任务卡右侧、在视口内；自动布景脚本捕获到 0 个 `window` error/unhandled rejection。截图不代表真人操作时机、真机触控或低端 GPU 表现。
 - **接手建议/限制**：该分支尚未合并；合并前真人确认约 0.52 秒预警、冲锋距离/命中线与 2 秒反击窗口手感。之后由 Issue #11 认领 P1：低/中/高画质粒子与帧耗、参数平衡；未认领前不要并行改敌人 AI。
-- **分支**：`work/sandsea-scarab-telegraph-riposte-20260929`；PR/Issue #11 最新交接链接待发布后补入。
+- **分支/PR**：`work/sandsea-scarab-telegraph-riposte-20260929`；[PR #51](https://github.com/bosswenwu/alex-games/pull/51) 等待审阅，未合并。Issue #11 留言同步本轮测试和下阶段建议。
