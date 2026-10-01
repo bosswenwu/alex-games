@@ -1,6 +1,6 @@
 # 沙海奇境第十八轮提案：P1 低端 GPU 实测与监控可信度
 
-> 状态：**工具切片已在独立分支实现并测试；真实低端 GPU 数据尚未取得**。这是下一周期的执行规格，不是 P1 战斗参数调优已经通过的声明。取数之前先读 [Issue #11](https://github.com/bosswenwu/alex-games/issues/11) 最新认领和本文件记录的基线 SHA；不要复用过期分支事实。
+> 状态：[PR #54](https://github.com/bosswenwu/alex-games/pull/54) **已推送、开放待审且未合并**；工具切片已在独立分支实现并测试，真实低端 GPU 数据尚未取得。这是下一周期的执行规格，不是 P1 战斗参数调优已经通过的声明。取数之前先读 [Issue #11](https://github.com/bosswenwu/alex-games/issues/11) 最新认领和本文件记录的基线 SHA；不要复用过期分支事实。
 
 ## 1. 已核验事实与主分支健康（2026-09-30，美西时间）
 

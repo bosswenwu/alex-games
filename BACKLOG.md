@@ -576,3 +576,4 @@
 - **工具可信度**：`device-monitor.js` 的原连续慢帧算法按时间顺序计算，先前 Issue 认领中的“排序后累加”判断是误判，已在 Issue 公开勘误；不改正确算法。新增 3 组监控 VM 时序测试。`compare-device.mjs` 新增画布实际像素匹配与未知/软件 renderer 不可比门，比较器从 6 增至 9 组合成夹具，均通过。2s/4s 固定种子软件渲染 smoke 仅表明脚本可用，SwiftShader 约 1.79 FPS 的样本**不是**真机性能结论。
 - **主分支审计**：PR #52 merge `b0d6517`（工具/文档 15 文件）；PR #53 merge `cb95d55`（计划/报告 5 文件）；当前 main 双种子 headless 完整 selftest 各 **362/362 PASS**，工作树开始时干净。PR #52/#53 无 GitHub 检查项，不得说 CI 已过。所有 GPU/触控/热指标与 A1–A7 真人点测仍待真实参考机。
 - **接手门槛**：先核验低端参考机型号/SoC/GPU、对应 SHA、浏览器/真实 canvas 像素和同场景 10s 预热 + 30s×3 原始 JSON，再考虑单参数游戏优化。在线 Desktop 型号未知，不能自动称为低端 GPU；`PASS_PROVISIONAL_REAL_DEVICE` 只是页面侧帧时代理达标。技能参考 `docs/skills/sandsea-iteration/references/p1-device-performance.md` 与设备记录模板已同步。此记录为 PR 创建前快照；最终 PR 链接与是否合并以 Issue #11 最新交接为准。
+- **发布**：[PR #54](https://github.com/bosswenwu/alex-games/pull/54) 已推送并开放待审，**未合并**；仅监控工具、确定性测试、计划与技能更新。下一位 AI 先看 PR 状态和 Issue #11 最新认领，不要把本计划当作已取得低端硬件数据或已获准合并。
