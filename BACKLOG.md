@@ -563,3 +563,8 @@
 - **协作边界**：本轮工具准备已在 Issue #11 单独声明；下一位 AI 若调整圣甲虫粒子或战斗数值，必须先读本清单和 Issue #11 最新认领，采集参考真机 before/after，仅修复复现问题。P2/P3/P4/P5 不随 P1 监控工具一并开工。
 - **发布**：[PR #52](https://github.com/bosswenwu/alex-games/pull/52) 已创建、**等待审阅且未合并**；分支 `work/sandsea-p1-perf-tooling-20260930`，只含 P1 工具与文档，不包含 P1 战斗参数改动。Issue #11 以实际 PR 链接交接。
 - **归档补充（同一 PR #52）**：用户本轮要求“全部推送并留说明”，因此 [交付说明](docs/SANDSEA-DELIVERY-HANDOFF-2026-09-30.md) 指向 Word 总报告、便携 ZIP 工具包与 `skill-creator` 生成的 Sandsea 工程技能副本。此处的“未合并”仅表示当时的状态快照；最终合并 SHA 以 GitHub PR #52 与 Issue #11 后续评论为准。
+
+
+## Manus 后续勘误（2026-09-30：PR #52 合并与最终资料归档）
+
+[PR #52](https://github.com/bosswenwu/alex-games/pull/52) 已按用户明确授权合并，merge commit `b0d651749c84e00e5e260463b0655327038417e2`；此前段落写的“未合并”只是 PR 创建时的历史快照，不是当前状态。合并后默认世界与 `?seed=424242` 完整 selftest 均 **362/362 PASS**，P1 设备比较器的 6 组合成夹具通过，main 无未提交改动。Word 报告已在本轮补记实际合并状态，之前单独交付的 [P1–P5 详细任务/验收计划](docs/SANDSEA-P1-P5-NEXT-CYCLE-PLAN-2026-09-30.md) 已补录到仓库；文件索引见 [交付说明](docs/SANDSEA-DELIVERY-HANDOFF-2026-09-30.md)。真人点测 A1–A7、真实触屏、实际低端 GPU 与正式 10s/30s×3 仍是 **未测**，不可由 SwiftShader 自测推出达标结论。下一位 AI 先读 Issue #11 最新留言，再单独认领 P1 战斗改码，避免与其他分支重叠。
