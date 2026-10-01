@@ -2,8 +2,9 @@
 
 > 范围：本文档只覆盖 `games/minecraft/index.html`（沙海奇境）。仓库其余游戏的分工见 `ROLES.md`，全仓库待办见 `BACKLOG.md`。
 > 定位：给"沙海奇境"这一款游戏设定阶段性方向，供本地/云端两个 Claude 会话、以及用户排优先级时对齐。不是逐日任务表——具体认领与进度仍以 GitHub issue #11 和 `BACKLOG.md` 为准，本文件负责回答"接下来按什么顺序做、为什么、怎么算做完"。
-> 最后更新：2026-09-30（PR #50/#51/#52 均已合并；战斗切片、自动回归和 P1 测量工具已入库；真人手感/真机性能仍待点测）。较早的协作背景见[AI 交接规划](docs/SANDSEA-ROADMAP-HANDOFF-2026-09-29.md)。
+> 最后更新：2026-09-30（PR #50/#51/#52/#53 均已合并；第十八轮正在准备 P1 性能监控可信度与低端设备实测；真人手感/真机性能仍待点测）。较早的协作背景见[AI 交接规划](docs/SANDSEA-ROADMAP-HANDOFF-2026-09-29.md)。
 > **长期迭代索引：**P0 交付与 P1–P5 阶段见[长期迭代计划](docs/SANDSEA-LONG-TERM-PLAN-2026-09-30.md)；更细的下一周期任务见[P1–P5 细化计划](docs/SANDSEA-P1-P5-NEXT-CYCLE-PLAN-2026-09-30.md)；合并后补充验收见[PR #51 点测清单](docs/SANDSEA-PR51-POSTMERGE-ACCEPTANCE-2026-09-30.md)；P1 基线执行见[性能与设备监控方案](docs/SANDSEA-P1-PERFORMANCE-BASELINE-2026-09-30.md)。
+> **第十八轮提案：**低端 GPU 设备门、分层证据、性能工具可信度、具体任务及测试用例见[第十八轮 P1 实测计划](docs/SANDSEA-ROUND18-P1-LOW-END-GPU-PLAN-2026-09-30.md)；此链接不代表真机样本已经取得。
 > **本轮交付索引：**Word 对话总报告、便携工具包、可复用技能及交接边界见[完整交付说明](docs/SANDSEA-DELIVERY-HANDOFF-2026-09-30.md)；合并后的确认状态以 GitHub PR/Issue #11 实时数据为准。
 > **状态提示：**下方“现状诊断/短板”沿用较早版本，有部分功能已上线；不要把其中药水、钓鱼、驯服、耐久、熔炉、储物或设置误判为当前缺项。遇到冲突时以当前代码、长期计划及 GitHub Issue #11 / 开放 PR 为准。
 

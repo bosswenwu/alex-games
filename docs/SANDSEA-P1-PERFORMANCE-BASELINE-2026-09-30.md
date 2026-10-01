@@ -68,11 +68,11 @@ setTimeout(() => window.__sandseaPerf.start({
 node tools/sandsea-perf/compare-device.mjs --baseline /path/to/main-device-series.json --candidate /path/to/candidate-device-series.json --out /tmp/sandsea-device-review.json --max-p95-regression 10 --require-30fps
 ```
 
-脚本对比 label、场景、seed、userAgent、platform、renderer、画质、渲染距离、视口和 DPR，要求每个序列至少 3 次、两组次数相等；任何隐藏、运行错误、自动降档、短样本或版本未记录均报 `NOT_COMPARABLE`（exit 3）。p95 中位数恶化超过阈值、粒子数超过同时刻 cap、`--require-30fps` 时出现 ≥5000ms 慢帧连续区间报 `REVIEW_*`（exit 2）；仅同场景机器达标才报 `PASS_PROVISIONAL_REAL_DEVICE`（exit 0），**仍需真人判断读招和触屏手感**。沙步按键/攻击点击的人机可用性不由性能采样证明。
+脚本对比 label、场景、seed、userAgent、platform、renderer、画质、渲染距离、视口、DPR 和**WebGL canvas 实际像素尺寸**，要求每个序列至少 3 次、两组次数相等；任何隐藏、运行错误、自动降档、短样本、缺 canvas 尺寸或版本未记录均报 `NOT_COMPARABLE`（exit 3）。未知/通用或 SwiftShader、llvmpipe 等软件 renderer 的双方样本也不能标为“真实 GPU 暂定通过”；仍可保留原始帧时供诊断。p95 中位数恶化超过阈值、粒子数超过同时刻 cap、`--require-30fps` 时出现 ≥5000ms 慢帧连续区间报 `REVIEW_*`（exit 2）；仅可比场景及具有可辨认硬件 renderer 的样本满足这些页面侧阈值时才报 `PASS_PROVISIONAL_REAL_DEVICE`（exit 0），**仍需真人判断读招和触屏手感、独立确认 GPU/温控**。沙步按键/攻击点击的人机可用性不由性能采样证明。
 
 ## 5. 质量控制和后续优化顺序
 
-1. 先确认默认与固定种子完整 `selftest`、页面无异常，再用 10 s/30 s×3 建环境档案；若一个指标为 `null`，标“不支持/未采到”，不要填 0。
+1. 先确认默认与固定种子完整 `selftest`、页面无异常；运行 `node tools/sandsea-perf/test-compare.mjs` 与 `node tools/sandsea-perf/test-monitor.mjs` 锁住设备对比/监控时序逻辑，再用 10 s/30 s×3 建环境档案。前者目前有 9 组**合成**夹具，后者 3 组 VM 模拟时序；它们都不提供真机样本。若一个指标为 `null`，标“不支持/未采到”，不要填 0。
 2. `idle→charge1→charge3→charge6` 比较边际成本。用 DevTools 区分 CPU 的 `updateMobs`、粒子创建、世界加载与 GPU 相关绘制/后处理；同时看 `maxTelegraph`、粒子峰值与当时 cap。headless 的阶段覆盖可能不足，需真机录像。
 3. 若自然遇敌时出现 P0 命中误判，先修逻辑；性能回归再先定位瓶颈。一次只改一个变量，例如预警粒子频率/单批数量、tint 绘制条件或帧内重复计算；不要同时缩短预警与降低粒子可读性。
 4. 每改一次按“基线/候选同条件对比 → 功能/固定种子 selftest → 桌面/横屏截图目视 → 真机点测 → changelog/BACKLOG/Issue #11 → 单主题 PR”收尾。性能没有取得匹配真机样本时填写**待测**，不能把 `HEADLESS_WITHIN_P95_CEILING` 改写为真机 PASS。

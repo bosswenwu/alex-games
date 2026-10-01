@@ -27,12 +27,19 @@ if(before.measurementClass!=="real browser/device page-side timing; not GPU util
   notes.push("Both files must be raw real-device series exported by device-monitor.js");
 if(base.length<3||current.length<3||base.length!==current.length)notes.push("Both files need equal counts of at least 3 runs; reload page between scenarios");
 const identity=r=>{
-  const m=r.metadata||{},s=m.screen||{};
+  const m=r.metadata||{},s=m.screen||{},c=m.canvas||{};
   return [m.label,m.scenario,m.seed,m.userAgent,m.platform,m.renderer,m.graphicsLevel,m.graphicsName,
-    m.renderDist,s.innerWidth,s.innerHeight,s.dpr,s.width,s.height].map(x=>String(x??"missing")).join("|");
+    m.renderDist,s.innerWidth,s.innerHeight,s.dpr,s.width,s.height,c.width,c.height].map(x=>String(x??"missing")).join("|");
 };
 const runs=[...base,...current];
-if(!runs.length||!runs.every(r=>identity(r)===identity(runs[0])))notes.push("Environment mismatch: label/scenario/seed/browser/renderer/graphics/render distance/viewport/DPR must match");
+if(!runs.length||!runs.every(r=>identity(r)===identity(runs[0])))notes.push("Environment mismatch: label/scenario/seed/browser/renderer/graphics/render distance/viewport/DPR/canvas pixels must match");
+if(runs.some(r=>!Number.isFinite(r.metadata?.canvas?.width)||r.metadata.canvas.width<1||
+  !Number.isFinite(r.metadata?.canvas?.height)||r.metadata.canvas.height<1))
+  notes.push("Actual WebGL canvas pixel width/height missing; CSS viewport alone is insufficient to hold GPU load constant");
+if(runs.some(r=>!/\S/.test(String(r.metadata?.renderer??""))||
+  /^(unknown|WebKit WebGL|WebGL)$/i.test(String(r.metadata?.renderer??""))||
+  /SwiftShader|llvmpipe|softpipe|software rasterizer|D3D11 WARP|Microsoft Basic Render/i.test(String(r.metadata?.renderer??""))))
+  notes.push("Unknown, generic or software WebGL renderer: page-side timings may be diagnostic, but not provisional real-GPU acceptance");
 if(runs.some(r=>!r.metadata?.revision||r.metadata.revision==="not-recorded"))notes.push("Record a real revision/commit for each run");
 if(runs.some(r=>!r.metadata?.seed||r.metadata.seed==="unknown"))notes.push("Seed metadata missing");
 if(base.some(r=>r.metadata?.revision!==base[0]?.metadata?.revision)||current.some(r=>r.metadata?.revision!==current[0]?.metadata?.revision))notes.push("Each series must have one consistent revision");
