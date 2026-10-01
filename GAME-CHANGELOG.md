@@ -2,6 +2,17 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-10-01 — 沙海奇境 第十九轮·Codex：触屏侧闪与精准反击提示
+
+- 触屏摇杆方向现在与沙步方向一致，支持左右和斜向；松开摇杆仍沿视线前进。键盘和显式调试方向保持原语义。
+- 完整帮助显示期间，沙步入口也会拦截触屏调用，避免阅读时误位移。
+- 精准反击窗口新增居中的金色倒计时、同目标近战提示与命中确认；帮助/暂停/拍照/死亡/目标离场时隐藏，移动横屏避开血条。
+- H 完整帮助新增三步战斗指南。没有新增快捷键、存档字段、依赖，也没有修改敌人 AI、战斗时限、伤害或渲染管线。
+
+**Affected files:** `games/minecraft/index.html`, `tools/sandsea-combat-ui-smoke.js`.
+
+**Verification:** 默认世界及 seed=424242 selftest 各 **368/368 PASS**（原基线 362/362）；浏览器模拟触摸经真实监听器验证摇杆输入、按钮侧移、帮助拦截、释放归中；1280×720 帮助、844×390 反击、390×844 帮助布局截图。测试页面新增检查期间无捕获异常。截图为脚本布景，非真人反击手感验收；RTX 5060 Ti 本机验证不代表低端 GPU 或真实手机验收。
+
 ## 2026-09-29 — 沙海奇境 第十六轮·Manus：沙步 v1.1 边界加固
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) only. The C-key Sandstep now explicitly refuses to activate while a gameplay panel is open, while airborne, riding, grappling, in water/lava, dead, paused, or otherwise not grounded; repeated keydown events cannot retrigger it. Collision-safe landing remains unchanged in distance and AABB semantics, and the player still follows WASD or view direction as documented. No other key, save field, enemy AI, `foeStrike()` damage logic, shader, or rendering code changed.

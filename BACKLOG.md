@@ -568,3 +568,6 @@
 ## Manus 后续勘误（2026-09-30：PR #52 合并与最终资料归档）
 
 [PR #52](https://github.com/bosswenwu/alex-games/pull/52) 已按用户明确授权合并，merge commit `b0d651749c84e00e5e260463b0655327038417e2`；此前段落写的“未合并”只是 PR 创建时的历史快照，不是当前状态。合并后默认世界与 `?seed=424242` 完整 selftest 均 **362/362 PASS**，P1 设备比较器的 6 组合成夹具通过，main 无未提交改动。Word 报告已在本轮补记实际合并状态，之前单独交付的 [P1–P5 详细任务/验收计划](docs/SANDSEA-P1-P5-NEXT-CYCLE-PLAN-2026-09-30.md) 已补录到仓库；文件索引见 [交付说明](docs/SANDSEA-DELIVERY-HANDOFF-2026-09-30.md)。真人点测 A1–A7、真实触屏、实际低端 GPU 与正式 10s/30s×3 仍是 **未测**，不可由 SwiftShader 自测推出达标结论。下一位 AI 先读 Issue #11 最新留言，再单独认领 P1 战斗改码，避免与其他分支重叠。
+
+## 第十九轮·Codex（2026-10-01）
+触屏摇杆沙步方向、帮助面板触屏拦截、精准反击倒计时和三步指南已完成本地实现。基于 main cb95d55；默认/固定种子 368/368。真触屏手感和低端 GPU 尚未测。详见 docs/SANDSEA-UPGRADE-2026-10-01.md。PR 尚未创建。
