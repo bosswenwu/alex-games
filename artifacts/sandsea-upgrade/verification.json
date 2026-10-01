@@ -1,0 +1,15 @@
+{
+  "baseline": "cb95d55c7e41d14fecb80f3408d567d65bb803e9",
+  "defaultSelftest": "368/368 PASS",
+  "seed424242": "368/368 PASS",
+  "renderer": "NVIDIA GeForce RTX 5060 Ti / ANGLE D3D11",
+  "simulatedTouch": "joystick direction, button side displacement, panel blocking, release passed",
+  "screenshots": [
+    "guide-desktop.png",
+    "guide-portrait.png",
+    "counter-landscape.png"
+  ],
+  "realMobileTested": false,
+  "lowEndGpuTested": false,
+  "gitPublished": false
+}
