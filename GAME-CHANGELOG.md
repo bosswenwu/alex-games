@@ -230,3 +230,12 @@ Persistent handoff notes for future agents. Add a new entry for each user-visibl
 | Runtime-only state | The 1 s success highlight is cleared on pause/death/respawn/new world and is not saved. `window.__game.sandStep` exposes status fields for smoke tests. | `games/minecraft/index.html` |
 
 **Verification:** `node tools/headless.mjs selftest` **356/356** both on the default world and `?seed=424242`; seeded Chromium touch-event smoke at 844×390 triggered the visible control, moved 3.33 blocks, and confirmed the button stays inside the viewport without overlapping the tutorial card. A second touch during cooldown produced no movement and no cooldown toast. Desktop smoke at 1280×720 showed the HUD status with touch controls off; both screenshots inspected; `git diff --check` passed. Simulated browser touch is not a substitute for real-device feel testing.
+
+
+## 2026-09-30 — 沙海奇境：圣甲虫预警与沙步精准反击（第十七轮）
+
+**范围：**仅 `games/minecraft/index.html`。圣甲虫新增“蓄力预警 → 锁向冲锋 → 收招”攻击节奏；蓄力期间以暖金实体高亮与浮空粒子环提示。受击、失去视线、超出距离或锁定方向明显偏离时会取消冲锋。
+
+**战斗规则：**只有沙步窗口成功避开带圣甲虫冲锋标记的攻击，才获得绑定同一圣甲虫、持续 2 秒的一次性反击。下一次对该目标的近战主击增加约 35% 伤害（向上取整、封顶 +3）；重锤范围副伤害、远程和环境伤害不继承奖励。普通敌击不授予机会。反击状态为运行态，不新增存档字段。
+
+**验证：**`node tools/headless.mjs selftest` 默认世界 **362/362 PASS**，`?seed=424242` **362/362 PASS**；自动截图并目视检查 1280×720 桌面预警、844×390 横屏触控反击、390×844 竖屏旋转提示，脚本布景未报告窗口错误；`git diff --check` 通过。截图由无头 Chromium / SwiftShader 和脚本化状态生成，不代表真人操作时机、真实触屏或低端 GPU 性能结论。合并前仍需真人点测冲锋可读性和反击时机。
