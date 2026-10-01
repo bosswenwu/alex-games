@@ -562,3 +562,4 @@
 - **P1 预备工具**：[性能与设备监控方案](docs/SANDSEA-P1-PERFORMANCE-BASELINE-2026-09-30.md) 与 `tools/sandsea-perf/` 包含可复现 SwiftShader 场景采样、真实设备被动监控、3 次样本同设备对比和 6 个模拟夹具单元测试。**仅工具/文档，不改游戏源码**；SwiftShader 只能冒烟/回归，真实设备性能与触控感仍待测。默认和固定种子 selftest 均 362/362；短时脚本 smoke 与设备监控器页面接口通过；短采样 `--compare` 返回 `NOT_COMPARABLE`，没有伪造正式 10s/30s×3 基线。
 - **协作边界**：本轮工具准备已在 Issue #11 单独声明；下一位 AI 若调整圣甲虫粒子或战斗数值，必须先读本清单和 Issue #11 最新认领，采集参考真机 before/after，仅修复复现问题。P2/P3/P4/P5 不随 P1 监控工具一并开工。
 - **发布**：[PR #52](https://github.com/bosswenwu/alex-games/pull/52) 已创建、**等待审阅且未合并**；分支 `work/sandsea-p1-perf-tooling-20260930`，只含 P1 工具与文档，不包含 P1 战斗参数改动。Issue #11 以实际 PR 链接交接。
+- **归档补充（同一 PR #52）**：用户本轮要求“全部推送并留说明”，因此 [交付说明](docs/SANDSEA-DELIVERY-HANDOFF-2026-09-30.md) 指向 Word 总报告、便携 ZIP 工具包与 `skill-creator` 生成的 Sandsea 工程技能副本。此处的“未合并”仅表示当时的状态快照；最终合并 SHA 以 GitHub PR #52 与 Issue #11 后续评论为准。
