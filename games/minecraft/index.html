@@ -522,6 +522,7 @@
       </div>
       <p>没有方向输入时朝视线前方沙步。沙步冷却 4.5 秒；空中、骑乘、水中、岩浆和钩爪牵引中不能使用。</p>
       <p>看到「闪避成功」不一定有反击机会：只有规避圣甲虫的标记冲锋才授予反击。远程攻击、重锤范围副伤害不享受奖励；环境伤害不能用沙步规避。</p>
+      <p><b>骷髅射手</b>放箭前会站定、身体泛红，弓前拉出一条红色瞄准线；瞄准线变亮表示方向已锁定。躲到掩体后可取消它的瞄准；锁定后横移就能躲开；瞄准时打它一下会打断，并让它僵直约 1 秒。</p>
     </section>
     <b>F1</b> 拍照模式　<b>F2</b> 截图　<b>F5</b> 第三人称(Shift+F5 看正脸)　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成(可熔铸☀拉之烈阳剑、🔨塞特之锤)　<b>0</b> 第10格　<b>J</b> 附魔祭坛(献文物)　<b>C</b> 沙步闪避　<b>Esc</b> 暂停　<b>T</b> 编年史　<b>P</b> 陶片图鉴　<b>K</b> 神话遗物　<b>U</b> 开宝库　<b>R</b> 答斯芬克斯　<b>L</b> 神灯许愿　<b>N</b> 大地图(右上角为小地图)<br>
     <b>物品栏</b>：1烟花 2钩爪 3可乐 4铁剑 5机关枪 6火箭筒 7弓 8=TNT(右键放·左键点燃) 9弹跳板<br>
@@ -4967,6 +4968,9 @@ const SAND_RIPOSTE_WINDOW=2.0, SAND_RIPOSTE_RATE=0.35, SAND_RIPOSTE_CAP=3;
 const SCARAB_TELEGRAPH_T=0.52, SCARAB_LUNGE_T=0.38, SCARAB_RECOVER_T=0.58;
 const SCARAB_CHARGE_RANGE=8.5, SCARAB_CHARGE_HIT_R=1.55, SCARAB_CHARGE_DAMAGE=2;
 const SCARAB_CHARGE_TAG="scarab-charge";
+// 第十九轮·云端: 骷髅蓄力瞄准箭 —— 瞄准(站定+红色瞄准线) → 最后 SKEL_LOCK_T 秒锁定方向 → 放出更快的瞄准箭; 被打断则僵直
+const SKEL_AIM_T=0.9, SKEL_LOCK_T=0.28, SKEL_ARROW_SPEED=32, SKEL_STAGGER_T=1.2, SKEL_AIM_RANGE=22, SKEL_AIM_DAMAGE=4;
+const SKEL_AIM_TAG="skeleton-aimed";
 const sandStepState={cd:0, evadeT:0, dodged:false, lastDist:0, feedbackT:0,
                      counterT:0, counterTarget:null, counterHitT:0};
 function clearSandRiposte(){ sandStepState.counterT=0; sandStepState.counterTarget=null; sandStepState.counterHitT=0; }
@@ -8116,6 +8120,8 @@ function drawEntity(ent){
   else if(ent.fuse>0){  const f=0.5+0.5*Math.sin(ent.fuse*ent.fuse*22); gl.uniform3f(U.uTint,1+f*1.4,1+f*0.4,1+f*0.4); } // 苦力怕闪白
   else if(ent.burning)  gl.uniform3f(U.uTint,1.5,0.75,0.4);
   else if(ent.type==="scarab" && ent.chargeState==="telegraph") gl.uniform3f(U.uTint,1.9,1.28,0.5); // 圣甲虫蓄力: 暖金高亮
+  else if(ent.type==="skeleton" && ent.aimState==="aim") gl.uniform3f(U.uTint, ent.aimT<=SKEL_LOCK_T?2.1:1.7, 0.6, 0.5); // 骷髅瞄准: 泛红, 锁定后更亮
+  else if(ent.type==="skeleton" && ent.aimState==="stagger") gl.uniform3f(U.uTint,0.75,0.82,1.15);   // 骷髅僵直: 偏冷灰
   else if(ent.elite)    gl.uniform3f(U.uTint,1.5,1.22,0.55);   // 精英怪: 金光加身, 一眼可辨
   else if(ent.def.fly)  gl.uniform3f(U.uTint,1.1,1.0,0.9);     // 飞龙暖色
   else if(ent.def.boss) gl.uniform3f(U.uTint,1.15,0.9,1.15);   // 僵尸王偏紫,更威慑
@@ -8493,10 +8499,55 @@ function updateScarabCharge(m,dt,dx,dz,dist,speed,targetVisible){
   }
   return speed;
 }
+function emitSkeletonAim(m){                   // 瞄准线: 从弓前朝瞄准点撒几颗红色亮点, 锁定后更密更亮
+  const ex=m.x, ey=m.y+m.def.h*0.75, ez=m.z, tx=m.aimX-ex, ty=m.aimY-ey, tz=m.aimZ-ez;
+  const t=BLOCKS[BRICK].s, locked=m.aimT<=SKEL_LOCK_T, n=locked?6:4;
+  for(let i=1;i<=n;i++){ const f=i/(n+1)*0.6;             // 只画前 60% 段: 离玩家太近的粒子会糊满镜头
+    particles.push({x:ex+tx*f,y:ey+ty*f,z:ez+tz*f,vx:0,vy:0.05,vz:0,life:locked?0.16:0.12,size:locked?0.06:0.045,
+      u:(t%16)*TS+TS*0.3,v:Math.floor(t/16)*TV+TV*0.3,l:locked?2.4:1.9});
+  }
+}
+function skeletonFireAimed(m){                 // 放箭: 飞向锁定点(不再预判玩家), 抛物补偿与 mobShoot 一致
+  const ex=m.x, ey=m.y+m.def.h*0.75, ez=m.z, sp=SKEL_ARROW_SPEED;
+  const d=Math.hypot(m.aimX-ex,m.aimZ-ez), drop=0.5*16*(d/sp)*(d/sp);
+  let dx=m.aimX-ex, dy=(m.aimY+drop)-ey, dz=m.aimZ-ez;
+  const L=Math.hypot(dx,dy,dz)||1; dx/=L; dy/=L; dz/=L;
+  makeArrow(ex+dx*0.5, ey, ez+dz*0.5, dx*sp, dy*sp, dz*sp, true);
+  arrows[arrows.length-1].tag=SKEL_AIM_TAG;
+  sfxBow();
+}
+function updateSkeletonAim(m,dt,dist,speed,visible,chasing){
+  const st=m.aimState||"idle";
+  if(st==="stagger"){                          // 被打断: 僵直, 慢走, 不能射
+    m.staggerT-=dt;
+    if(m.staggerT<=0) m.aimState="idle";
+    return speed*0.35;
+  }
+  if(st==="aim"){
+    if(m.hurtT>0.12){                          // 瞄准中挨打 → 打断 + 僵直
+      m.aimState="stagger"; m.staggerT=SKEL_STAGGER_T; m.atkCd=Math.max(m.atkCd,SKEL_STAGGER_T+0.5); return speed*0.35;
+    }
+    if(!visible || !chasing || dist>SKEL_AIM_RANGE+2){ m.aimState="idle"; m.atkCd=Math.max(m.atkCd,0.8); return speed; }   // 断视线/脱战: 取消
+    m.aimT-=dt;
+    if(m.aimT>SKEL_LOCK_T){ m.aimX=player.x; m.aimY=player.y+1.0; m.aimZ=player.z; }   // 锁定前持续跟踪, 锁定后不再更新
+    m.tgtYaw=Math.atan2(m.aimX-m.x,-(m.aimZ-m.z));
+    m.aimFxT=(m.aimFxT||0)-dt;
+    if(m.aimFxT<=0){ emitSkeletonAim(m); m.aimFxT=0.1; }
+    if(m.aimT<=0){ skeletonFireAimed(m); m.swingT=0.3; m.aimState="idle"; m.atkCd=1.6+Math.random()*0.7; }
+    return 0;
+  }
+  if(chasing && m.atkCd<=0 && dist<SKEL_AIM_RANGE && visible){
+    m.aimState="aim"; m.aimT=SKEL_AIM_T; m.aimFxT=0; m.swingT=0.3;
+    m.aimX=player.x; m.aimY=player.y+1.0; m.aimZ=player.z;
+    return 0;
+  }
+  return speed;
+}
 function updateMobs(dt){
   const pendingBoom=[];
   for(let i=mobs.length-1;i>=0;i--){
-    const m=mobs[i], D=m.def;
+    const m=mobs[i]; if(!m) continue;           // 本轮里前一只生物可能一次删掉多只(爆炸/清理), 下标会落到空位
+    const D=m.def;
     const dx=player.x-m.x, dz=player.z-m.z, dist=Math.hypot(dx,dz)||1e-6;
     if((dist>72 && !m.tamed) || m.y<-20){ mobs.splice(i,1); continue; }   // 驯服的骆驼不因走远被清理
     m.hurtT=Math.max(0,m.hurtT-dt);
@@ -8538,6 +8589,7 @@ function updateMobs(dt){
       // 巡逻兵被警戒(自身发现或被同袍呼叫)后, 侦测范围临时扩大, 更难甩脱
       const aggro=(D.aggroRange||28)+(m.patrol&&m.alertT>0?16:0)+((m.patrol&&romeWanted())?45:0);   // 通缉期间: 罗马巡逻兵警戒范围暴涨, 主动来袭
       const chasing = !dead && dist<aggro;                   // 鳄鱼等伏击型生物用短探测距离(装作潜伏)
+      m.chaseNow=chasing;
       if(m.patrol) patrolAlert(m, chasing, dist);            // 巡逻兵: 发现玩家→警戒并呼叫同袍
       if(chasing){
         m.tgtYaw=Math.atan2(dx,-dz);
@@ -8548,7 +8600,7 @@ function updateMobs(dt){
           if(dist<22 && m.atkCd<=0 && mobCanSeePlayer(m)){
             if(D.mech){                            // 机甲: 三连发等离子弹
               m.atkCd=D.boss?1.6:2.3; m.swingT=0.3; mobPlasma(m);
-            } else {
+            } else if(m.type!=="skeleton"){       // 骷髅改走 updateSkeletonAim 的蓄力瞄准(第十九轮·云端)
               m.atkCd=1.7+Math.random()*0.7; m.swingT=0.3; mobShoot(m);
             }
           }
@@ -8654,6 +8706,13 @@ function updateMobs(dt){
         (phase==="idle"&&speed>0&&m.chargeCd<=dt&&dist>1.3&&dist<SCARAB_CHARGE_RANGE);
       const visible=!wantsSight || mobCanSeePlayer(m);
       speed=updateScarabCharge(m,dt,dx,dz,dist,speed,visible);
+    }
+    // 骷髅: 蓄力瞄准 → 锁定 → 放箭; 挨打会被打断并僵直(第十九轮·云端)
+    if(m.type==="skeleton" && D.hostile){
+      const st=m.aimState||"idle";
+      const wantsSight=st==="aim" || (st==="idle"&&m.chaseNow&&m.atkCd<=0&&dist<SKEL_AIM_RANGE);
+      const visible=!wantsSight || mobCanSeePlayer(m);
+      speed=updateSkeletonAim(m,dt,dist,speed,visible,!!m.chaseNow);
     }
     // 平滑转向 + 移动
     let dyaw=m.tgtYaw-m.yaw;
@@ -9963,7 +10022,7 @@ function updateArrows(dt){
         if(!dead && px>player.x-0.5 && px<player.x+0.5 && pz>player.z-0.5 && pz<player.z+0.5 &&
            py>player.y-0.2 && py<player.y+PH){
           const d=Math.hypot(a.vx,a.vz)||1;
-          foeStrike(a.fire?5:(a.plasma?3:4), a.vx/d*5, a.vz/d*5);
+          foeStrike(a.fire?5:(a.plasma?3:(a.tag===SKEL_AIM_TAG?SKEL_AIM_DAMAGE:4)), a.vx/d*5, a.vz/d*5, null, a.tag);
           if(a.fire||a.plasma) for(let k=0;k<10;k++) particles.push({x:px,y:py,z:pz,vx:(Math.random()-.5)*5,vy:Math.random()*4,vz:(Math.random()-.5)*5,life:.4,size:.12,u:15*TS,v:0,l:1.7});
           arrows.splice(i,1); consumed=true; break;
         }
@@ -16034,6 +16093,64 @@ function selftest(){
         Object.assign(touchState,t0); for(const key in keys) delete keys[key]; Object.assign(keys,k0);
         player.yaw=yaw0; Object.assign(sandStepState,s0); softLock=sl0; locked=locked0; dead=dead0; photoMode=photo0;
         help.style.display=hd0; overlay.style.display=od0; mobs.length=n0; refreshRiposteCue();
+      }
+    }
+
+    // 第十九轮·云端: 骷髅蓄力瞄准箭 —— 瞄准不放箭、锁定后不再跟随、放出带标签的瞄准箭; 挨打打断并僵直; 断视线取消; 沙步可躲; 骷髅不再瞬发
+    {
+      const P0={x:player.x,y:player.y,z:player.z}, a0=arrows.length, pa0=particles.length, n0=mobs.length, s0=Object.assign({},sandStepState), hp0=hp, ms0=mobShoot;
+      const mk=()=>({type:"skeleton",def:MOB_DEFS.skeleton,x:player.x+8,y:player.y,z:player.z,vx:0,vy:0,vz:0,kbx:0,kbz:0,yaw:0,tgtYaw:0,
+        hp:MOB_DEFS.skeleton.hp,hurtT:0,animT:0,t:0,atkCd:0,burnT:0,swingT:0,groanT:0,fleeT:0,onGround:true,pause:false,burning:false,held:null});
+      try{
+        // 1) 正常: 瞄准 → 锁定 → 放箭
+        const sk=mk(); let stoodStill=true, firedEarly=false, lockedAim=null;
+        let r=updateSkeletonAim(sk,0.05,8,2,true,true);
+        const started=sk.aimState==="aim" && r===0 && arrows.length===a0;
+        for(let i=0;i<40 && sk.aimState==="aim";i++){
+          if(sk.aimT<=SKEL_LOCK_T && !lockedAim){ lockedAim={x:sk.aimX,z:sk.aimZ}; player.z+=3; }   // 锁定后玩家横移 3 格
+          const before=arrows.length;
+          r=updateSkeletonAim(sk,0.05,8,2,true,true);
+          if(sk.aimState==="aim"){ if(r!==0) stoodStill=false; if(arrows.length!==before) firedEarly=true; }
+        }
+        const ar=arrows[arrows.length-1], fired=arrows.length===a0+1 && ar && ar.tag===SKEL_AIM_TAG && ar.hostile;
+        const sp=ar?Math.hypot(ar.vx,ar.vy,ar.vz):0;
+        const noTrack=!!lockedAim && fired && Math.abs(ar.vz/sp)<0.05 && Math.abs(sk.aimZ-lockedAim.z)<1e-9;   // 箭朝锁定点(原位置), 不追横移后的玩家
+        const fast=fired && Math.abs(sp-SKEL_ARROW_SPEED)<0.5 && sk.atkCd>=1.6;
+        ok("骷髅蓄力瞄准: 先站定瞄准不放箭, 锁定后不再跟随玩家, 时间到放出更快的带标签瞄准箭",
+           started && stoodStill && !firedEarly && fired && noTrack && fast,
+           "start="+started+" still="+stoodStill+" early="+firedEarly+" fired="+fired+" noTrack="+noTrack+" sp="+sp.toFixed(1)+" cd="+sk.atkCd.toFixed(2));
+        arrows.length=a0; player.z=P0.z;
+        // 2) 瞄准中挨打 → 打断 + 僵直, 僵直期间不射
+        const s2=mk(); updateSkeletonAim(s2,0.05,8,2,true,true); s2.hurtT=0.4;
+        const r2=updateSkeletonAim(s2,0.05,8,2,true,true);
+        const staggered=s2.aimState==="stagger" && Math.abs(r2-2*0.35)<1e-9 && arrows.length===a0 && s2.atkCd>=SKEL_STAGGER_T;
+        s2.hurtT=0; let shotInStagger=false;
+        for(let t=0;t<SKEL_STAGGER_T+0.1;t+=0.05){ updateSkeletonAim(s2,0.05,8,2,true,true); if(arrows.length!==a0) shotInStagger=true; }
+        const recovered=s2.aimState==="idle" && s2.atkCd>0;   // 僵直结束后还在冷却, 不会立刻再瞄
+        ok("骷髅蓄力瞄准: 瞄准中挨打被打断并僵直 1.2 秒, 僵直期间不射, 结束后仍在冷却",
+           staggered && !shotInStagger && recovered, "stag="+staggered+" shot="+shotInStagger+" rec="+recovered+" cd="+s2.atkCd.toFixed(2));
+        // 3) 断视线 / 脱战 → 取消
+        const s3=mk(); updateSkeletonAim(s3,0.05,8,2,true,true);
+        updateSkeletonAim(s3,0.05,8,2,false,true);
+        const s4=mk(); updateSkeletonAim(s4,0.05,8,2,true,true);
+        updateSkeletonAim(s4,0.05,8,2,true,false);
+        ok("骷髅蓄力瞄准: 躲到掩体后(断视线)或脱战会取消瞄准, 不放箭",
+           s3.aimState==="idle" && s4.aimState==="idle" && s3.atkCd>=0.8 && arrows.length===a0, "los="+s3.aimState+" chase="+s4.aimState);
+        // 4) 沙步能躲瞄准箭, 但不给精准反击(反击只属于圣甲虫冲锋)
+        sandStepState.evadeT=0.3; sandStepState.dodged=false; sandStepState.counterTarget=null; sandStepState.counterT=0;
+        const hit=foeStrike(SKEL_AIM_DAMAGE,0,0,null,SKEL_AIM_TAG);
+        ok("骷髅蓄力瞄准: 沙步闪避窗内能躲瞄准箭, 不授予精准反击", hit===false && hp===hp0 && !sandStepState.counterTarget,
+           "hit="+hit+" hp="+hp+" counter="+!!sandStepState.counterTarget);
+        Object.assign(sandStepState,s0);
+        // 5) 真实 updateMobs 里骷髅不再瞬发 mobShoot
+        let shot=0; mobShoot=()=>{ shot++; };
+        const keep=mobs.slice(); mobs.length=0;            // 只放这一只骷髅, 不把世界里的其他生物牵扯进来
+        const s5=mk(); mobs.push(s5);
+        try{ for(let i=0;i<8;i++) updateMobs(0.05); } finally { mobs.length=0; for(const m of keep) mobs.push(m); }
+        ok("骷髅蓄力瞄准: updateMobs 里骷髅不再走瞬发射箭", shot===0, "mobShoot调用="+shot+" state="+(s5.aimState||"idle"));
+      } finally {
+        mobShoot=ms0; mobs.length=n0; arrows.length=a0; particles.length=Math.min(particles.length,pa0);
+        Object.assign(player,P0); Object.assign(sandStepState,s0); hp=hp0; updateHearts();
       }
     }
 
