@@ -10393,7 +10393,13 @@ const skyProg = makeShader(`
   varying vec2 vN;
   uniform vec3 uFwd, uRight, uUp, uMoonDir, uSunDisc, uMoonCol;
   uniform float uTanH, uAspect, uPix, uNight, uSunVis, uSunR, uMoonVis;
+  uniform float uRainbow; uniform vec4 uBolt;       // 第二十轮·云端: 雨后彩虹强度; 远方闪电(方位角, 种子, 亮度, -)
   ${SKY_GLSL}
+  vec3 rainbowCol(float t){                          // t: 0=内圈紫 → 1=外圈红; 两端柔和收边
+    float w = smoothstep(-0.2, 0.12, t) * (1.0 - smoothstep(0.88, 1.2, t));
+    float h = (1.0 - clamp(t, 0.0, 1.0)) * 0.78;
+    return clamp(abs(fract(h + vec3(0.0, 2.0/3.0, 1.0/3.0))*6.0 - 3.0) - 1.0, 0.0, 1.0) * w;
+  }
   float hash13(vec3 p){ p = fract(p*0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y)*p.z); }
   void main(){
     vec3 ray = normalize(uFwd + vN.x*uTanH*uAspect*uRight + vN.y*uTanH*uUp);
@@ -10434,6 +10440,15 @@ const skyProg = makeShader(`
       col = mix(col, uSunDisc*limb, disc*uSunVis*hor);
     }
     col += uSunDisc * 0.30 * pow(max(cosS, 0.0), 700.0) * uSunVis * hor;
+    // 雨后彩虹(第二十轮·云端): 以反日点为圆心的 42° 主虹(外红内紫) + 51° 淡副虹(颜色反序); 太阳越高彩虹越低, 云会把它遮住
+    if(uRainbow > 0.001){
+      float ra = acos(clamp(dot(ray, -uSkySun), -1.0, 1.0));
+      float t1 = (ra - 0.705)/0.040, t2 = (0.905 - ra)/0.045;
+      vec3 rb = vec3(0.0);
+      if(t1 > -0.25 && t1 < 1.25) rb += rainbowCol(t1);
+      if(t2 > -0.25 && t2 < 1.25) rb += rainbowCol(t2)*0.38;
+      col += rb * (uRainbow * 0.30 * smoothstep(0.0, 0.06, ray.y));
+    }
     // 云盖在日月星之上(云会遮住太阳)
     vec4 cl = clouds(ray);
     col = mix(col, cl.rgb, cl.a);
@@ -10446,9 +10461,18 @@ const skyProg = makeShader(`
         col += mix(vec3(1.0, 0.86, 0.72), vec3(0.72, 0.84, 1.0), smoothstep(-0.012, 0.012, da)) * (0.06*ring*hk*uMoonVis*hor);
       }
     }
+    // 远方闪电(第二十轮·云端): 雷击方位上一道从云底劈到地平线的锯齿电光(在云前面)
+    if(uBolt.z > 0.001 && ray.y > 0.0 && ray.y < 0.5){
+      float dA = atan(ray.x, ray.z) - uBolt.x;
+      dA = mod(dA + 3.14159265, 6.2831853) - 3.14159265;
+      float path = (vnoise(vec2(ray.y*9.0, uBolt.y)) - 0.5)*0.10 + (vnoise(vec2(ray.y*34.0, uBolt.y + 7.0)) - 0.5)*0.03;
+      float d = abs(dA - path);
+      float bolt = exp(-d*d/0.000006) + 0.25*exp(-d*d/0.00025);
+      col += vec3(0.85, 0.9, 1.0) * (bolt * smoothstep(0.0, 0.015, ray.y) * (1.0 - smoothstep(0.30, 0.45, ray.y)) * uBolt.z * 1.8);
+    }
     gl_FragColor = vec4(col, 1.0);
   }`);
-const USK={}; for(const n of ["uFwd","uRight","uUp","uMoonDir","uSunDisc","uMoonCol","uTanH","uAspect","uPix","uNight","uSunVis","uSunR","uMoonVis"]) USK[n]=gl.getUniformLocation(skyProg,n);
+const USK={}; for(const n of ["uFwd","uRight","uUp","uMoonDir","uSunDisc","uMoonCol","uTanH","uAspect","uPix","uNight","uSunVis","uSunR","uMoonVis","uRainbow","uBolt"]) USK[n]=gl.getUniformLocation(skyProg,n);
 const SKL_SKY=skyUniformLocs(skyProg);
 const ASK_P=gl.getAttribLocation(skyProg,"aP");
 const skyVbo=gl.createBuffer();
@@ -11670,6 +11694,8 @@ function render(now){
     gl.uniform3fv(USK.uMoonDir,LS.moon);
     gl.uniform3f(USK.uMoonCol,0.886,0.902,0.941);
     gl.uniform1f(USK.uMoonVis,(1-smoothstep(0.05,0.3,sunH))*(1-0.7*_sky.murk)*(1-_sky.sand));
+    gl.uniform1f(USK.uRainbow,rainbowK*(1-_sky.murk)*(1-_sky.sand)*(0.35+0.65*Math.min(1,LS.sunI)));   // 阳光越弱彩虹越淡
+    gl.uniform4f(USK.uBolt,boltA,boltSeed,boltAlpha(),0);
     gl.bindBuffer(gl.ARRAY_BUFFER,skyVbo);
     gl.enableVertexAttribArray(ASK_P);
     gl.vertexAttribPointer(ASK_P,2,gl.FLOAT,false,8,0);
@@ -11929,6 +11955,16 @@ function render(now){
    天气系统: 晴 / 雨 / 雷暴 (雪原下雪)
    ========================================================= */
 let weather="clear", weatherT=260+Math.random()*200, lightT=0, thunderT=0;
+// 第二十轮·云端: 雨停后的彩虹 + 远方闪电的天空电光
+const RAINBOW_T=50;
+let rainbowT=0, rainbowK=0, boltA=0, boltSeed=0;
+function rainbowTarget(sun,bio){ return (rainbowT>0 && weather==="clear" && sun>0.02 && bio!==BIO_SNOW) ? Math.min(1,rainbowT/10) : 0; }   // 白天、晴、非雪原; 最后 10 秒淡出
+function tickRainbow(dt){
+  const tgt=rainbowTarget(sunH, biomeAt(Math.floor(player.x),Math.floor(player.z)));
+  rainbowT=Math.max(0,rainbowT-dt);
+  rainbowK+=clamp(tgt-rainbowK,-dt/6,dt/4);          // 约 4 秒浮现、6 秒散去
+}
+function boltAlpha(){ const f=lightT/0.35; return f<=0?0:(f>0.55?1:(f>0.4?0.2:f*1.6)); }   // 一亮、一暗、再一亮
 function weatherName(){
   if(weather==="clear") return "☀ 晴";
   const snowy = biomeAt(Math.floor(player.x),Math.floor(player.z));
@@ -11949,7 +11985,7 @@ function updateWeather(dt){
       if(aridBiome(bio) && r<0.42){ weather="sand"; weatherT=8+Math.random()*5; showName("🌪 沙暴来袭！能见度下降 — 黄沙中偶有生物出没"); startSandRaid(); }   // 沙暴(8~13秒)轻量掩护少量沙漠生物
       else { weather = r<0.25?"storm":"rain"; weatherT=25+Math.random()*35; showName(weather==="storm"?"⛈ 雷暴来袭！":"🌧 下雨了"); }
     }
-    else { weather="clear"; weatherT=240+Math.random()*260; showName("☀ 天放晴了"); }
+    else { const wasWet=weather==="rain"||weather==="storm"; weather="clear"; weatherT=240+Math.random()*260; showName("☀ 天放晴了"); if(wasWet) rainbowT=RAINBOW_T; }
   }
   if(weather==="clear") return;
   if(RENDER<=6) return; // 低配砍天气粒子，只留色调/雷闪
@@ -11991,6 +12027,7 @@ function updateWeather(dt){
       thunderT=3+Math.random()*7;
       lightT=0.35;                                  // 全屏闪白
       const a=Math.random()*6.283, d=10+Math.random()*26;
+      boltA=Math.atan2(Math.sin(a),Math.cos(a)); boltSeed=Math.random()*50;   // 天空电光朝同一方向
       const lx=Math.floor(player.x+Math.sin(a)*d), lz=Math.floor(player.z+Math.cos(a)*d);
       const gy=groundY(lx,lz);
       if(gy>0){
@@ -12297,6 +12334,7 @@ function frame(now){
     tickFurnaces(dt);                             // 第七轮·云端: 熔炉按秒推进
     tickDriveHud(dt);                             // 第十一轮·云端: 载具驾驶 HUD
     tickWetness(dt);                              // 第十二轮·云端: 雨天湿地面
+    tickRainbow(dt);                              // 第二十轮·云端: 雨后彩虹
     tickRainSplash(dt);                           // 第十二轮·云端·A: 雨天涟漪强度 + 地面/水面雨滴水花
     tickTitle();
     arrowCd=Math.max(0,arrowCd-dt);
@@ -16210,6 +16248,32 @@ function selftest(){
            "round="+round+" clamp="+clampOK+" bad="+badOK+" legacy="+legacyOK+" api="+!!api);
       } finally {
         restoreCombatMastery(cm0); cores=cores0; Object.assign(sandStepState,s0); Object.assign(player,P0); refreshSandStepButton();
+      }
+    }
+
+    // 第二十轮·云端: 雨后彩虹 + 远方天空闪电 —— 雨/雷暴转晴才出彩虹(沙暴不出), 只在白天/非雪原, 最后 10 秒淡出; 雷击同步天空电光方向与闪烁
+    {
+      const w0=weather, wt0=weatherT, rt0=rainbowT, rk0=rainbowK, lt0=lightT, th0=thunderT, R0=RENDER, ba0=boltA, pa0=particles.length;
+      try{
+        weather="rain"; weatherT=0; rainbowT=0; updateWeather(0.01); const afterRain=weather==="clear" && rainbowT===RAINBOW_T;
+        weather="sand"; weatherT=0; rainbowT=0; updateWeather(0.01); const afterSand=weather==="clear" && rainbowT===0;
+        weather="clear"; rainbowT=RAINBOW_T;
+        const day=rainbowTarget(0.5,BIO_DESERT), night=rainbowTarget(-0.1,BIO_DESERT), snow=rainbowTarget(0.5,BIO_SNOW);
+        rainbowT=5; const fading=rainbowTarget(0.5,BIO_DESERT);
+        weather="rain"; rainbowT=RAINBOW_T; const raining=rainbowTarget(0.5,BIO_DESERT);
+        ok("雨后彩虹: 雨/雷暴转晴才出现(沙暴不出), 白天且非雪原才显示, 最后 10 秒淡出",
+           afterRain && afterSand && day===1 && night===0 && snow===0 && Math.abs(fading-0.5)<1e-9 && raining===0,
+           "rain="+afterRain+" sand="+afterSand+" day="+day+" night="+night+" snow="+snow+" fade="+fading+" raining="+raining);
+        weather="storm"; weatherT=999; thunderT=0; lightT=0; RENDER=Math.max(RENDER,8); boltA=99;
+        const keepM=mobs.slice(); mobs.length=0;            // 雷击会伤附近生物: 测试里不牵扯世界中的生物
+        try{ updateWeather(0.01); } finally { mobs.length=0; for(const m of keepM) mobs.push(m); }
+        const struck=lightT>0 && Math.abs(boltA)<=Math.PI+1e-9;
+        lightT=0.35; const a1=boltAlpha(); lightT=0.17; const a2=boltAlpha(); lightT=0.1; const a3=boltAlpha(); lightT=0; const a4=boltAlpha();
+        const locsOK=!!USK.uRainbow && !!USK.uBolt;
+        ok("远方天空闪电: 雷击时设置电光方向, 亮度一亮一暗再一亮后归零; 天空着色器接口就绪",
+           struck && a1===1 && a2===0.2 && a3>0 && a3<1 && a4===0 && locsOK, "struck="+struck+" a="+[a1,a2,a3.toFixed(2),a4]+" locs="+locsOK);
+      } finally {
+        weather=w0; weatherT=wt0; rainbowT=rt0; rainbowK=rk0; lightT=lt0; thunderT=th0; RENDER=R0; boltA=ba0; particles.length=Math.min(particles.length,pa0);
       }
     }
 
