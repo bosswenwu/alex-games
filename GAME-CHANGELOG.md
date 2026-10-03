@@ -2,6 +2,18 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-10-03 — 沙海奇境 第二十三轮·云端：躲开木乃伊重击也能精准反击
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only. No save, key, block or atlas changes; riposte numbers unchanged.
+
+| Change | Player-visible behavior |
+| --- | --- |
+| Riposte from mummy slam | Sandstepping through a mummy's slam now grants the same precise riposte as dodging a scarab charge: 2 s to land one melee hit on **that** mummy for the bonus (combat-mastery upgrades apply). It pairs with the mummy's 0.5 s recovery after the slam. Skeleton arrows and ordinary hits still grant nothing. |
+| Riposte cue | The cue names the actual target ("近战命中原木乃伊 / 原圣甲虫 · 仅一次") instead of always saying scarab. The H guide is updated. |
+| Test robustness | The Sandstep repeat-keydown test now releases any movement keys left held by earlier tests before pressing C (its new diagnostics showed `land=false`, i.e. the dodge had been steered sideways into a wall), and lists held keys if it ever fails again. |
+
+**Verification:** `node tools/headless.mjs selftest` **385/385** on random seeds ×3 and seeds 424242 / 2718281 / 1 (the mummy Sandstep assertion now also checks the riposte grant and the cue text).
+
 ## 2026-10-03 — 沙海奇境 第二十二轮·云端：木乃伊重击前摇（第三种敌人读招）
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) only. No save, key, block or atlas changes.

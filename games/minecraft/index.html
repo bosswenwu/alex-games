@@ -518,10 +518,10 @@
       <div class="combat-steps">
         <div><b>01 · 读预警</b>圣甲虫变暖金、浮起粒子环时正在蓄力；随后沿锁定方向冲锋。</div>
         <div><b>02 · 侧向沙步</b>桌面按住 A / D 再按 C；触屏将摇杆推向侧面，再点「沙步」。保持落地并留出空间。</div>
-        <div><b>03 · 同目标反击</b>成功规避冲锋后，看金色倒计时：2 秒内用近战命中原圣甲虫，获得一次伤害奖励。</div>
+        <div><b>03 · 同目标反击</b>成功规避圣甲虫冲锋或木乃伊重击后，看金色倒计时：2 秒内用近战命中原目标，获得一次伤害奖励。</div>
       </div>
       <p>没有方向输入时朝视线前方沙步。沙步冷却 4.5 秒；空中、骑乘、水中、岩浆和钩爪牵引中不能使用。</p>
-      <p>看到「闪避成功」不一定有反击机会：只有规避圣甲虫的标记冲锋才授予反击。远程攻击、重锤范围副伤害不享受奖励；环境伤害不能用沙步规避。</p>
+      <p>看到「闪避成功」不一定有反击机会：只有规避圣甲虫的标记冲锋或木乃伊重击才授予反击。远程攻击、重锤范围副伤害不享受奖励；环境伤害不能用沙步规避。</p>
       <p><b>能量核心战技</b>：在 B 合成台用能量核心学「沙步熟练」（缩短沙步冷却）和「回砂反击」（提高精准反击伤害），各最多 3 级，越往后越贵。</p>
       <p><b>木乃伊</b>贴近后会站定举手、身体泛紫，脚下亮起一圈紫色诅咒光环；约 0.75 秒后砸地，圈内受重伤并被击飞。重击打不断，看到光环就走出圈外，或者用沙步躲开；砸完它会慢半拍，正好反击。</p>
       <p><b>骷髅射手</b>放箭前会站定、身体泛红，弓前拉出一条红色瞄准线；瞄准线变亮表示方向已锁定。躲到掩体后可取消它的瞄准；锁定后横移就能躲开；瞄准时打它一下会打断，并让它僵直约 1 秒。</p>
@@ -5099,7 +5099,7 @@ function refreshRiposteCue(){
   el.hidden=!visible;
   if(!visible) return;
   const title=counter?"精准反击 · "+sandStepState.counterT.toFixed(1)+"s":"精准反击命中";
-  const hint=counter?"近战命中原圣甲虫 · 仅一次":"额外伤害已结算";
+  const hint=counter?"近战命中原"+((target.def&&target.def.name)||(MOB_DEFS[target.type]&&MOB_DEFS[target.type].name)||"目标")+" · 仅一次":"额外伤害已结算";   // 第二十三轮·云端: 按目标名字显示(圣甲虫/木乃伊)
   if(el.dataset.label!==title){ document.getElementById("riposteTitle").textContent=title; el.dataset.label=title; }
   if(el.dataset.hint!==hint){ document.getElementById("riposteHint").textContent=hint; el.dataset.hint=hint; }
   document.getElementById("riposteFill").style.transform="scaleX("+clamp(counter?sandStepState.counterT/SAND_RIPOSTE_WINDOW:sandStepState.counterHitT/0.9,0,1)+")";
@@ -9002,7 +9002,7 @@ function foeStrike(dmg,kx,kz,m,attackTag){
   // 沙步只躲经由敌方攻击入口的伤害；坠落、陷阱、毒、岩浆等仍直接走 damagePlayer。
   if(sandStepState.evadeT>0){
     if(!sandStepState.dodged){ sandStepState.dodged=true; sandStepState.feedbackT=1.0; refreshSandStepButton(); }
-    if(attackTag===SCARAB_CHARGE_TAG && m && m.type==="scarab" && !sandStepState.counterTarget){
+    if(m && !sandStepState.counterTarget && ((attackTag===SCARAB_CHARGE_TAG && m.type==="scarab") || (attackTag===MUMMY_SLAM_TAG && m.type==="mummy"))){   // 第二十三轮·云端: 躲开木乃伊重击也给反击
       sandStepState.counterT=SAND_RIPOSTE_WINDOW; sandStepState.counterTarget=m; sandStepState.counterHitT=0;
       refreshSandStepButton();
     }
@@ -14870,9 +14870,11 @@ function selftest(){
         const craft=document.getElementById("craftPanel"), craftC=craft.className, craftD=craft.style.display;
         reject("面板打开",()=>{craft.classList.add("on"); craft.style.display="flex";},()=>{craft.className=craftC; craft.style.display=craftD;});
         const yawR=player.yaw; if(spot) player.yaw=Math.atan2(spot.dx,-spot.dz);   // 真实按键走视线方向: 对准已知可走的方向, 免得随机朝向正对墙而没触发
+        const kR=Object.assign({},keys); for(const k in keys) keys[k]=false;          // 先前测试可能留下按住的方向键, 会把方向拐到侧面
         resetStep(); const repeatBefore={x:player.x,z:player.z}; sandStepState.cd=0; document.dispatchEvent(new KeyboardEvent("keydown",{code:"KeyC",bubbles:true})); const once={x:player.x,z:player.z,cd:sandStepState.cd}; document.dispatchEvent(new KeyboardEvent("keydown",{code:"KeyC",repeat:true,bubbles:true}));
+        const heldKeys=Object.keys(kR).filter(k=>kR[k]).join("+")||"none"; Object.assign(keys,kR);
         player.yaw=yawR;
-        const why=once.cd>=4.49?"":(" playing="+playing()+" panel="+sandStepPanelOpen()+" water="+inWater()+" lava="+inLava()+" ground="+player.onGround+" fly="+player.flying+" ride="+!!riding+" grapple="+!!grappleTarget+" touch="+touchState.active+" land="+!!sandStepLanding(repeatBefore.x,player.y,repeatBefore.z,...sandStepDirection()));
+        const why=once.cd>=4.49?"":(" playing="+playing()+" panel="+sandStepPanelOpen()+" water="+inWater()+" lava="+inLava()+" ground="+player.onGround+" fly="+player.flying+" ride="+!!riding+" grapple="+!!grappleTarget+" touch="+touchState.active+" keys="+heldKeys);
         ok("沙步: 按住 C 的重复 keydown 只触发一次且冷却期不再位移",once.cd>=4.49 && player.x===once.x && player.z===once.z,"from="+repeatBefore.x.toFixed(2)+","+repeatBefore.z.toFixed(2)+" onceCd="+once.cd.toFixed(2)+why);
         softLock=sl0; locked=locked0; dead=dead0; riding=ride0; player.flying=fly0; grappleTarget=gt0; player.onGround=og0; document.getElementById("overlay").style.display=ov0; restoreB();
         const sv=collectSave();
@@ -16412,8 +16414,12 @@ function selftest(){
         hp=999; const m3=mk(); updateMummySlam(m3,0.05,-1.5,0,1.5,1.6,true);
         sandStepState.evadeT=1; sandStepState.dodged=false;
         for(let t=0;t<MUMMY_WIND_T+0.1 && m3.slamState==="wind";t+=0.05) updateMummySlam(m3,0.05,-1.5,0,1.5,1.6,true);
-        const dodged=hp===999 && sandStepState.dodged; Object.assign(sandStepState,s0);
-        ok("木乃伊重击: 沙步闪避窗内被砸不掉血", dodged, "hp="+hp+" dodged="+sandStepState.dodged);
+        const dodged=hp===999 && sandStepState.dodged, granted=sandStepState.counterTarget===m3 && sandStepState.counterT===SAND_RIPOSTE_WINDOW;
+        const keepM=mobs.slice(); mobs.push(m3); const sl=softLock, od=overlay.style.display; softLock=true; overlay.style.display="none"; refreshRiposteCue();   // 遮罩开着时提示框不刷新
+        const cueTxt=document.getElementById("riposteCue").textContent; mobs.length=0; for(const q of keepM) mobs.push(q); softLock=sl; overlay.style.display=od;
+        Object.assign(sandStepState,s0); refreshRiposteCue();
+        ok("木乃伊重击: 沙步闪避窗内被砸不掉血, 并授予对这只木乃伊的精准反击(提示写「原木乃伊」)", dodged && granted && cueTxt.includes("原木乃伊"),
+           "hp="+hp+" dodged="+dodged+" granted="+granted+" cue="+cueTxt.slice(0,30));
         // 4) 真实 updateMobs: 贴脸的木乃伊第一帧不再直接打人(先蓄力)
         hp=999; const keep=mobs.slice(); mobs.length=0; const m4=mk(); mobs.push(m4);
         try{ updateMobs(0.05); } finally { mobs.length=0; for(const q of keep) mobs.push(q); }
