@@ -2,6 +2,19 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-10-03 — 沙海奇境 第二十一轮·云端：试炼厅加入骷髅射手 + 沙漠旋风
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only. No save, key, block or atlas changes.
+
+| Change | Player-visible behavior |
+| --- | --- |
+| Trial hall | Wave 2 of the Osiris trial now includes a skeleton archer (normal: replaces one scarab; ominous: replaces one mummy), so the repeatable trial uses the round-19 aimed-shot read-and-counter. The final wave is still led by Anubis guards. |
+| Dust devils | On clear days (sun well up) in arid biomes (desert, mesa, salt lake, canyon), a swirling sand funnel occasionally forms 18–40 blocks away, wanders for 14–22 s, then dies down. At most one at a time; ~90 particles/s on high (half on medium, none on low), capped by the global particle limit; it disappears if the weather changes, night falls or you leave arid ground. Purely visual: no damage or gameplay effect. |
+
+**How:** `TRIAL_WAVES` / `TRIAL_WAVES_OMEN` wave 2 edited; `dustDevils`, `dustDevilOK()`, `tickDustDevils(dt)` (main loop after `tickRainbow`); `updateParticles` gets a `p.dd` branch that orbits each particle around its devil's moving center (radius grows, slow rise) instead of normal gravity.
+
+**Verification:** `node tools/headless.mjs selftest` **381/381** on random seed and seeds 424242 / 2718281 / 1 (2 new assertions: trial wave composition; dust-devil gating, single instance, particle-rate bound and dispersal on weather change). Headless screenshot of a desert dust devil checked by eye (earlier versions scattered sand everywhere or looked too thin; tuned until it reads as a funnel).
+
 ## 2026-10-03 — 沙海奇境 第二十轮·云端：雨后彩虹 + 远方天空闪电
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) only, desktop. Sky/weather rendering only; no gameplay, save, key, block or atlas changes.
