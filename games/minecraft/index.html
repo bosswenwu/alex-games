@@ -7376,6 +7376,11 @@ function updateParticles(dt){
     if(p.life<=0){ particles.splice(i,1); continue; }
     if(p.firefly){ p.vx+=(Math.random()-.5)*dt*2; p.vz+=(Math.random()-.5)*dt*2; p.vy=(p.vy+(Math.random()-.5)*dt*1.5)*0.98; p.l=Math.sin((p.life*5.3+p.x)*2)>-0.2?2.4:0.9; }   // 萤火虫: 无重力乱飘, 一闪一闪
     else if(p.smoke){ p.vy*=0.995; p.vx+=dt*0.08; p.size+=dt*0.07; }                    // 炊烟: 缓升、顺风、渐散
+    else if(p.dd){                                   // 沙漠旋风(第二十一轮·云端): 绕旋风中心转, 半径渐大、缓缓上升, 中心跟着旋风走
+      p.th+=dt*p.w; p.r+=dt*0.3; p.y+=dt*p.vy;
+      p.x=p.dv.x+Math.cos(p.th)*p.r; p.z=p.dv.z+Math.sin(p.th)*p.r;
+      continue;
+    }
     else p.vy-=18*dt;
     p.x+=p.vx*dt; p.z+=p.vz*dt;
     const ny=p.y+p.vy*dt;
@@ -9593,14 +9598,14 @@ function trialHall(s){
           spawns:[[x-1,z-9],[x+7,z-9],[x-1,z-6],[x+7,z-6]], key:"T"+x+","+z,
           vaults:[[x-1,z-11],[x+7,z-11]], omen:[x+3,z-4]};
 }
-const TRIAL_WAVES=[["mummy","scarab","scarab","mummy"],["serqet","mummy","scarab","serqet"],["anubis","mummy","serqet"]];
+const TRIAL_WAVES=[["mummy","scarab","scarab","mummy"],["serqet","mummy","skeleton","serqet"],["anubis","mummy","serqet"]];   // 第二十一轮·云端: 第二波加入骷髅射手(蓄力瞄准读招)
 const trialState={active:false, key:null, wave:0, alive:[], nextT:0, done:0, T:null, omen:false, keysGiven:0};
 /* ---- 🗝 试炼钥匙 · 试炼宝库 / 不祥宝库 (第九轮·本地, 对标 Minecraft Tricky Trials 的试炼钥匙与宝库) ----
    试炼每清一波掉 1 把试炼钥匙(一轮 3 把)。首次通关(宝匣已开)后, 试炼厅变成「不祥试炼」, 每个游戏日可挑战一次:
    怪物血量 ×1.5 且全是精英, 第三波两只阿努比斯守卫; 每清一波掉 1 把不祥钥匙。
    厅内北墙两座试炼宝库、南侧一座不祥宝库, 右键用对应钥匙开启, 每座只开一次(变暗, 随 blockDiff 存档)。
    不祥宝库更丰厚, 另有 35% 给武器随机升一级附魔(接附魔祭坛)。 */
-const TRIAL_WAVES_OMEN=[["mummy","serqet","serqet","mummy"],["anubis","serqet","mummy","scarab"],["anubis","anubis","serqet"]];
+const TRIAL_WAVES_OMEN=[["mummy","serqet","serqet","mummy"],["anubis","serqet","skeleton","scarab"],["anubis","anubis","serqet"]];   // 第二十一轮·云端: 第二波换入骷髅射手
 const vaultKeys={trial:0, omen:0, omenDay:{}};         // 钥匙数 + 每座试炼厅最近一次不祥试炼通关的游戏日
 function giveTrialKey(omen){
   if(omen) vaultKeys.omen++; else vaultKeys.trial++;
@@ -11965,6 +11970,42 @@ function tickRainbow(dt){
   rainbowK+=clamp(tgt-rainbowK,-dt/6,dt/4);          // 约 4 秒浮现、6 秒散去
 }
 function boltAlpha(){ const f=lightT/0.35; return f<=0?0:(f>0.55?1:(f>0.4?0.2:f*1.6)); }   // 一亮、一暗、再一亮
+// 第二十一轮·云端: 沙漠旋风(纯氛围) —— 晴朗白天、玩家在干旱群系时, 偶尔在 18~40 格外卷起一根游走的沙尘柱; 最多同时 1 根, 粒子限速
+const dustDevils=[]; let dustDevilT=12, dustDevilAcc=0;
+const DUST_DEVIL_RATE=90;                           // 每秒粒子数(高画质; 中画质减半), 同屏约百颗
+function dustDevilOK(){
+  const bio=biomeAt(Math.floor(player.x),Math.floor(player.z));
+  return weather==="clear" && sunH>0.25 && gfxLevel>0 && (bio===BIO_DESERT||bio===BIO_MESA||bio===BIO_SALTLAKE||bio===BIO_CANYON);
+}
+function tickDustDevils(dt){
+  if(dustDevils.length===0){
+    dustDevilT-=dt;
+    if(dustDevilT<=0){
+      dustDevilT=20+Math.random()*25;
+      if(dustDevilOK()){
+        const a=Math.random()*6.283, d=18+Math.random()*22, x=player.x+Math.sin(a)*d, z=player.z+Math.cos(a)*d, g=groundY(Math.floor(x),Math.floor(z));
+        if(g>0){ const h=Math.random()*6.283; dustDevils.push({x,z,y:g,vx:Math.sin(h)*1.4,vz:Math.cos(h)*1.4,life:14+Math.random()*8,age:0,spin:Math.random()*6.283}); }
+      }
+    }
+    return;
+  }
+  const dv=dustDevils[0];
+  dv.age+=dt; dv.life-=dt; dv.spin+=dt*7;
+  dv.x+=dv.vx*dt; dv.z+=dv.vz*dt;
+  if(Math.random()<dt*0.4){ const h=Math.random()*6.283; dv.vx=Math.sin(h)*1.4; dv.vz=Math.cos(h)*1.4; }   // 偶尔换个方向晃
+  const g=groundY(Math.floor(dv.x),Math.floor(dv.z)); if(g>0) dv.y+=(g-dv.y)*Math.min(1,dt*3);
+  if(dv.life<=0 || Math.hypot(dv.x-player.x,dv.z-player.z)>70 || !dustDevilOK()){ dustDevils.length=0; return; }
+  const fade=Math.min(1,dv.age/2,dv.life/3);            // 起风 2 秒、散去 3 秒
+  dustDevilAcc+=dt*DUST_DEVIL_RATE*(gfxLevel>=2?1:0.5)*fade;
+  while(dustDevilAcc>=1 && particles.length<partCap()){
+    dustDevilAcc-=1;
+    const hgt=Math.pow(Math.random(),1.4)*9, r=0.35+hgt*0.22, th=dv.spin+Math.random()*6.283;   // 底部更密, 越往上越粗
+    particles.push({dd:true, dv, th, r, w:4.5+Math.random()*2.5,
+      x:dv.x+Math.cos(th)*r, y:dv.y+0.2+hgt, z:dv.z+Math.sin(th)*r, vx:0, vy:0.8+Math.random()*0.8, vz:0,
+      life:0.9+Math.random()*0.6, size:0.08+Math.random()*0.09, u:4*TS, v:0, l:1.0});
+  }
+  if(dustDevilAcc>=1) dustDevilAcc=0;                    // 粒子满额时不攒账
+}
 function weatherName(){
   if(weather==="clear") return "☀ 晴";
   const snowy = biomeAt(Math.floor(player.x),Math.floor(player.z));
@@ -12335,6 +12376,7 @@ function frame(now){
     tickDriveHud(dt);                             // 第十一轮·云端: 载具驾驶 HUD
     tickWetness(dt);                              // 第十二轮·云端: 雨天湿地面
     tickRainbow(dt);                              // 第二十轮·云端: 雨后彩虹
+    tickDustDevils(dt);                           // 第二十一轮·云端: 沙漠旋风
     tickRainSplash(dt);                           // 第十二轮·云端·A: 雨天涟漪强度 + 地面/水面雨滴水花
     tickTitle();
     arrowCd=Math.max(0,arrowCd-dt);
@@ -16274,6 +16316,33 @@ function selftest(){
            struck && a1===1 && a2===0.2 && a3>0 && a3<1 && a4===0 && locsOK, "struck="+struck+" a="+[a1,a2,a3.toFixed(2),a4]+" locs="+locsOK);
       } finally {
         weather=w0; weatherT=wt0; rainbowT=rt0; rainbowK=rk0; lightT=lt0; thunderT=th0; RENDER=R0; boltA=ba0; particles.length=Math.min(particles.length,pa0);
+      }
+    }
+
+    // 第二十一轮·云端: 试炼第二波加入骷髅射手; 沙漠旋风只在晴朗白天的干旱群系出现、最多 1 根、粒子限速、会散去
+    {
+      const wavesOK=TRIAL_WAVES[1].includes("skeleton") && TRIAL_WAVES_OMEN[1].includes("skeleton") && TRIAL_WAVES[2].includes("anubis")
+        && [...TRIAL_WAVES,...TRIAL_WAVES_OMEN].every(w=>w.every(t=>MOB_DEFS[t] && MOB_DEFS[t].hostile));
+      ok("试炼厅: 第二波(普通/不祥)加入骷髅射手, 末波仍是阿努比斯, 波次里的怪都存在且敌对", wavesOK,
+         "w2="+TRIAL_WAVES[1].join("/")+" omen2="+TRIAL_WAVES_OMEN[1].join("/"));
+      const w0=weather, sh0=sunH, P0={x:player.x,y:player.y,z:player.z}, dt0=dustDevilT, acc0=dustDevilAcc, pa0=particles.length, g0=gfxLevel;
+      try{
+        // 找一块干旱群系站上去
+        let spot=null; for(let i=0;i<80 && !spot;i++){ const x=Math.floor(player.x)+i*37, z=Math.floor(player.z)-i*23; ensureData(x>>4,z>>4); const b=biomeAt(x,z); if(b===BIO_DESERT||b===BIO_MESA||b===BIO_SALTLAKE||b===BIO_CANYON) spot={x,z}; }
+        if(spot){ player.x=spot.x+0.5; player.z=spot.z+0.5; for(let dx=-3;dx<=3;dx++) for(let dz=-3;dz<=3;dz++) ensureData((spot.x>>4)+dx,(spot.z>>4)+dz); }
+        gfxLevel=Math.max(gfxLevel,2); weather="clear"; sunH=0.8;
+        const aridOK=!!spot && dustDevilOK();
+        weather="rain"; const rainNo=!dustDevilOK(); weather="clear"; sunH=0.1; const nightNo=!dustDevilOK(); sunH=0.8;
+        dustDevils.length=0; let spawned=false;
+        for(let k=0;k<12 && !spawned;k++){ dustDevilT=0; tickDustDevils(0.05); spawned=dustDevils.length===1; }   // 选点偶尔落在没地面的地方, 多试几次
+        particles.length=0; for(let i=0;i<40;i++) tickDustDevils(0.05);               // 2 秒
+        const made=particles.length, bounded=made<=Math.ceil(2*DUST_DEVIL_RATE)+1 && made>0, single=dustDevils.length<=1;
+        weather="rain"; tickDustDevils(0.05); const gone=dustDevils.length===0;      // 天气变了就散
+        ok("沙漠旋风: 晴朗白天的干旱群系才有(下雨/夜里没有), 最多 1 根, 2 秒粒子不超过限速, 天气一变就散",
+           aridOK && rainNo && nightNo && spawned && bounded && single && gone,
+           "arid="+aridOK+" rain="+rainNo+" night="+nightNo+" spawn="+spawned+" parts="+made+" single="+single+" gone="+gone);
+      } finally {
+        weather=w0; sunH=sh0; Object.assign(player,P0); dustDevils.length=0; dustDevilT=dt0; dustDevilAcc=acc0; gfxLevel=g0; particles.length=Math.min(particles.length,pa0);
       }
     }
 
