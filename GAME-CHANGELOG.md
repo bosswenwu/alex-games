@@ -2,6 +2,19 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-10-03 — 沙海奇境 第二十轮·云端：雨后彩虹 + 远方天空闪电
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only, desktop. Sky/weather rendering only; no gameplay, save, key, block or atlas changes.
+
+| Change | Player-visible behavior |
+| --- | --- |
+| Rainbow after rain | When rain or a thunderstorm clears in daytime (not in snow biomes and not after a sandstorm), a rainbow appears opposite the sun: a 42° primary bow (red outside, violet inside) plus a fainter 51° secondary bow with reversed colors. The lower the sun, the higher the arc; with the sun above 42° it sits below the horizon. It fades in over ~4 s, lasts ~50 s, fades out over the last 10 s, dims with weaker sunlight, and clouds/terrain cover it. |
+| Distant sky lightning | Every thunderstorm strike now also draws a jagged bolt in the sky, from the cloud base down to the horizon, in the direction of the strike. Its brightness goes bright → dim → bright and then fades, matching the existing screen flash. The ground strike column, thunder and damage are unchanged. |
+
+**How:** `skyProg` gains `uRainbow` / `uBolt` and a `rainbowCol()` helper; the rainbow is added before the cloud layer, the bolt after it (it sits below the cloud base). JS: `RAINBOW_T`, `rainbowT`/`rainbowK`, `rainbowTarget()`, `tickRainbow(dt)` (main loop, after `tickWetness`), `boltA`/`boltSeed`/`boltAlpha()`; `updateWeather` sets `rainbowT` when rain/storm turns clear and records the strike direction.
+
+**Verification:** `node tools/headless.mjs selftest` **379/379** on random seed and seeds 424242 / 2718281 / 1 (2 new assertions: rainbow trigger, day/snow/sand gating and fade; strike direction, flicker curve and shader uniforms). Headless screenshots checked by eye: dusk rainbow over the village (primary + secondary, occluded by roofs/trees) and a storm bolt over the oasis village. An extra stress script (40 strikes, 17 hitting mobs) threw no errors.
+
 ## 2026-10-03 — 沙海奇境 第十九轮·云端：能量核心战技（P3 有上限的成长出口）
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) only. P3 of the P1–P5 plan, following the user-supplied "round-15 proposal" (core-funded combat mastery). Reuses the existing energy-core currency and B crafting panel; no new currency, keys, blocks or hotbar slots. **One new save field:** `combatMastery`.
