@@ -2,6 +2,17 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-10-01 — 沙海奇境 第十九轮·Codex：触屏侧闪与精准反击提示
+
+- 触屏摇杆方向现在与沙步方向一致，支持左右和斜向；松开摇杆仍沿视线前进。键盘和显式调试方向保持原语义。
+- 完整帮助显示期间，沙步入口也会拦截触屏调用，避免阅读时误位移。
+- 精准反击窗口新增居中的金色倒计时、同目标近战提示与命中确认；帮助/暂停/拍照/死亡/目标离场时隐藏，移动横屏避开血条。
+- H 完整帮助新增三步战斗指南。没有新增快捷键、存档字段、依赖，也没有修改敌人 AI、战斗时限、伤害或渲染管线。
+
+**Affected files:** `games/minecraft/index.html`, `tools/sandsea-combat-ui-smoke.js`.
+
+**Verification:** 默认世界及 seed=424242 selftest 各 **368/368 PASS**（原基线 362/362）；浏览器模拟触摸经真实监听器验证摇杆输入、按钮侧移、帮助拦截、释放归中；1280×720 帮助、844×390 反击、390×844 帮助布局截图。测试页面新增检查期间无捕获异常。截图为脚本布景，非真人反击手感验收；RTX 5060 Ti 本机验证不代表低端 GPU 或真实手机验收。
+
 ## 2026-09-29 — 沙海奇境 第十六轮·Manus：沙步 v1.1 边界加固
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) only. The C-key Sandstep now explicitly refuses to activate while a gameplay panel is open, while airborne, riding, grappling, in water/lava, dead, paused, or otherwise not grounded; repeated keydown events cannot retrigger it. Collision-safe landing remains unchanged in distance and AABB semantics, and the player still follows WASD or view direction as documented. No other key, save field, enemy AI, `foeStrike()` damage logic, shader, or rendering code changed.
@@ -217,3 +228,25 @@ Persistent handoff notes for future agents. Add a new entry for each user-visibl
 | Debug/test contract | `window.__game.sandStep` reports cooldown/window/ready/distance and `useSandStep(x,z)` triggers a testable step. Four self-tests cover movement, the precise damage boundary, cooldown/window expiry and absence of new save fields. |
 
 **Verification:** `node tools/headless.mjs selftest` **342/342** (the four new Sandstep assertions plus all regressions); headless `KeyC` smoke moved 3.2 blocks and reported `cd=4.5`, `evade=0.35`, with both help surfaces present; `git diff --check` passed. Real-time dodge timing remains a desktop point-test item.
+
+
+## 2026-09-29 — 沙海奇境：Sandstep touch control and HUD feedback (round 16.2)
+
+**Scope:** `games/minecraft/index.html` only. This finishes the player-facing input/feedback slice; it does not change the Sandstep movement, landing collision checks, cooldown, enemy damage boundary, rendering, or world-save schema.
+
+| Change | Player-visible behavior | Files |
+| --- | --- | --- |
+| Touch control | Adds a 60 px Sandstep button to the existing touch controls, positioned beside the task card and above the tutorial card on landscape screens. It calls the same `sandStep()` path as **C**. | `games/minecraft/index.html` |
+| Status feedback | Desktop HUD shows ready/evading/cooldown/success. The touch button mirrors the state with a short success highlight. Successful activation and cooldown no longer create bottom toasts over hearts/hotbar; blocked-use reasons retain their existing feedback. | `games/minecraft/index.html` |
+| Runtime-only state | The 1 s success highlight is cleared on pause/death/respawn/new world and is not saved. `window.__game.sandStep` exposes status fields for smoke tests. | `games/minecraft/index.html` |
+
+**Verification:** `node tools/headless.mjs selftest` **356/356** both on the default world and `?seed=424242`; seeded Chromium touch-event smoke at 844×390 triggered the visible control, moved 3.33 blocks, and confirmed the button stays inside the viewport without overlapping the tutorial card. A second touch during cooldown produced no movement and no cooldown toast. Desktop smoke at 1280×720 showed the HUD status with touch controls off; both screenshots inspected; `git diff --check` passed. Simulated browser touch is not a substitute for real-device feel testing.
+
+
+## 2026-09-30 — 沙海奇境：圣甲虫预警与沙步精准反击（第十七轮）
+
+**范围：**仅 `games/minecraft/index.html`。圣甲虫新增“蓄力预警 → 锁向冲锋 → 收招”攻击节奏；蓄力期间以暖金实体高亮与浮空粒子环提示。受击、失去视线、超出距离或锁定方向明显偏离时会取消冲锋。
+
+**战斗规则：**只有沙步窗口成功避开带圣甲虫冲锋标记的攻击，才获得绑定同一圣甲虫、持续 2 秒的一次性反击。下一次对该目标的近战主击增加约 35% 伤害（向上取整、封顶 +3）；重锤范围副伤害、远程和环境伤害不继承奖励。普通敌击不授予机会。反击状态为运行态，不新增存档字段。
+
+**验证：**`node tools/headless.mjs selftest` 默认世界 **362/362 PASS**，`?seed=424242` **362/362 PASS**；自动截图并目视检查 1280×720 桌面预警、844×390 横屏触控反击、390×844 竖屏旋转提示，脚本布景未报告窗口错误；`git diff --check` 通过。截图由无头 Chromium / SwiftShader 和脚本化状态生成，不代表真人操作时机、真实触屏或低端 GPU 性能结论。合并前仍需真人点测冲锋可读性和反击时机。

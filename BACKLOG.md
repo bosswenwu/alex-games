@@ -530,3 +530,44 @@
 - **修「沙步: 按住 C 只触发一次」偶发失败**（`onceCd=0`）：真实按键走视线方向，视线朝向是随机的，正对墙时第一次按 C 就不触发。现在测试前把视线转向测试已找到的可走方向 `spot`，测完还原。
 - **验证**：合并后的 main 上连跑 10 次（5 次 `?seed=424242`，5 次随机种子），这两条全部通过。
 - **仍有的偶发失败（留给后续，敌人 AI 车道）**：「圣甲虫会突进扑击(charge)」约 1/10 失败（`曾突进=false`）。突进要求 `speed>0`，也就是圣甲虫得先进入追击状态，受随机游走、视线等因素影响。建议负责敌人 AI 的会话让这条测试显式设好追击条件，或者延长观察帧数，不要放宽断言。
+
+
+## Manus 进度（2026-09-29：第十六轮②·沙步触屏与 HUD 反馈收尾）
+
+- **范围**：只改 `games/minecraft/index.html` 的沙步输入反馈；基于 main（PR #48 合并后）。不改沙步落点/位移/冷却/敌击伤害规则、敌人 AI、渲染/着色器或世界存档 schema。
+- **触屏入口**：`#btnDodge` 在 `initTouchUI()` 的现有 `hold()` 事件层绑定到同一个 `sandStep()`，每次触摸只触发一次。按钮 60×60 px，落在左侧任务卡右边、引导卡上方的空区（CSS `left:250px; top:82px`）；横屏实拍中与任务卡/教程卡均不重叠。
+- **状态反馈**：桌面右上 `#stats` 显示 `C 沙步 · 就绪/闪避中/剩余秒数/闪避成功`；触屏按钮同步显示冷却和闪避状态，并用色彩区分就绪/动作/成功。敌击命中沙步窗口时 `feedbackT` 高亮 1 秒。成功触发、冷却拒绝不再用底部 `showName()` toast 遮住生命条/快捷栏；落点被挡等失败原因保留原提示。`feedbackT` 是纯运行态，只在暂停/死亡/重生/新世界清除，不保存。
+- **后续 AI 接手锚点**：触屏按钮 DOM `#btnDodge` 与相邻 CSS；监听在 `initTouchUI()` 的 `hold("btnDodge",...)`；状态呈现 `sandStepStatusLabel()` / `refreshSandStepButton()`；桌面行在 `updateStatsHUD()`；敌击成功反馈仅从 `foeStrike()` 置位。`window.__game.sandStep` 额外暴露 `feedback`/`status` 供诊断。后续扩展应继续调用唯一的 `sandStep()`，勿另造冷却或绕过 AABB/面板禁用规则。
+- **协作/发布**：代码分支 `work/sandsea-sandstep-feedback-20260929`；PR 链接与最终审阅状态以 Issue #11 最新留言为准。
+- **验证**：默认世界与固定种子 `?seed=424242` 的完整 Chromium selftest 均为 **356/356**；固定种子 844×390 横屏真实触摸事件触发约 3.33 格移动，按钮显示“闪避中”、位于视口内且避开教程卡；冷却期再次按下不移动（0 格）且无冷却 toast。1280×720 桌面冒烟显示 HUD 状态行、未启用触屏层；目视检查两种截图，`git diff --check` 通过。此为浏览器模拟触摸，不等同真机手感测试。
+- **协作/发布**：代码分支 `work/sandsea-sandstep-feedback-20260929`；PR 链接与最终审阅状态以 Issue #11 最新留言为准。
+- **协作/发布**：代码分支 `work/sandsea-sandstep-feedback-20260929`；PR 链接与最终审阅状态以 Issue #11 最新留言为准。
+
+
+## Manus 进度（2026-09-30：第十七轮·圣甲虫预警与精准反击）
+
+- **范围**：仅 `games/minecraft/index.html`。圣甲虫状态机、预警视觉、标记冲锋攻击、沙步反击状态及确定性测试；无新增快捷键、方块、依赖、存档字段或其他敌人 AI。
+- **状态机/锚点**：`updateScarabCharge()` 管理 `idle → telegraph → lunge → recover`；`emitScarabTelegraph()` 产生 8 个亮色浮空粒子，`drawEntity()` 在 `chargeState==="telegraph"` 时暖金高亮。伤害继续经 `foeStrike()`，标记常量 `SCARAB_CHARGE_TAG` 仅在沙步闪避窗成功规避时授予机会。
+- **反击规则/锚点**：`sandStepState.counterT/counterTarget/counterHitT` 为纯运行态；`sandRiposteDamage()` 绑定同一目标一次消费，约 +35%、最多 +3，近战单体主目标接入 `doBreak()` / `maceStrike()`，AOE 保持基础结算。清理入口覆盖计时/目标离场及暂停、死亡、重生、新世界。
+- **确定性回归**：默认种子及 `?seed=424242` 完整 selftest 各 **362/362 PASS**；覆盖预警粒子、先预警后冲锋、精准闪避资格、普通敌击无资格、错目标不消费、同目标一次消费、+3 封顶、超时/离场失效、环境伤害仍生效、存档 schema 不变。`git diff --check` 通过。
+- **视觉验证**：无头 Chromium / SwiftShader 下目视检查 1280×720 桌面预警、844×390 横屏反击按钮/HUD、390×844 竖屏旋转提示。横屏 60×60 沙步按钮位于任务卡右侧、在视口内；自动布景脚本捕获到 0 个 `window` error/unhandled rejection。截图不代表真人操作时机、真机触控或低端 GPU 表现。
+- **接手建议/限制**：该分支尚未合并；合并前真人确认约 0.52 秒预警、冲锋距离/命中线与 2 秒反击窗口手感。之后由 Issue #11 认领 P1：低/中/高画质粒子与帧耗、参数平衡；未认领前不要并行改敌人 AI。
+- **分支/PR**：`work/sandsea-scarab-telegraph-riposte-20260929`；[PR #51](https://github.com/bosswenwu/alex-games/pull/51) 等待审阅，未合并。Issue #11 留言同步本轮测试和下阶段建议。
+
+
+## Manus 交接（2026-09-30：PR #51 合并后点测 / P1 性能测量工具）
+
+- **已发生**：[PR #51](https://github.com/bosswenwu/alex-games/pull/51) 按用户明确授权合入 `main`，merge commit `5f0af39a52b964b4f68d4645ba97c6686f95ba27`；合并后默认与 `?seed=424242` headless 完整 selftest 各 **362/362 PASS**。上面的“待审/未合并”是第十七轮提交时的历史快照，不是当前状态。
+- **真人点测待做**：[PR #51 合并后验收清单](docs/SANDSEA-PR51-POSTMERGE-ACCEPTANCE-2026-09-30.md) 已列 A1–A7 的近战/时机/真触屏/旧档场景、记录表及 P0/P1/P2 处置。无真人/真机验证，不回填“人工通过”；如出现问题从新 `main` 开修复 PR。
+- **P1 预备工具**：[性能与设备监控方案](docs/SANDSEA-P1-PERFORMANCE-BASELINE-2026-09-30.md) 与 `tools/sandsea-perf/` 包含可复现 SwiftShader 场景采样、真实设备被动监控、3 次样本同设备对比和 6 个模拟夹具单元测试。**仅工具/文档，不改游戏源码**；SwiftShader 只能冒烟/回归，真实设备性能与触控感仍待测。默认和固定种子 selftest 均 362/362；短时脚本 smoke 与设备监控器页面接口通过；短采样 `--compare` 返回 `NOT_COMPARABLE`，没有伪造正式 10s/30s×3 基线。
+- **协作边界**：本轮工具准备已在 Issue #11 单独声明；下一位 AI 若调整圣甲虫粒子或战斗数值，必须先读本清单和 Issue #11 最新认领，采集参考真机 before/after，仅修复复现问题。P2/P3/P4/P5 不随 P1 监控工具一并开工。
+- **发布**：[PR #52](https://github.com/bosswenwu/alex-games/pull/52) 已创建、**等待审阅且未合并**；分支 `work/sandsea-p1-perf-tooling-20260930`，只含 P1 工具与文档，不包含 P1 战斗参数改动。Issue #11 以实际 PR 链接交接。
+- **归档补充（同一 PR #52）**：用户本轮要求“全部推送并留说明”，因此 [交付说明](docs/SANDSEA-DELIVERY-HANDOFF-2026-09-30.md) 指向 Word 总报告、便携 ZIP 工具包与 `skill-creator` 生成的 Sandsea 工程技能副本。此处的“未合并”仅表示当时的状态快照；最终合并 SHA 以 GitHub PR #52 与 Issue #11 后续评论为准。
+
+
+## Manus 后续勘误（2026-09-30：PR #52 合并与最终资料归档）
+
+[PR #52](https://github.com/bosswenwu/alex-games/pull/52) 已按用户明确授权合并，merge commit `b0d651749c84e00e5e260463b0655327038417e2`；此前段落写的“未合并”只是 PR 创建时的历史快照，不是当前状态。合并后默认世界与 `?seed=424242` 完整 selftest 均 **362/362 PASS**，P1 设备比较器的 6 组合成夹具通过，main 无未提交改动。Word 报告已在本轮补记实际合并状态，之前单独交付的 [P1–P5 详细任务/验收计划](docs/SANDSEA-P1-P5-NEXT-CYCLE-PLAN-2026-09-30.md) 已补录到仓库；文件索引见 [交付说明](docs/SANDSEA-DELIVERY-HANDOFF-2026-09-30.md)。真人点测 A1–A7、真实触屏、实际低端 GPU 与正式 10s/30s×3 仍是 **未测**，不可由 SwiftShader 自测推出达标结论。下一位 AI 先读 Issue #11 最新留言，再单独认领 P1 战斗改码，避免与其他分支重叠。
+
+## 第十九轮·Codex（2026-10-01）
+触屏摇杆沙步方向、帮助面板触屏拦截、精准反击倒计时和三步指南已完成本地实现。基于 main cb95d55；默认/固定种子 368/368。真触屏手感和低端 GPU 尚未测。详见 docs/SANDSEA-UPGRADE-2026-10-01.md。PR 尚未创建。
