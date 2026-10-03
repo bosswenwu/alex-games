@@ -2,6 +2,21 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-10-03 — 沙海奇境 第十九轮·云端：能量核心战技（P3 有上限的成长出口）
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only. P3 of the P1–P5 plan, following the user-supplied "round-15 proposal" (core-funded combat mastery). Reuses the existing energy-core currency and B crafting panel; no new currency, keys, blocks or hotbar slots. **One new save field:** `combatMastery`.
+
+| Change | Player-visible behavior |
+| --- | --- |
+| ⚡ 战技·沙步熟练 | B panel: each level cuts the Sandstep cooldown by 0.4 s (4.5 → 4.1 → 3.7 → 3.3). Max 3 levels; costs 3 / 4 / 5 cores. |
+| ⚡ 战技·回砂反击 | B panel: each level adds +10% to the precise-riposte bonus and +1 to its cap (35% / +3 → 65% / +6 at level 3). Max 3 levels; costs 4 / 5 / 6 cores. |
+| Panel text | Recipe descriptions show the current level and effect; at max level the recipe locks with "已满 3 级". The H guide mentions both. |
+| Saves | `combatMastery {step, riposte}` is saved and loaded; old saves without it start at level 0; bad types become 0; out-of-range values clamp to 0..3; a new world resets both to 0. |
+
+**How:** `MASTERY_MAX`, `combatMastery`, `sandStepCd()`, `riposteRate()`, `riposteCap()`, `restoreCombatMastery()`; `sandStep` uses `sandStepCd()`, `sandRiposteDamage` uses the rate/cap helpers; two recipes appended at the end of `RECIPES` with getter-based `coreCost`/`desc`; `collectSave`/`loadGame`/new-world reset; `window.__game.combatMastery` (read-only).
+
+**Verification:** `node tools/headless.mjs selftest` **377/377** on random seed and seeds 424242 / 2718281 (4 new assertions: escalating cost + cap + cooldown; level-2 cooldown 3.7 s in a real `sandStep`; riposte bonus +3 → +6 and purchase cost; save round-trip, clamping, bad/legacy values, `__game`). Headless screenshot of the B panel checked by eye. Balance in real play is not verified.
+
 ## 2026-10-03 — 沙海奇境 第十九轮·云端：骷髅蓄力瞄准箭（P2 第二种敌人读招）
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) only. P2 of `docs/SANDSEA-P1-P5-NEXT-CYCLE-PLAN-2026-09-30.md`: one new enemy behavior with a tell and counters that differ from the scarab charge. No new save fields, keys, blocks or atlas tiles; mechs/titan, scarab charge and the precise-riposte rules are unchanged.

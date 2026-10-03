@@ -522,6 +522,7 @@
       </div>
       <p>没有方向输入时朝视线前方沙步。沙步冷却 4.5 秒；空中、骑乘、水中、岩浆和钩爪牵引中不能使用。</p>
       <p>看到「闪避成功」不一定有反击机会：只有规避圣甲虫的标记冲锋才授予反击。远程攻击、重锤范围副伤害不享受奖励；环境伤害不能用沙步规避。</p>
+      <p><b>能量核心战技</b>：在 B 合成台用能量核心学「沙步熟练」（缩短沙步冷却）和「回砂反击」（提高精准反击伤害），各最多 3 级，越往后越贵。</p>
       <p><b>骷髅射手</b>放箭前会站定、身体泛红，弓前拉出一条红色瞄准线；瞄准线变亮表示方向已锁定。躲到掩体后可取消它的瞄准；锁定后横移就能躲开；瞄准时打它一下会打断，并让它僵直约 1 秒。</p>
     </section>
     <b>F1</b> 拍照模式　<b>F2</b> 截图　<b>F5</b> 第三人称(Shift+F5 看正脸)　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成(可熔铸☀拉之烈阳剑、🔨塞特之锤)　<b>0</b> 第10格　<b>J</b> 附魔祭坛(献文物)　<b>C</b> 沙步闪避　<b>Esc</b> 暂停　<b>T</b> 编年史　<b>P</b> 陶片图鉴　<b>K</b> 神话遗物　<b>U</b> 开宝库　<b>R</b> 答斯芬克斯　<b>L</b> 神灯许愿　<b>N</b> 大地图(右上角为小地图)<br>
@@ -4965,6 +4966,16 @@ const EYE=1.62, PW=0.3, PH=1.8;
 /* 沙步是纯运行态；第十七轮在命中预警冲锋时授予一次精准反击。 */
 const SANDSTEP_DIST=3.2, SANDSTEP_WINDOW=0.35, SANDSTEP_CD=4.5;
 const SAND_RIPOSTE_WINDOW=2.0, SAND_RIPOSTE_RATE=0.35, SAND_RIPOSTE_CAP=3;
+// 第十九轮·云端 P3: 能量核心战技(有上限)。沙步熟练: 每级冷却 -0.4s(4.5→3.3); 回砂反击: 每级反击加成 +10%、封顶 +1(35%/+3 → 65%/+6)。
+const MASTERY_MAX=3;
+const combatMastery={step:0, riposte:0};
+function sandStepCd(){ return SANDSTEP_CD-0.4*combatMastery.step; }
+function riposteRate(){ return SAND_RIPOSTE_RATE+0.1*combatMastery.riposte; }
+function riposteCap(){ return SAND_RIPOSTE_CAP+combatMastery.riposte; }
+function restoreCombatMastery(d){                 // 老存档无字段/坏值 → 0, 越界限幅到 0..3
+  const o=d&&typeof d==="object"&&!Array.isArray(d)?d:{};
+  for(const k of ["step","riposte"]){ const n=Number(o[k]); combatMastery[k]=Number.isFinite(n)?clamp(Math.floor(n),0,MASTERY_MAX):0; }
+}
 const SCARAB_TELEGRAPH_T=0.52, SCARAB_LUNGE_T=0.38, SCARAB_RECOVER_T=0.58;
 const SCARAB_CHARGE_RANGE=8.5, SCARAB_CHARGE_HIT_R=1.55, SCARAB_CHARGE_DAMAGE=2;
 const SCARAB_CHARGE_TAG="scarab-charge";
@@ -4976,7 +4987,7 @@ const sandStepState={cd:0, evadeT:0, dodged:false, lastDist:0, feedbackT:0,
 function clearSandRiposte(){ sandStepState.counterT=0; sandStepState.counterTarget=null; sandStepState.counterHitT=0; }
 function sandRiposteDamage(target,baseDamage){
   if(sandStepState.counterT<=0 || sandStepState.counterTarget!==target) return {damage:baseDamage,bonus:0};
-  const bonus=Math.min(SAND_RIPOSTE_CAP,Math.max(0,Math.round(baseDamage*SAND_RIPOSTE_RATE)));
+  const bonus=Math.min(riposteCap(),Math.max(0,Math.round(baseDamage*riposteRate())));
   sandStepState.counterT=0; sandStepState.counterTarget=null; sandStepState.counterHitT=bonus>0?0.9:0;
   if(bonus>0){
     for(let i=0;i<7;i++){ const a=i/7*6.283;
@@ -5029,7 +5040,7 @@ function sandStep(dirX,dirZ,force){
   clearSandRiposte();
   player.x=landing.x; player.z=landing.z;
   player.kbx+=dx*1.5; player.kbz+=dz*1.5;
-  sandStepState.cd=SANDSTEP_CD; sandStepState.evadeT=SANDSTEP_WINDOW;
+  sandStepState.cd=sandStepCd(); sandStepState.evadeT=SANDSTEP_WINDOW;
   sandStepState.dodged=false; sandStepState.lastDist=landing.d; sandStepState.feedbackT=0;
   for(let i=0;i<12;i++){
     const r=Math.random(), side=(Math.random()-.5)*0.45;
@@ -5508,6 +5519,15 @@ const RECIPES=[
    run(){ bundleState.owned=true; renderCraft(); return "👜 收纳袋缝好了 — 合成台(B)面板里点「打开收纳袋」"; }},
   // 第七轮·云端: 砂岩熔炉
   {name:"🔥 砂岩熔炉", desc:"砂岩垒的炉子：放下后右键，烧玻璃/石头/红砖/钢板/鎏金，还能烤鱼", cost:[[SANDSTONE,8]], run(){ giveBlock(FURNACE,1); return "获得 砂岩熔炉 x1（放下后右键打开）"; }},
+  // 第十九轮·云端 P3: 能量核心战技(有上限, 价格逐级上涨)
+  {name:"⚡ 战技·沙步熟练", get desc(){ return "能量核心磨砺步法：沙步冷却 -0.4 秒（"+combatMastery.step+"/3 级，当前 "+sandStepCd().toFixed(1)+" 秒）"; },
+   get coreCost(){ return 3+combatMastery.step; }, cost:[],
+   ok(){ return combatMastery.step<MASTERY_MAX; }, lockMsg:"沙步熟练已满 3 级",
+   run(){ combatMastery.step++; refreshSandStepButton(); return "💨 沙步熟练 "+combatMastery.step+"/3（冷却 "+sandStepCd().toFixed(1)+" 秒）"; }},
+  {name:"⚡ 战技·回砂反击", get desc(){ return "能量核心灌注反击：精准反击加成 +10%、上限 +1（"+combatMastery.riposte+"/3 级，当前 "+Math.round(riposteRate()*100)+"%、最多 +"+riposteCap()+"）"; },
+   get coreCost(){ return 4+combatMastery.riposte; }, cost:[],
+   ok(){ return combatMastery.riposte<MASTERY_MAX; }, lockMsg:"回砂反击已满 3 级",
+   run(){ combatMastery.riposte++; return "🌀 回砂反击 "+combatMastery.riposte+"/3（加成 "+Math.round(riposteRate()*100)+"%，最多 +"+riposteCap()+"）"; }},
 ];
 // 第七轮③·本地: 其余材质的半砖/楼梯配方由材质表生成(砂岩的两条在上面手写)
 for(const M of SHAPE_MATS.slice(1)){
@@ -7106,7 +7126,7 @@ newworldbtn.addEventListener("click",()=>{
   for(const [,c] of world) if(c.mesh) destroyMesh(c.mesh);
   world.clear(); meshQueue.length=0; queued.clear();
   mobs.length=0; arrows.length=0; drops.length=0; particles.length=0;
-  hp=maxHp=20; lvl=1; xp=0; armor=0; cores=0; kills=0; dayCount=1; dmgMul=1; dead=false; setSunblade(false); setMace(false); for(const k in gearWear) gearWear[k]=0; updateGearHud(); for(const k in enchState) enchState[k]=0; vaultKeys.trial=0; vaultKeys.omen=0; vaultKeys.omenDay={};
+  hp=maxHp=20; lvl=1; xp=0; armor=0; cores=0; restoreCombatMastery({}); kills=0; dayCount=1; dmgMul=1; dead=false; setSunblade(false); setMace(false); for(const k in gearWear) gearWear[k]=0; updateGearHud(); for(const k in enchState) enchState[k]=0; vaultKeys.trial=0; vaultKeys.omen=0; vaultKeys.omenDay={};
   for(const k in potions) potions[k]=0; for(const k in potionFx) potionFx[k]=0;   // 第五轮·云端
   fishState.on=false; fishState.fish=0; fishState.caught=0;
   for(const k in chests) delete chests[k]; bundleState.owned=false; bundleState.items={};   // 第六轮·云端
@@ -12359,6 +12379,7 @@ function collectSave(){
     fish:{ n:fishState.fish, caught:fishState.caught, cooked:fishState.cooked|0 },   // 第五轮·云端: 钓鱼(老存档无此字段 → 0); 第七轮·云端: 烤鱼
     chests:JSON.parse(JSON.stringify(chests)), bundle:{ owned:bundleState.owned, items:Object.assign({},bundleState.items) },   // 第六轮·云端: 储物箱/收纳袋(老存档无 → 空)
     furnaces:JSON.parse(JSON.stringify(furnaces)),   // 第七轮·云端: 熔炉(老存档无 → 空)
+    combatMastery:Object.assign({},combatMastery),   // 第十九轮·云端 P3: 能量核心战技等级(老存档无 → 0 级)
     questIdx, questId:(QUESTS[questIdx]||{}).id||null,
     questProg:+questProg.toFixed(1), questDone,
     bounty:{ idx:bountyIdx, prog:bountyProg, done:bountyDone },
@@ -12447,6 +12468,7 @@ function loadGame(){
   setSunblade(!!s.sunblade);
   setMace(!!s.mace);
   restoreGearWear(s.gearWear);
+  restoreCombatMastery(s.combatMastery);         // 第十九轮·云端 P3
   for(const D of ENCH_DEFS) enchState[D.k]=Math.max(0,Math.min(D.max,(s.ench&&s.ench[D.k])|0));
   { const V=s.trialVault||{}; vaultKeys.trial=Math.max(0,V.trial|0); vaultKeys.omen=Math.max(0,V.omen|0); vaultKeys.omenDay=(V.omenDay&&typeof V.omenDay==="object")?V.omenDay:{}; }
   for(const P of POTIONS){ potions[P.k]=Math.max(0,(s.potions&&s.potions[P.k])|0); if(P.k in potionFx) potionFx[P.k]=0; }   // 第五轮·云端: 老存档无 potions → 全 0
@@ -13658,6 +13680,7 @@ window.__game = {
                               eliteChance:+eliteChance().toFixed(3), spawnCap:Math.min(8,2+Math.floor(Math.min(dayCount,10)/2)) }; },
   get streak(){ return { cur:killStreak, best:bestStreak, elites:elitesSlain }; },
   get cores(){ return cores; }, get armor(){ return armor; },
+  get combatMastery(){ return {step:combatMastery.step, riposte:combatMastery.riposte, sandStepCd:sandStepCd(), riposteRate:riposteRate(), riposteCap:riposteCap()}; },
   get poison(){ return +poisonT.toFixed(2); },
   get sandStep(){ return {cd:+sandStepState.cd.toFixed(2), evade:+sandStepState.evadeT.toFixed(2), feedback:+sandStepState.feedbackT.toFixed(2),
     counter:+sandStepState.counterT.toFixed(2), counterTarget:sandStepState.counterTarget&&sandStepState.counterTarget.type||null,
@@ -16151,6 +16174,42 @@ function selftest(){
       } finally {
         mobShoot=ms0; mobs.length=n0; arrows.length=a0; particles.length=Math.min(particles.length,pa0);
         Object.assign(player,P0); Object.assign(sandStepState,s0); hp=hp0; updateHearts();
+      }
+    }
+
+    // 第十九轮·云端 P3: 能量核心战技 —— 价格逐级上涨、3 级封顶、冷却/反击效果生效、存档往返与坏值限幅
+    {
+      const cm0=Object.assign({},combatMastery), cores0=cores, s0=Object.assign({},sandStepState), P0={x:player.x,y:player.y,z:player.z,vx:player.vx,vz:player.vz,onGround:player.onGround};
+      try{
+        restoreCombatMastery({});
+        const iStep=RECIPES.findIndex(r=>r.name==="⚡ 战技·沙步熟练"), iRip=RECIPES.findIndex(r=>r.name==="⚡ 战技·回砂反击");
+        const exists=iStep>=0 && iRip>=0 && RECIPES[iStep].coreCost===3 && RECIPES[iRip].coreCost===4;
+        cores=20; const costs=[];
+        for(let k=0;k<4;k++){ costs.push(RECIPES[iStep].coreCost); doCraft(iStep); }
+        const stepCapped=combatMastery.step===3 && cores===20-3-4-5 && !canCraft(RECIPES[iStep]) && costs.join(",")==="3,4,5,6";
+        ok("核心战技·沙步熟练: 价格 3→4→5 逐级上涨, 3 级封顶后不再扣核心, 冷却 4.5→3.3 秒",
+           exists && stepCapped && Math.abs(sandStepCd()-3.3)<1e-9, "exists="+exists+" costs="+costs+" step="+combatMastery.step+" cores="+cores+" cd="+sandStepCd().toFixed(2));
+        // 沙步真正用上缩短后的冷却
+        restoreCombatMastery({step:2}); let used=false;
+        for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){ Object.assign(player,P0); sandStepState.cd=0; sandStepState.evadeT=0; player.onGround=true; if(sandStep(dx,dz,true)){ used=true; break; } }
+        ok("核心战技·沙步熟练: 2 级时沙步冷却为 3.7 秒", !used || Math.abs(sandStepState.cd-3.7)<1e-9, "used="+used+" cd="+sandStepState.cd.toFixed(2));
+        // 回砂反击: 基础 35%/+3, 3 级 65%/+6
+        const tgt={x:player.x,y:player.y,z:player.z};
+        restoreCombatMastery({}); sandStepState.counterT=1; sandStepState.counterTarget=tgt; const b0=sandRiposteDamage(tgt,10).bonus;
+        restoreCombatMastery({riposte:3}); sandStepState.counterT=1; sandStepState.counterTarget=tgt; const b3=sandRiposteDamage(tgt,10).bonus;
+        cores=4; restoreCombatMastery({}); doCraft(iRip); const ripBought=combatMastery.riposte===1 && cores===0 && RECIPES[iRip].coreCost===5;
+        ok("核心战技·回砂反击: 10 点近战基础加成 +3, 3 级时 +6; 买 1 级扣 4 核心、下一级要 5", b0===3 && b3===6 && ripBought, "b0="+b0+" b3="+b3+" bought="+ripBought);
+        // 存档往返 + 坏值限幅
+        restoreCombatMastery({step:2,riposte:1}); const sv=JSON.parse(JSON.stringify(collectSave()));
+        restoreCombatMastery({}); restoreCombatMastery(sv.combatMastery); const round=combatMastery.step===2 && combatMastery.riposte===1;
+        restoreCombatMastery({step:-1,riposte:9}); const clampOK=combatMastery.step===0 && combatMastery.riposte===3;
+        restoreCombatMastery({step:"x",riposte:null}); const badOK=combatMastery.step===0 && combatMastery.riposte===0;
+        restoreCombatMastery(undefined); const legacyOK=combatMastery.step===0 && combatMastery.riposte===0;
+        const api=window.__game && window.__game.combatMastery && window.__game.combatMastery.sandStepCd===4.5;
+        ok("核心战技: 存档往返、越界限幅到 0..3、坏值和老存档读成 0 级、__game 可读", round && clampOK && badOK && legacyOK && !!api,
+           "round="+round+" clamp="+clampOK+" bad="+badOK+" legacy="+legacyOK+" api="+!!api);
+      } finally {
+        restoreCombatMastery(cm0); cores=cores0; Object.assign(sandStepState,s0); Object.assign(player,P0); refreshSandStepButton();
       }
     }
 
