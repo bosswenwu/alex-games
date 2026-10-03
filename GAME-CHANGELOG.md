@@ -2,6 +2,21 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-10-03 — 沙海奇境 第二十二轮·云端：木乃伊重击前摇（第三种敌人读招）
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only. No save, key, block or atlas changes.
+
+| Change | Player-visible behavior |
+| --- | --- |
+| Mummy slam | Mummies no longer hit instantly in melee. Within ~2.3 blocks they stop, raise their arms, glow purple and draw a purple curse ring (radius 2.6) on the ground; after 0.75 s they slam: inside the ring you take 5 damage and are knocked outward, outside nothing happens. The slam **cannot** be interrupted by hitting them. Afterwards they recover slowly for 0.5 s (counter window), 2 s cooldown. |
+| Counters | Step out of the ring, or Sandstep through it (the slam goes through `foeStrike`). This rounds out three distinct reads: scarab = line charge (sidestep), skeleton = ranged aim (cover / strafe / interrupt), mummy = area slam (leave the ring). |
+| Help | The H guide adds a paragraph on mummies. |
+| Tests | Two rare, terrain-dependent flaky assertions (Sandstep repeat-keydown, drive-HUD height) now print diagnostics when they fail, so the cause can be read off the next failure. |
+
+**How:** `MUMMY_*` constants, `emitMummyRing`, `mummySlamHits`, `updateMummySlam` (idle/wind/recover), hooked in `updateMobs` after the skeleton block; the mummy is excluded from the generic melee branch; `drawEntity` tints the wind-up purple.
+
+**Verification:** `node tools/headless.mjs selftest` **385/385** on seeds 424242 / 2718281 / 1 (4 new assertions: no damage during wind-up and no interrupt, hit inside the ring; miss after stepping out; Sandstep avoids it; `updateMobs` starts the wind-up instead of hitting). One random-seed run hit the known rare drive-HUD flake (unrelated; diagnostics added). Headless screenshot of a winding-up mummy with its ring checked by eye.
+
 ## 2026-10-03 — 沙海奇境 第二十一轮·云端：试炼厅加入骷髅射手 + 沙漠旋风
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) only. No save, key, block or atlas changes.
