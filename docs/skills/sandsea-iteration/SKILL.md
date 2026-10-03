@@ -1,6 +1,6 @@
 ---
 name: sandsea-iteration
-description: Repeatable engineering workflow for the Sandsea single-file WebGL voxel game. Use when planning, implementing, testing, documenting, coordinating, or opening a PR for gameplay or performance changes in bosswenwu/alex-games/games/minecraft/index.html.
+description: Repeatable engineering workflow for the Sandsea single-file WebGL voxel game. Use for Sandsea gameplay or performance planning, real-device P1 profiling, monitoring-tool tests, implementation, coordination, documentation, or PR handoff in bosswenwu/alex-games.
 ---
 
 # Sandsea Iteration
@@ -43,6 +43,10 @@ Use this skill to carry one Sandsea game slice from scope and coordination throu
 ## Planning P1–P5
 
 For a new cycle, read the current project roadmap first; do not assume a dated plan is still current. Use the plan to sequence: **P1 performance/balance → P2 one contrasting enemy behavior → P3 bounded progression sink → P4 replayable micro-ruin → P5 release stabilization**. Start only the next unblocked phase, give it one Issue #11 claim and one PR, and make each phase's automated, visual, human, persistence, and performance acceptance criteria explicit. See the delivered project plan for the current detailed breakdown; refresh it from code and GitHub before reuse.
+
+### P1 real-device performance route
+
+Before planning a low-end GPU experiment, editing `tools/sandsea-perf/`, or judging device performance, read [P1 device-performance workflow](references/p1-device-performance.md). Use its [operator session template](templates/device-session.md) for reference-hardware identity, warmup, raw 30s ×3 results, and missing GPU/thermal or human evidence. Determine whether a genuine low-end device is accessible; Sandbox SwiftShader and an online Desktop with unknown GPU do not qualify. For plan-only work, publish a dated proposal without asserting that a hardware benchmark occurred; for tool/game edits, claim Issue #11, test comparability gates, and keep the PR unmerged pending approval.
 
 ## Completion checklist
 

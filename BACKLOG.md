@@ -569,5 +569,13 @@
 
 [PR #52](https://github.com/bosswenwu/alex-games/pull/52) 已按用户明确授权合并，merge commit `b0d651749c84e00e5e260463b0655327038417e2`；此前段落写的“未合并”只是 PR 创建时的历史快照，不是当前状态。合并后默认世界与 `?seed=424242` 完整 selftest 均 **362/362 PASS**，P1 设备比较器的 6 组合成夹具通过，main 无未提交改动。Word 报告已在本轮补记实际合并状态，之前单独交付的 [P1–P5 详细任务/验收计划](docs/SANDSEA-P1-P5-NEXT-CYCLE-PLAN-2026-09-30.md) 已补录到仓库；文件索引见 [交付说明](docs/SANDSEA-DELIVERY-HANDOFF-2026-09-30.md)。真人点测 A1–A7、真实触屏、实际低端 GPU 与正式 10s/30s×3 仍是 **未测**，不可由 SwiftShader 自测推出达标结论。下一位 AI 先读 Issue #11 最新留言，再单独认领 P1 战斗改码，避免与其他分支重叠。
 
+
+## Manus 第十八轮提案（2026-09-30：P1 低端 GPU 与监控可信度）
+
+- **范围/认领**：已在 [Issue #11](https://github.com/bosswenwu/alex-games/issues/11) 声明；从合并后的 `main cb95d55c7e41d14fecb80f3408d567d65bb803e9` 建 `work/sandsea-round18-p1-monitor-plan-20260930`。本轮只改 `tools/sandsea-perf/`、文档与 `sandsea-iteration` 工程技能，不改 `games/minecraft/index.html`、存档、战斗参数或他人的 PR #49。具体 A–F 工作包与 H/M/C/D/G 测试用例见 [第十八轮 P1 计划](docs/SANDSEA-ROUND18-P1-LOW-END-GPU-PLAN-2026-09-30.md)。
+- **工具可信度**：`device-monitor.js` 的原连续慢帧算法按时间顺序计算，先前 Issue 认领中的“排序后累加”判断是误判，已在 Issue 公开勘误；不改正确算法。新增 3 组监控 VM 时序测试。`compare-device.mjs` 新增画布实际像素匹配与未知/软件 renderer 不可比门，比较器从 6 增至 9 组合成夹具，均通过。2s/4s 固定种子软件渲染 smoke 仅表明脚本可用，SwiftShader 约 1.79 FPS 的样本**不是**真机性能结论。
+- **主分支审计**：PR #52 merge `b0d6517`（工具/文档 15 文件）；PR #53 merge `cb95d55`（计划/报告 5 文件）；当前 main 双种子 headless 完整 selftest 各 **362/362 PASS**，工作树开始时干净。PR #52/#53 无 GitHub 检查项，不得说 CI 已过。所有 GPU/触控/热指标与 A1–A7 真人点测仍待真实参考机。
+- **接手门槛**：先核验低端参考机型号/SoC/GPU、对应 SHA、浏览器/真实 canvas 像素和同场景 10s 预热 + 30s×3 原始 JSON，再考虑单参数游戏优化。在线 Desktop 型号未知，不能自动称为低端 GPU；`PASS_PROVISIONAL_REAL_DEVICE` 只是页面侧帧时代理达标。技能参考 `docs/skills/sandsea-iteration/references/p1-device-performance.md` 与设备记录模板已同步。此记录为 PR 创建前快照；最终 PR 链接与是否合并以 Issue #11 最新交接为准。
+- **发布**：[PR #54](https://github.com/bosswenwu/alex-games/pull/54) 已推送并开放待审，**未合并**；仅监控工具、确定性测试、计划与技能更新。下一位 AI 先看 PR 状态和 Issue #11 最新认领，不要把本计划当作已取得低端硬件数据或已获准合并。
 ## 第十九轮·Codex（2026-10-01）
 触屏摇杆沙步方向、帮助面板触屏拦截、精准反击倒计时和三步指南已完成本地实现。基于 main cb95d55；默认/固定种子 368/368。真触屏手感和低端 GPU 尚未测。详见 docs/SANDSEA-UPGRADE-2026-10-01.md。PR 尚未创建。
