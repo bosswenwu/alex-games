@@ -2,6 +2,21 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-10-03 — 沙海奇境 第十九轮·云端：骷髅蓄力瞄准箭（P2 第二种敌人读招）
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only. P2 of `docs/SANDSEA-P1-P5-NEXT-CYCLE-PLAN-2026-09-30.md`: one new enemy behavior with a tell and counters that differ from the scarab charge. No new save fields, keys, blocks or atlas tiles; mechs/titan, scarab charge and the precise-riposte rules are unchanged.
+
+| Change | Player-visible behavior |
+| --- | --- |
+| Aimed shot | Skeletons no longer fire instantly. When ready (in range, line of sight) they stand still for 0.9 s, glow red, and draw a short red aim line from the bow toward you; for the last 0.28 s the aim **locks** (line and glow brighten) and stops tracking. The arrow then flies at the locked point, faster than before (32 vs 26), without leading the target. Damage stays 4 via `foeStrike()`. |
+| Counters | Break line of sight (cover) or leave aggro → aim cancels. Strafe after lock → the arrow misses. Hit the skeleton while it aims → interrupted and **staggered for 1.2 s** (cold-grey tint, slow, cannot shoot). Sandstep can dodge the aimed arrow, but only the scarab charge grants a precise riposte. |
+| Help | The H guide adds a paragraph on reading and countering the skeleton. |
+| Robustness | `updateMobs` skips an empty slot when an earlier mob in the same pass removed more than one mob (found when a test ran `updateMobs` with the whole world's mobs). |
+
+**How:** `SKEL_*` constants, `emitSkeletonAim`, `skeletonFireAimed`, `updateSkeletonAim` (states idle/aim/stagger), hooked in `updateMobs` after the scarab block; `m.chaseNow` records the hostile chase flag; the ranged branch no longer calls `mobShoot` for skeletons; `drawEntity` tints aim/stagger; hostile arrows pass their `tag` to `foeStrike`.
+
+**Verification:** `node tools/headless.mjs selftest` **373/373** on random seed and seeds 424242 / 2718281 / 1 (5 new assertions: aim→lock→fire without tracking; hurt interrupts + stagger; cover/disengage cancels; sandstep dodges without riposte; `updateMobs` no longer insta-shoots for skeletons). Headless screenshot of a locked skeleton (red glow + red aim line) checked by eye. Real-player timing on desktop/touch is **not** verified.
+
 ## 2026-10-01 — 沙海奇境 第十九轮·Codex：触屏侧闪与精准反击提示
 
 - 触屏摇杆方向现在与沙步方向一致，支持左右和斜向；松开摇杆仍沿视线前进。键盘和显式调试方向保持原语义。
