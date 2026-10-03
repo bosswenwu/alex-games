@@ -123,6 +123,20 @@
              background:radial-gradient(circle at 50% 40%,rgba(60,40,20,.92),rgba(12,10,20,.96)); color:#ffe9c4; text-align:center; padding:30px; }
   #stats { position:absolute; right:8px; top:8px; color:#fff; font:bold 15px/1.5 "Microsoft YaHei",sans-serif; text-shadow:2px 2px 0 #000; text-align:right; }
   #stats .kills { color:#ffd23f; }
+  #riposteCue { position:absolute; left:50%; bottom:112px; transform:translateX(-50%); width:270px; max-width:70vw;
+    padding:10px 14px; border:1px solid #edc36c; border-radius:10px; background:rgba(29,24,17,.92); color:#fff0be;
+    font:13px/1.5 "Microsoft YaHei",sans-serif; text-align:center; pointer-events:none; box-shadow:0 3px 16px #0006; }
+  #riposteCue[hidden] { display:none; }
+  #riposteCue strong { display:block; font-size:17px; letter-spacing:1px; }
+  #riposteCue .rc-track { height:4px; margin-top:7px; background:#ffffff26; border-radius:4px; overflow:hidden; }
+  #riposteCue .rc-fill { height:100%; background:#ffd16c; transform-origin:left; }
+  #fullhelp .combat-guide { margin:12px 0 18px; padding:14px; border:1px solid #b68d4e; border-radius:10px; background:#302619; }
+  #fullhelp .combat-steps { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin:10px 0; }
+  #fullhelp .combat-steps div { padding:9px; border-radius:7px; background:#ffffff0c; }
+  #fullhelp .combat-steps b { display:block; margin-bottom:5px; }
+  #fullhelp .combat-guide p { margin:7px 0; }
+  @media(max-height:500px) { #riposteCue { bottom:108px; padding:5px 10px; width:240px; font-size:11px; } #riposteCue strong { font-size:14px; } }
+  @media(max-width:500px) { #fullhelp .combat-steps { grid-template-columns:1fr; } }
   #compass { position:absolute; right:8px; top:96px; width:118px; padding:7px 6px 6px; border-radius:10px;
              background:rgba(14,10,20,.42); box-shadow:0 0 0 1px rgba(255,220,150,.18) inset; text-align:center;
              font:bold 12px/1.35 "Microsoft YaHei",sans-serif; color:#ffe9c4; text-shadow:1px 1px 0 #000; display:none; }
@@ -452,6 +466,7 @@
   <div id="xpbar"><div class="xf"></div><div class="xl">Lv 1</div></div>
   <div id="bossbar"><div class="bn"></div><div class="bg"><div class="bf"></div></div></div>
   <div id="stats"></div>
+  <div id="riposteCue" hidden><strong id="riposteTitle"></strong><span id="riposteHint"></span><div class="rc-track"><div class="rc-fill" id="riposteFill"></div></div></div>
   <div id="compass">
     <div class="cring"><div class="cN">视线</div><div class="carrow"><i></i></div></div>
     <div class="clabel">—</div>
@@ -498,6 +513,16 @@
 <div id="fullhelp">
   <div class="fh-card">
     <div class="fh-title">完整帮助 · 按 <b>H</b> 或点此关闭</div>
+    <section class="combat-guide" aria-label="沙步与精准反击指南">
+      <b>沙海战技 · 看准，再反击</b>
+      <div class="combat-steps">
+        <div><b>01 · 读预警</b>圣甲虫变暖金、浮起粒子环时正在蓄力；随后沿锁定方向冲锋。</div>
+        <div><b>02 · 侧向沙步</b>桌面按住 A / D 再按 C；触屏将摇杆推向侧面，再点「沙步」。保持落地并留出空间。</div>
+        <div><b>03 · 同目标反击</b>成功规避冲锋后，看金色倒计时：2 秒内用近战命中原圣甲虫，获得一次伤害奖励。</div>
+      </div>
+      <p>没有方向输入时朝视线前方沙步。沙步冷却 4.5 秒；空中、骑乘、水中、岩浆和钩爪牵引中不能使用。</p>
+      <p>看到「闪避成功」不一定有反击机会：只有规避圣甲虫的标记冲锋才授予反击。远程攻击、重锤范围副伤害不享受奖励；环境伤害不能用沙步规避。</p>
+    </section>
     <b>F1</b> 拍照模式　<b>F2</b> 截图　<b>F5</b> 第三人称(Shift+F5 看正脸)　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成(可熔铸☀拉之烈阳剑、🔨塞特之锤)　<b>0</b> 第10格　<b>J</b> 附魔祭坛(献文物)　<b>C</b> 沙步闪避　<b>Esc</b> 暂停　<b>T</b> 编年史　<b>P</b> 陶片图鉴　<b>K</b> 神话遗物　<b>U</b> 开宝库　<b>R</b> 答斯芬克斯　<b>L</b> 神灯许愿　<b>N</b> 大地图(右上角为小地图)<br>
     <b>物品栏</b>：1烟花 2钩爪 3可乐 4铁剑 5机关枪 6火箭筒 7弓 8=TNT(右键放·左键点燃) 9弹跳板<br>
     <b>2 钩爪</b>甩向准星把你拉过去；<b>3 可乐</b>回血+加速；<b>9 弹跳板</b>踩上去高高弹飞不摔伤<br>
@@ -4964,7 +4989,7 @@ function sandStepPanelOpen(){
   return ids.some(id=>{
     const el=document.getElementById(id); if(!el) return false;
     const cs=getComputedStyle(el);
-    return el.classList.contains("on") || (cs.display!=="none" && cs.visibility!=="hidden" && +cs.opacity>0 && id!=="fullhelp" && id!=="settingsPanel");
+    return el.classList.contains("on") || (cs.display!=="none" && cs.visibility!=="hidden" && +cs.opacity>0);
   }) || document.getElementById("overlay")?.style.display!=="none";
 }
 function sandStepDirection(overrideX,overrideZ){
@@ -4973,6 +4998,8 @@ function sandStepDirection(overrideX,overrideZ){
     if(n>1e-4) return [overrideX/n,overrideZ/n];
   }
   let f=(keys.KeyW?1:0)-(keys.KeyS?1:0), s=(keys.KeyD?1:0)-(keys.KeyA?1:0);
+  // Keep dodge direction consistent with the movement joystick, including diagonals.
+  if(touchState.active){ f-=touchState.moveY; s+=touchState.moveX; }
   if(!f && !s) f=1;                              // 未按方向时朝视线前方闪避
   const n=Math.hypot(f,s)||1, cy=Math.cos(player.yaw), sy=Math.sin(player.yaw);
   return [(f*sy+s*cy)/n,(-f*cy+s*sy)/n];
@@ -5043,6 +5070,20 @@ function refreshSandStepButton(){
   btn.classList.toggle("is-success",phase==="success");
   btn.classList.toggle("is-counter",phase==="counter");
   btn.classList.toggle("is-riposte",phase==="riposte");
+}
+function refreshRiposteCue(){
+  const el=document.getElementById("riposteCue");
+  const target=sandStepState.counterTarget;
+  const counter=sandStepState.counterT>0 && target && target.hp>0 && mobs.includes(target);
+  const hit=sandStepState.counterHitT>0;
+  const visible=(counter||hit) && playing() && !dead && !photoMode && !sandStepPanelOpen();
+  el.hidden=!visible;
+  if(!visible) return;
+  const title=counter?"精准反击 · "+sandStepState.counterT.toFixed(1)+"s":"精准反击命中";
+  const hint=counter?"近战命中原圣甲虫 · 仅一次":"额外伤害已结算";
+  if(el.dataset.label!==title){ document.getElementById("riposteTitle").textContent=title; el.dataset.label=title; }
+  if(el.dataset.hint!==hint){ document.getElementById("riposteHint").textContent=hint; el.dataset.hint=hint; }
+  document.getElementById("riposteFill").style.transform="scaleX("+clamp(counter?sandStepState.counterT/SAND_RIPOSTE_WINDOW:sandStepState.counterHitT/0.9,0,1)+")";
 }
 function lookDir(){
   const cp=Math.cos(player.pitch), sp=Math.sin(player.pitch);
@@ -11976,6 +12017,7 @@ function tick(now){
 let _stSkipRender=false;   // 自测只推进逻辑时跳过渲染(软件渲染下每帧要数秒); 渲染另由「渲染一帧无异常」覆盖
 function frame(now){
   let dt=clamp((now-lastT)/1000,0,0.05); lastT=now;
+  refreshRiposteCue();
   fpsC++; if(now-fpsT>500){ fps=Math.round(fpsC*1000/(now-fpsT)); fpsC=0; fpsT=now; autoScalePerf(); }
   const prevSunH=sunH;
   dayT=((now/1000)/DAY_LEN+dayShift)%1;
@@ -15948,6 +15990,50 @@ function selftest(){
         mobs.length=mlen; Object.assign(sandStepState,S0); Object.assign(player,P0); playerEnt.hurtT=hurt0;
         hp=hpS; maxHp=mS; armor=aS; poisonT=pS; dead=deadS; particles.length=plen;
         updateHearts(); refreshSandStepButton(); updateStatsHUD();
+      }
+    }
+
+    // 第十九轮·Codex：触屏方向、帮助拦截和运行态反击提示。
+    {
+      const t0={...touchState}, k0={...keys}, yaw0=player.yaw, s0={...sandStepState};
+      const sl0=softLock, locked0=locked, dead0=dead, photo0=photoMode;
+      const help=document.getElementById("fullhelp"), hd0=help.style.display;
+      const overlay=document.getElementById("overlay"), od0=overlay.style.display;
+      const n0=mobs.length;
+      try{
+        for(const key in keys) keys[key]=false;
+        player.yaw=0; touchState.active=true; touchState.moveX=1; touchState.moveY=0;
+        const right=sandStepDirection();
+        touchState.moveX=-1; const left=sandStepDirection();
+        touchState.moveX=1; touchState.moveY=-1; const diagonal=sandStepDirection();
+        ok("触屏沙步: 摇杆左右与斜向输入决定方向且归一化",right[0]>.99&&Math.abs(right[1])<1e-6&&left[0]<-.99&&diagonal[0]>.7&&diagonal[1]<-.7&&Math.abs(Math.hypot(...diagonal)-1)<1e-6);
+        touchState.moveX=touchState.moveY=0; const forward=sandStepDirection();
+        touchState.active=false; touchState.moveX=1; const inactive=sandStepDirection();
+        ok("触屏沙步: 摇杆归中或触屏未激活时沿视线前进",forward[1]<-.99&&inactive[1]<-.99&&Math.abs(inactive[0])<1e-6);
+        softLock=true; dead=false; photoMode=false; overlay.style.display="none"; help.style.display="flex";
+        const before={x:player.x,z:player.z,cd:sandStepState.cd};
+        const blocked=sandStepPanelOpen()&&sandStep()===false;
+        ok("完整帮助打开时直接沙步调用也被拦截",blocked&&player.x===before.x&&player.z===before.z&&sandStepState.cd===before.cd);
+        help.style.display="none";
+        const sc={type:"scarab",hp:10}; mobs.push(sc);
+        sandStepState.counterTarget=sc; sandStepState.counterT=1; sandStepState.counterHitT=0;
+        refreshRiposteCue();
+        const cue=document.getElementById("riposteCue");
+        ok("精准反击提示: 同目标文案与半程倒计时",!cue.hidden&&cue.textContent.includes("原圣甲虫")&&cue.textContent.includes("1.0s")&&document.getElementById("riposteFill").style.transform==="scaleX(0.5)");
+        help.style.display="flex"; refreshRiposteCue(); const helpHidden=cue.hidden; help.style.display="none";
+        photoMode=true; refreshRiposteCue(); const photoHidden=cue.hidden; photoMode=false;
+        dead=true; refreshRiposteCue(); const deadHidden=cue.hidden; dead=false;
+        softLock=false; locked=false; refreshRiposteCue(); const pausedHidden=cue.hidden; softLock=true;
+        mobs.length=n0; refreshRiposteCue();
+        ok("精准反击提示: 帮助、拍照、死亡、暂停与目标离场均隐藏",helpHidden&&photoHidden&&deadHidden&&pausedHidden&&cue.hidden);
+        sandStepState.counterT=0; sandStepState.counterTarget=null; sandStepState.counterHitT=.6; refreshRiposteCue();
+        const hitShown=!cue.hidden&&cue.textContent.includes("精准反击命中");
+        sandStepState.counterHitT=0; refreshRiposteCue();
+        ok("精准反击提示: 命中确认后消退",hitShown&&cue.hidden);
+      } finally {
+        Object.assign(touchState,t0); for(const key in keys) delete keys[key]; Object.assign(keys,k0);
+        player.yaw=yaw0; Object.assign(sandStepState,s0); softLock=sl0; locked=locked0; dead=dead0; photoMode=photo0;
+        help.style.display=hd0; overlay.style.display=od0; mobs.length=n0; refreshRiposteCue();
       }
     }
 
