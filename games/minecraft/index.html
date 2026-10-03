@@ -523,6 +523,7 @@
       <p>没有方向输入时朝视线前方沙步。沙步冷却 4.5 秒；空中、骑乘、水中、岩浆和钩爪牵引中不能使用。</p>
       <p>看到「闪避成功」不一定有反击机会：只有规避圣甲虫的标记冲锋才授予反击。远程攻击、重锤范围副伤害不享受奖励；环境伤害不能用沙步规避。</p>
       <p><b>能量核心战技</b>：在 B 合成台用能量核心学「沙步熟练」（缩短沙步冷却）和「回砂反击」（提高精准反击伤害），各最多 3 级，越往后越贵。</p>
+      <p><b>木乃伊</b>贴近后会站定举手、身体泛紫，脚下亮起一圈紫色诅咒光环；约 0.75 秒后砸地，圈内受重伤并被击飞。重击打不断，看到光环就走出圈外，或者用沙步躲开；砸完它会慢半拍，正好反击。</p>
       <p><b>骷髅射手</b>放箭前会站定、身体泛红，弓前拉出一条红色瞄准线；瞄准线变亮表示方向已锁定。躲到掩体后可取消它的瞄准；锁定后横移就能躲开；瞄准时打它一下会打断，并让它僵直约 1 秒。</p>
     </section>
     <b>F1</b> 拍照模式　<b>F2</b> 截图　<b>F5</b> 第三人称(Shift+F5 看正脸)　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成(可熔铸☀拉之烈阳剑、🔨塞特之锤)　<b>0</b> 第10格　<b>J</b> 附魔祭坛(献文物)　<b>C</b> 沙步闪避　<b>Esc</b> 暂停　<b>T</b> 编年史　<b>P</b> 陶片图鉴　<b>K</b> 神话遗物　<b>U</b> 开宝库　<b>R</b> 答斯芬克斯　<b>L</b> 神灯许愿　<b>N</b> 大地图(右上角为小地图)<br>
@@ -4982,6 +4983,9 @@ const SCARAB_CHARGE_TAG="scarab-charge";
 // 第十九轮·云端: 骷髅蓄力瞄准箭 —— 瞄准(站定+红色瞄准线) → 最后 SKEL_LOCK_T 秒锁定方向 → 放出更快的瞄准箭; 被打断则僵直
 const SKEL_AIM_T=0.9, SKEL_LOCK_T=0.28, SKEL_ARROW_SPEED=32, SKEL_STAGGER_T=1.2, SKEL_AIM_RANGE=22, SKEL_AIM_DAMAGE=4;
 const SKEL_AIM_TAG="skeleton-aimed";
+// 第二十二轮·云端: 木乃伊重击前摇 —— 站定举手蓄力(泛紫 + 脚下紫色诅咒光环) → 砸地, 圈内受伤并被击飞; 挨打打不断, 要走出圈或沙步
+const MUMMY_WIND_T=0.75, MUMMY_RECOVER_T=0.5, MUMMY_SLAM_R=2.6, MUMMY_SLAM_DAMAGE=5, MUMMY_TRIGGER=2.3;
+const MUMMY_SLAM_TAG="mummy-slam";
 const sandStepState={cd:0, evadeT:0, dodged:false, lastDist:0, feedbackT:0,
                      counterT:0, counterTarget:null, counterHitT:0};
 function clearSandRiposte(){ sandStepState.counterT=0; sandStepState.counterTarget=null; sandStepState.counterHitT=0; }
@@ -8147,6 +8151,7 @@ function drawEntity(ent){
   else if(ent.type==="scarab" && ent.chargeState==="telegraph") gl.uniform3f(U.uTint,1.9,1.28,0.5); // 圣甲虫蓄力: 暖金高亮
   else if(ent.type==="skeleton" && ent.aimState==="aim") gl.uniform3f(U.uTint, ent.aimT<=SKEL_LOCK_T?2.1:1.7, 0.6, 0.5); // 骷髅瞄准: 泛红, 锁定后更亮
   else if(ent.type==="skeleton" && ent.aimState==="stagger") gl.uniform3f(U.uTint,0.75,0.82,1.15);   // 骷髅僵直: 偏冷灰
+  else if(ent.type==="mummy" && ent.slamState==="wind") gl.uniform3f(U.uTint,1.45,0.85,1.85);            // 木乃伊蓄力: 泛紫
   else if(ent.elite)    gl.uniform3f(U.uTint,1.5,1.22,0.55);   // 精英怪: 金光加身, 一眼可辨
   else if(ent.def.fly)  gl.uniform3f(U.uTint,1.1,1.0,0.9);     // 飞龙暖色
   else if(ent.def.boss) gl.uniform3f(U.uTint,1.15,0.9,1.15);   // 僵尸王偏紫,更威慑
@@ -8568,6 +8573,36 @@ function updateSkeletonAim(m,dt,dist,speed,visible,chasing){
   }
   return speed;
 }
+function emitMummyRing(m,burst){                  // 地面诅咒光环: 紫色亮点围成 MUMMY_SLAM_R 的圈; 砸地时向外炸开
+  const t=BLOCKS[AMETHYST].s, n=burst?22:18;
+  for(let i=0;i<n;i++){ const a=i/n*6.283+(burst?0:m.slamT*2), r=burst?MUMMY_SLAM_R*0.5:MUMMY_SLAM_R;
+    particles.push({x:m.x+Math.cos(a)*r,y:m.y+0.3,z:m.z+Math.sin(a)*r,vx:burst?Math.cos(a)*6:0,vy:burst?2.5:0.35,vz:burst?Math.sin(a)*6:0,
+      life:burst?0.45:0.2,size:burst?0.13:0.09,u:(t%16)*TS+TS*0.5,v:Math.floor(t/16)*TV+TV*0.5,l:burst?2.0:1.8});
+  }
+}
+function mummySlamHits(m){
+  return Math.hypot(player.x-m.x,player.z-m.z)<=MUMMY_SLAM_R && player.y>m.y-1.2 && player.y<m.y+2.4;
+}
+function updateMummySlam(m,dt,dx,dz,dist,speed,chasing){
+  const st=m.slamState||"idle";
+  if(st==="wind"){
+    m.slamT-=dt; m.tgtYaw=Math.atan2(dx,-dz);
+    m.slamFxT=(m.slamFxT||0)-dt;
+    if(m.slamFxT<=0){ emitMummyRing(m,false); m.slamFxT=0.12; }
+    if(m.slamT<=0){
+      m.slamState="recover"; m.slamRecoverT=MUMMY_RECOVER_T; m.swingT=0.3; m.atkCd=2.0;
+      emitMummyRing(m,true);
+      if(!dead && mummySlamHits(m)){ const n=dist||1; foeStrike(MUMMY_SLAM_DAMAGE,dx/n*11,dz/n*11,m,MUMMY_SLAM_TAG); }
+    }
+    return 0;
+  }
+  if(st==="recover"){ m.slamRecoverT-=dt; if(m.slamRecoverT<=0) m.slamState="idle"; return speed*0.25; }   // 收招: 反击窗口
+  if(chasing && !dead && m.atkCd<=0 && dist<MUMMY_TRIGGER && player.y>m.y-1.2 && player.y<m.y+2.4){
+    m.slamState="wind"; m.slamT=MUMMY_WIND_T; m.slamFxT=0; m.swingT=0.3;
+    return 0;
+  }
+  return speed;
+}
 function updateMobs(dt){
   const pendingBoom=[];
   for(let i=mobs.length-1;i>=0;i--){
@@ -8655,6 +8690,8 @@ function updateMobs(dt){
           }
         } else if(m.type==="scarab"){
           speed=D.speed;                              // 圣甲虫只用带预警的冲锋，避免提示期内偷咬
+        } else if(m.type==="mummy"){
+          speed=D.speed;                              // 木乃伊只用带前摇的重击(第二十二轮·云端), 见 updateMummySlam
         } else if(m.type==="sandworm"){            // 沙虫: 钻沙潜行逼近 → 破沙而出爆发
           m.erupt=(m.erupt||0)-dt;
           m.burrowed = !(m.erupt>0);               // 出土(erupt>0)时露头可被攻击, 其余时间埋在沙里
@@ -8739,6 +8776,7 @@ function updateMobs(dt){
       const visible=!wantsSight || mobCanSeePlayer(m);
       speed=updateSkeletonAim(m,dt,dist,speed,visible,!!m.chaseNow);
     }
+    if(m.type==="mummy" && D.hostile) speed=updateMummySlam(m,dt,dx,dz,dist,speed,!!m.chaseNow);   // 木乃伊重击前摇(第二十二轮·云端)
     // 平滑转向 + 移动
     let dyaw=m.tgtYaw-m.yaw;
     while(dyaw>Math.PI) dyaw-=6.283;
@@ -14834,7 +14872,8 @@ function selftest(){
         const yawR=player.yaw; if(spot) player.yaw=Math.atan2(spot.dx,-spot.dz);   // 真实按键走视线方向: 对准已知可走的方向, 免得随机朝向正对墙而没触发
         resetStep(); const repeatBefore={x:player.x,z:player.z}; sandStepState.cd=0; document.dispatchEvent(new KeyboardEvent("keydown",{code:"KeyC",bubbles:true})); const once={x:player.x,z:player.z,cd:sandStepState.cd}; document.dispatchEvent(new KeyboardEvent("keydown",{code:"KeyC",repeat:true,bubbles:true}));
         player.yaw=yawR;
-        ok("沙步: 按住 C 的重复 keydown 只触发一次且冷却期不再位移",once.cd>=4.49 && player.x===once.x && player.z===once.z,"from="+repeatBefore.x.toFixed(2)+","+repeatBefore.z.toFixed(2)+" onceCd="+once.cd.toFixed(2));
+        const why=once.cd>=4.49?"":(" playing="+playing()+" panel="+sandStepPanelOpen()+" water="+inWater()+" lava="+inLava()+" ground="+player.onGround+" fly="+player.flying+" ride="+!!riding+" grapple="+!!grappleTarget+" touch="+touchState.active+" land="+!!sandStepLanding(repeatBefore.x,player.y,repeatBefore.z,...sandStepDirection()));
+        ok("沙步: 按住 C 的重复 keydown 只触发一次且冷却期不再位移",once.cd>=4.49 && player.x===once.x && player.z===once.z,"from="+repeatBefore.x.toFixed(2)+","+repeatBefore.z.toFixed(2)+" onceCd="+once.cd.toFixed(2)+why);
         softLock=sl0; locked=locked0; dead=dead0; riding=ride0; player.flying=fly0; grappleTarget=gt0; player.onGround=og0; document.getElementById("overlay").style.display=ov0; restoreB();
         const sv=collectSave();
         ok("沙步不改变世界存档结构", !Object.prototype.hasOwnProperty.call(sv,"sandStep"),
@@ -15549,6 +15588,7 @@ function selftest(){
         for(let i=0;i<40 && groundY(gx,gz)<=0;i++){ gx+=3; ensureData(gx>>4,gz>>4); }   // 水面/树冠上 groundY=-1: 挪到实地再测
         player.x=gx+0.5; driveHud.lx=player.x; player.y=groundY(gx,gz)+7.5;
         const R3=driveReadout(0.1); const aglOk=R3.agl!=null && Math.abs(R3.agl-7.5)<1.01;
+        const aglDiag=aglOk?"":(" diag: col="+Math.floor(player.x)+","+Math.floor(player.z)+" py="+player.y.toFixed(1)+" gy="+groundY(Math.floor(player.x),Math.floor(player.z))+" below="+[0,1,2,3,4,5,6,7,8].map(d=>getBlock(Math.floor(player.x),Math.floor(player.y)-d,Math.floor(player.z))).join("/"));   // 偶发失败时直接看原因
         const cv=document.getElementById("driveHud");
         riding=null; tickDriveHud(0.1); const hidden=cv.style.display==="none";
         riding={def:MOB_DEFS.plane}; tickDriveHud(0.1); const shown=cv.style.display==="block" && driveHud.on;
@@ -15556,7 +15596,7 @@ function selftest(){
         riding=rS; Object.assign(player,pS); Object.assign(driveHud,hS); if(!driveHud.on) cv.style.display="none";
         ok("第十一轮驾驶 HUD: 载具分类正确; 航向 0=北 90=东; 速度按位移算且瞬移不计; 离地高度正确; 骑乘时显示、下车隐藏",
            kindOk && hdgOk && spdOk && jumpOk && aglOk && hidden && shown,
-           "kind="+kindOk+" hdg="+h0+"/"+h90+"/"+h270+" spd="+R1.kmh.toFixed(1)+"/"+R1.vs.toFixed(2)+" jump="+R2.kmh.toFixed(1)+" agl="+(R3.agl==null?"null":R3.agl.toFixed(2))+" hidden="+hidden+" shown="+shown);
+           "kind="+kindOk+" hdg="+h0+"/"+h90+"/"+h270+" spd="+R1.kmh.toFixed(1)+"/"+R1.vs.toFixed(2)+" jump="+R2.kmh.toFixed(1)+" agl="+(R3.agl==null?"null":R3.agl.toFixed(2))+" hidden="+hidden+" shown="+shown+aglDiag);
       }
       { // 第十轮·云端: 海平面平面反射 —— 只在高/极致开; 镜像矩阵把水面上方映到下方; 反射 FBO 可建; 水下/无水时不画; 着色器接好
         const presetOk=!GFX_PRESETS[0].refl && !GFX_PRESETS[1].refl && GFX_PRESETS[2].refl>0 && GFX_PRESETS[3].refl>0;
@@ -16343,6 +16383,43 @@ function selftest(){
            "arid="+aridOK+" rain="+rainNo+" night="+nightNo+" spawn="+spawned+" parts="+made+" single="+single+" gone="+gone);
       } finally {
         weather=w0; sunH=sh0; Object.assign(player,P0); dustDevils.length=0; dustDevilT=dt0; dustDevilAcc=acc0; gfxLevel=g0; particles.length=Math.min(particles.length,pa0);
+      }
+    }
+
+    // 第二十二轮·云端: 木乃伊重击前摇 —— 蓄力期间不伤人; 砸地时圈内受伤、圈外无事; 挨打打不断; 沙步可躲; 不再走通用近战
+    {
+      const P0={x:player.x,y:player.y,z:player.z}, hp0=hp, mh0=maxHp, s0=Object.assign({},sandStepState), pa0=particles.length, n0=mobs.length, dead0=dead;
+      const mk=()=>({type:"mummy",def:MOB_DEFS.mummy,x:player.x+1.5,y:player.y,z:player.z,vx:0,vy:0,vz:0,kbx:0,kbz:0,yaw:0,tgtYaw:0,
+        hp:MOB_DEFS.mummy.hp,hurtT:0,animT:0,t:0,atkCd:0,burnT:0,swingT:0,groanT:0,fleeT:0,onGround:true,pause:false,burning:false,held:null});
+      try{
+        maxHp=999; hp=999; dead=false; sandStepState.evadeT=0;
+        // 1) 圈内: 蓄力期间不掉血, 砸地掉血
+        const m1=mk(); let r=updateMummySlam(m1,0.05,-1.5,0,1.5,1.6,true);
+        const wound=m1.slamState==="wind" && r===0; let hurtEarly=false;
+        for(let t=0;t<MUMMY_WIND_T-0.1;t+=0.05){ updateMummySlam(m1,0.05,-1.5,0,1.5,1.6,true); if(hp!==999) hurtEarly=true; }
+        m1.hurtT=0.4;                                              // 挨打也打不断
+        for(let t=0;t<0.3 && m1.slamState==="wind";t+=0.05) updateMummySlam(m1,0.05,-1.5,0,1.5,1.6,true);
+        const hitIn=hp<999 && m1.slamState==="recover" && m1.atkCd>=2.0;
+        ok("木乃伊重击: 站定蓄力期间不伤人, 挨打也打不断, 砸地时圈内受伤并进入收招",
+           wound && !hurtEarly && hitIn, "wind="+wound+" early="+hurtEarly+" hit="+hitIn+" hp="+hp);
+        // 2) 蓄力中走出圈外 → 砸空
+        hp=999; const m2=mk(); updateMummySlam(m2,0.05,-1.5,0,1.5,1.6,true);
+        player.x=m2.x+MUMMY_SLAM_R+0.6;
+        for(let t=0;t<MUMMY_WIND_T+0.1 && m2.slamState==="wind";t+=0.05) updateMummySlam(m2,0.05,player.x-m2.x,0,player.x-m2.x,1.6,true);
+        const missed=hp===999 && m2.slamState==="recover"; player.x=P0.x;
+        ok("木乃伊重击: 蓄力时走出紫色光环就砸空", missed, "hp="+hp+" state="+m2.slamState);
+        // 3) 沙步闪避窗内被砸 → 免伤
+        hp=999; const m3=mk(); updateMummySlam(m3,0.05,-1.5,0,1.5,1.6,true);
+        sandStepState.evadeT=1; sandStepState.dodged=false;
+        for(let t=0;t<MUMMY_WIND_T+0.1 && m3.slamState==="wind";t+=0.05) updateMummySlam(m3,0.05,-1.5,0,1.5,1.6,true);
+        const dodged=hp===999 && sandStepState.dodged; Object.assign(sandStepState,s0);
+        ok("木乃伊重击: 沙步闪避窗内被砸不掉血", dodged, "hp="+hp+" dodged="+sandStepState.dodged);
+        // 4) 真实 updateMobs: 贴脸的木乃伊第一帧不再直接打人(先蓄力)
+        hp=999; const keep=mobs.slice(); mobs.length=0; const m4=mk(); mobs.push(m4);
+        try{ updateMobs(0.05); } finally { mobs.length=0; for(const q of keep) mobs.push(q); }
+        ok("木乃伊重击: updateMobs 里贴脸第一帧只开始蓄力、不直接出手", hp===999 && m4.slamState==="wind", "hp="+hp+" state="+m4.slamState);
+      } finally {
+        Object.assign(player,P0); hp=hp0; maxHp=mh0; dead=dead0; Object.assign(sandStepState,s0); mobs.length=Math.min(mobs.length,n0); particles.length=Math.min(particles.length,pa0); updateHearts();
       }
     }
 
