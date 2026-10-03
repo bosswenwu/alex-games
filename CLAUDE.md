@@ -8,7 +8,7 @@
 
 - `games/minecraft/index.html`（沙海奇境）约 1.6 万行、100 万字符，是单文件。**不要整个 Read**：先用 Grep 按下面的函数名定位，再用 Read 的 offset/limit 读那一段。本文件不写行号，因为行号每轮都会变。
 - 协作状态：看 GitHub issue #11 的**正文和最近 5 条评论**，不用翻完全部历史。每轮细节看 `GAME-CHANGELOG.md` 顶部和 `BACKLOG.md` 末尾，不要整份读。
-- 后续规划看 `docs/SANDSEA-ROADMAP-HANDOFF-2026-09-29.md`。根目录 `ROADMAP.md` 里的「缺失功能」清单已过时。
+- 后续规划和交接文档在 `docs/`，按文件名里的日期看**最新的那份**（如 `SANDSEA-*-2026-10-01.md`）。根目录 `ROADMAP.md` 里的「缺失功能」清单已过时。
 
 ## 仓库结构
 
@@ -34,7 +34,7 @@
 | 玩家技能 | `sandStep`（C 键沙步）、`sandStepDirection`、`sandStepPanelOpen` |
 | 输入 | 全局 `document.addEventListener("keydown", …)`；`playing()` = `locked \|\| softLock` |
 | 存档 | `SAVE_KEY`、`collectSave`、`saveGame`、`loadGame`。偏好设置（`sandsea_gfx`、`sandsea_music_*`）单独存，不写进世界存档 |
-| 调试 / 自测 | `window.__game`；`selftest()` 由 `?selftest=1` 触发，用 `ok(name, cond, detail)` 断言，约 355 条 |
+| 调试 / 自测 | `window.__game`；`selftest()` 由 `?selftest=1` 触发，用 `ok(name, cond, detail)` 断言，2026-10 初约 365 条，以实际跑出来的为准 |
 
 ## 验证
 
@@ -55,6 +55,6 @@
 
 ## 协作
 
-- 车道：**云端**负责画面渲染；**Manus**负责玩法、UI、设置、存档；**本地会话**负责结构生成、村落、近战。跨车道先在 issue #11 打招呼。
+- 车道（以 issue #11 正文为准）：**云端**负责画面渲染；**Manus**负责玩法、UI、设置、存档；**本地会话**负责结构生成、村落、近战。其他 AI（如 Codex）开工前也先在 issue #11 报号。跨车道先打招呼。
 - 各走各的分支，开草稿 PR，**用户说「合并」才合并**。在 issue #11 汇报时附上 PR 链接和自测结果。
 - 署名和轮次写成「第 N 轮·署名」，BACKLOG 里写 PR 链接，不写分支名。
