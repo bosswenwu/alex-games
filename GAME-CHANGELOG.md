@@ -2,6 +2,22 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-10-04 — 沙海奇境 第二十五轮·本地：摩天轮转动 + 遗迹远征可发现性收尾
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only. No new blocks, atlas tiles, keys or save fields; the round-24 expedition numbers are unchanged.
+
+| Change | Player-visible behavior |
+| --- | --- |
+| 🎡 摩天轮转动 | 走近游乐场(约 80 格内)时，摩天轮的 8 个彩色羊毛座舱沿轮圈缓慢步进(每 0.45 秒转 1/64 圈，一圈约 29 秒)，轮圈与辐条保持静止。座舱写入走运行时瞬态路径：**不写 blockDiff(存档零膨胀)**，重载后座舱回初始位再转；写入前后做期望值守卫，绝不覆盖玩家建筑。 |
+| 远征 H 帮助 | 完整帮助(H)新增「🏛 遗迹远征」段：怎么合成石板开启、解谜规则、三波守卫、首通幂等奖励与中断规则。 |
+| 远征编年史 | 编年史(T)新增「🏛 遗迹远征」行：已完成次数；进行中显示解谜/第几波/结算阶段。 |
+| 远征状态栏 | 左下 buffHud 在远征进行中显示「🏛 遗迹远征 · 解谜中 / 第 X 波 / 结算」。 |
+| 调试接口 | `window.__game.ferris`（只读 phase/near/wheel/queue）+ `ferrisWheelAt(s)` / `ferrisStepOnce(s)`（可传结构坐标强制步进）。 |
+
+**How:** `ferrisWheelAt(s)`（与生成公式同源的纯函数）、`ferrisPhase/FERRIS_STEP_T=0.45/FERRIS_RANGE=80`、`ferrisStepOnce(force)`（8 舱各自从 `seg(phase+k*8)` 步进到 `seg(phase+1+k*8)`，守卫式瞬态写）、`setTransientBlock()`（直写区块数据+脏区块队列）、`tickFerrisWheels(dt)`（挂 frame() 的 playing 分支，每帧最多重建 1 个脏网格摊平开销）；`loadGame()`/新世界重置 `ferrisPhase=0` 与烘焙布局同步。修复过程中发现并修掉首版"8 次循环都写同一段座舱格"的错误（此前 wool 计数会 16→2 衰减）。
+
+**Verification:** `node tools/headless.mjs selftest` **403/403** 于默认种子、`?seed=424242`、`?seed=2718281`（新增 3 条：轮体几何与生成公式一致；步进移动座舱且全程恰 16 个座舱格；整圈 64 步后轮体逐字节复原且 `blockDiff` 零增长）。无头截图 `ferris-wheel-step.png`（相位 10）已存档供目视；转动的连续观感与真机帧率仍待点测。
+
 ## 2026-10-04 — 沙海奇境 第二十四轮·本地：遗迹远征 MVP 垂直切片
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) only. Builds on the existing three-symbol glyph UI; no new blocks, atlas tiles, keys or hotbar slots. **One new save field:** `ruinExpedition`.

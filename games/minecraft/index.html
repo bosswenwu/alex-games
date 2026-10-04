@@ -545,6 +545,7 @@
     　<b>阵营声望</b>：助罗马/敬埃及各有回报，袭击军团会被<b>通缉</b>　<b>🔮天象</b>（希腊+罗马/埃及/波斯/阿拉伯/地中海）·<b>🐫波斯集市·🌊金羊毛远征·🌑亡者之夜</b>会不时自行降临，左下状态栏会挂着倒计时<br>
     　<b>宝库钥匙</b>：通关斗兽场或斩杀法老获得，站在金字塔/宫殿/斗兽场按 <b>U</b> 开启封印宝库（钥匙会真正被花掉）<br>
     　<b>神话遗物</b>：六文明碎片拼合后有被动神力（按 <b>K</b> 翻看）。拼合不灭神灯后按 <b>L</b> 自选一项愿望<br>
+    　<b>🏛 遗迹远征</b>：在 <b>B</b> 合成台用砂岩×8+金×2+钻×1 合成「遗迹远征石板」，立即开启一局：先解三符号机关（照石碑线索点选，错了可重来），解开后击退 3 波遗迹守卫。通关得金/钻/文物/核心与经验；同一存档每局首通奖励只发一次，重复通关只给少量纪念品。死亡、关面板或开新世界会中断远征（已完成次数保留）<br>
     <b>群系</b>：沙海·红土台地·干草原为主，另有盐湖·峡谷·火山·<b>晶洞高地·古代遗迹带</b><br>
     　💎 晶洞高地：地表紫晶标出入口，地下方解石洞可采　⛵ 遗迹带：沉船/商队残骸藏金<br>
     <b>地标</b>：金字塔(墓室石棺唤醒法老王Boss)·斗兽场·宫殿·绿洲·彩虹桥·机场·赛车场·陨石坑·游乐场<br>
@@ -6178,6 +6179,10 @@ function updateBuffHUD(){
   if(typeof expeditionState!=="undefined" && expeditionState.active){
     bits.push("🌊 金羊毛 "+Math.ceil(expeditionState.t)+"s");
   }
+  if(typeof ruinExpeditionState!=="undefined" && ruinExpeditionState.active){
+    const rp=ruinExpeditionState.phase;
+    bits.push(rp==="puzzle" ? "🏛 遗迹远征 · 解谜中" : (rp==="combat" ? "🏛 遗迹远征 · 第 "+Math.min(ruinExpeditionState.wave,RUIN_EXPEDITION_WAVES.length)+"/"+RUIN_EXPEDITION_WAVES.length+" 波" : "🏛 遗迹远征 · 结算"));
+  }
   if(typeof mythicDone==="function" && mythicDone("arabia")){
     if(djinnState.cd>0) bits.push("🪔 神灯冷却 "+Math.ceil(djinnState.cd)+"s · 按 L");
     else bits.push("🪔 神灯就绪 · 按 L");
@@ -6824,6 +6829,7 @@ function chronicleHTML(){
     + row('🔮 当前天象', om)
     + row('🐫 波斯集市', bz)
     + row('🌊 金羊毛远征', ex)
+    + row('🏛 遗迹远征', ruinExpeditionSave.completed+' 次通关'+(ruinExpeditionState.active?(' · '+(ruinExpeditionState.phase==="puzzle"?'解谜中':(ruinExpeditionState.phase==="combat"?('战斗第 '+ruinExpeditionState.wave+' 波'):'结算中'))):' · 石板在 B 合成台'))
     + row('🌑 亡者之夜', (undeadNight.active?('围城中 · 剩'+Math.ceil(undeadNight.t)+'s'):'平静')+' · 幸存 '+undeadNight.survived+' 夜')
     + row('✨ 神话遗物', mythicState.done.length+' / '+MYTHIC.length+'（碎片 '+Object.values(mythicState.frags).reduce((a,b)=>a+b,0)+'）· 按 K')
     + '<div style="margin-top:12px;color:#c9b98a;font-size:12px">按 <b style="color:#ffd23f">T</b> 关闭 · <b>P</b> 陶片图鉴 · <b>K</b> 神话遗物 · 声望随行为涨落，天象/集市/远征会自行降临</div>';
@@ -7162,6 +7168,7 @@ newworldbtn.addEventListener("click",()=>{
   mobs.length=0; arrows.length=0; drops.length=0; particles.length=0;
   hp=maxHp=20; lvl=1; xp=0; armor=0; cores=0; restoreCombatMastery({}); kills=0; dayCount=1; dmgMul=1; dead=false; setSunblade(false); setMace(false); for(const k in gearWear) gearWear[k]=0; updateGearHud(); for(const k in enchState) enchState[k]=0; vaultKeys.trial=0; vaultKeys.omen=0; vaultKeys.omenDay={};
   ruinExpeditionSave.runs=[]; ruinExpeditionSave.completed=0; abortRuinExpedition();
+  ferrisPhase=0; ferrisTimer=0; ferrisRebuildQ.length=0;
   for(const k in potions) potions[k]=0; for(const k in potionFx) potionFx[k]=0;   // 第五轮·云端
   fishState.on=false; fishState.fish=0; fishState.caught=0;
   for(const k in chests) delete chests[k]; bundleState.owned=false; bundleState.items={};   // 第六轮·云端
@@ -8992,6 +8999,48 @@ function nearVillage(){                   // 玩家附近(<44格)是否有可住
     if(Math.hypot(s.x-player.x, s.z-player.z)<44) return true;
   }
   return false;
+}
+/* ---- 🎡 摩天轮座舱运转 (第二十五轮·本地): 玩家靠近游乐场时, 8 个彩色座舱沿轮圈缓慢步进 ----
+   直写区块数据 + 排队重建网格, 不走 setBlock —— 不写 blockDiff(存档零膨胀), 重载后座舱回初始位再转。
+   写入前后都做"期望旧值"守卫: 座舱格不是 WOOL/目标格不是 AIR 就跳过, 绝不覆盖玩家的建筑。 */
+function ferrisWheelAt(s){ const wr=11; return {wx:s.x-9, wz:s.z+9, wr, wcy:s.h+wr+2}; }
+const FERRIS_CABINS=8, FERRIS_SEGS=64, FERRIS_STEP_T=0.45, FERRIS_RANGE=80;
+let ferrisPhase=0, ferrisTimer=0;
+const ferrisRebuildQ=[];
+function ferrisSegCell(g,seg){            // 轮圈上第 seg 格的位置(与生成时的圆环公式一致)
+  const ang=seg/FERRIS_SEGS*Math.PI*2;
+  return [g.wx, g.wcy+Math.round(Math.sin(ang)*g.wr), g.wz+Math.round(Math.cos(ang)*g.wr)];
+}
+function ferrisCabinSides(g,seg){ const c=ferrisSegCell(g,seg); return [[c[0]-1,c[1],c[2]],[c[0]+1,c[1],c[2]]]; }
+function setTransientBlock(x,y,z,id,dirty){   // 运行时视觉专用: 不记 diff, 脏区块排队重建
+  if(y<0||y>=H) return;
+  const c=world.get(key(x>>4,z>>4)); if(!c) return;
+  c.blocks[((x&15)*CS+(z&15))*H+y]=id; _gcx=1e9;
+  dirty.add((x>>4)+","+(z>>4));
+}
+function ferrisStepOnce(force){           // force: 自测直接传入结构坐标, 跳过距离门控
+  const s=force||nearStructure(["park"],FERRIS_RANGE); if(!s) return false;
+  const g=ferrisWheelAt(s);
+  if(!world.has(key(g.wx>>4,g.wz>>4))) return false;   // 轮体区块未加载: 不步进, 相位不漂移
+  const prev=ferrisPhase, next=(ferrisPhase+1)%FERRIS_SEGS, dirty=new Set();
+  for(let k=0;k<FERRIS_CABINS;k++){        // 8 个座舱等距 1/8 圈: 各自从 seg(prev+k*8) 步进到 seg(next+k*8)
+    const po=(prev+k*FERRIS_CABINS)%FERRIS_SEGS, pn=(next+k*FERRIS_CABINS)%FERRIS_SEGS;
+    for(const [x,y,z] of ferrisCabinSides(g,po)) if(getBlock(x,y,z)===WOOL) setTransientBlock(x,y,z,AIR,dirty);
+    for(const [x,y,z] of ferrisCabinSides(g,pn)) if(getBlock(x,y,z)===AIR) setTransientBlock(x,y,z,WOOL,dirty);
+  }
+  ferrisPhase=next;
+  for(const k of dirty) if(ferrisRebuildQ.indexOf(k)<0) ferrisRebuildQ.push(k);
+  return true;
+}
+function tickFerrisWheels(dt){
+  if(!worldGenReady) return;
+  if(ferrisRebuildQ.length){              // 每帧最多重建 1 个脏区块, 把 ~3ms 的网格开销摊平
+    const k=ferrisRebuildQ.shift(), p=k.split(","), c=world.get(key(+p[0],+p[1]));
+    if(c && c.mesh) buildChunkMesh(c);
+  }
+  if(!nearStructure(["park"],FERRIS_RANGE)){ ferrisTimer=0; return; }
+  ferrisTimer+=dt;
+  while(ferrisTimer>=FERRIS_STEP_T){ ferrisTimer-=FERRIS_STEP_T; ferrisStepOnce(); }
 }
 /* ---------- 难度强度: 随生存天数递增(每次天亮 +1 天), 中后期真正有压迫感 ----------
    selftest 默认 dayCount=1 → 三个系数恒为基线(1.0/1.0), 不影响既有战斗断言。 */
@@ -12442,6 +12491,7 @@ function frame(now){
     tickFishing(dt);                              // 第五轮·云端
     tickCamel(dt);                                // 第五轮·云端
     tickAmbient(dt);                              // 第六轮·云端: 萤火虫/炊烟/跃鱼
+    tickFerrisWheels(dt);                         // 第二十五轮·本地: 摩天轮座舱步进
     tickFurnaces(dt);                             // 第七轮·云端: 熔炉按秒推进
     tickDriveHud(dt);                             // 第十一轮·云端: 载具驾驶 HUD
     tickWetness(dt);                              // 第十二轮·云端: 雨天湿地面
@@ -12621,6 +12671,7 @@ function loadGame(){
   restoreGearWear(s.gearWear);
   restoreCombatMastery(s.combatMastery);         // 第十九轮·云端 P3
   { const RE=s.ruinExpedition||{}; ruinExpeditionSave.runs=Array.isArray(RE.runs)?RE.runs.filter(v=>Number.isInteger(v)&&v>0):[]; ruinExpeditionSave.completed=Math.max(0,RE.completed|0); abortRuinExpedition(); }   // 第二十四轮·本地: 遗迹远征完成记录(老存档无 → 空/0); 读档时强制结束进行中的远征
+  ferrisPhase=0; ferrisTimer=0; ferrisRebuildQ.length=0;   // 第二十五轮·本地: 世界按存档重建, 摩天轮回初始相位与烘焙布局同步
   for(const D of ENCH_DEFS) enchState[D.k]=Math.max(0,Math.min(D.max,(s.ench&&s.ench[D.k])|0));
   { const V=s.trialVault||{}; vaultKeys.trial=Math.max(0,V.trial|0); vaultKeys.omen=Math.max(0,V.omen|0); vaultKeys.omenDay=(V.omenDay&&typeof V.omenDay==="object")?V.omenDay:{}; }
   for(const P of POTIONS){ potions[P.k]=Math.max(0,(s.potions&&s.potions[P.k])|0); if(P.k in potionFx) potionFx[P.k]=0; }   // 第五轮·云端: 老存档无 potions → 全 0
@@ -13997,6 +14048,8 @@ window.__game = {
   get combatMastery(){ return {step:combatMastery.step, riposte:combatMastery.riposte, sandStepCd:sandStepCd(), riposteRate:riposteRate(), riposteCap:riposteCap()}; },
   get ruinExpedition(){ return { active:ruinExpeditionState.active, phase:ruinExpeditionState.phase, wave:ruinExpeditionState.wave, runId:ruinExpeditionState.runId, completed:ruinExpeditionSave.completed, runs:ruinExpeditionSave.runs.slice() }; },
   startRuinExpedition:()=>startRuinExpedition(), abortRuinExpedition:()=>abortRuinExpedition(),
+  get ferris(){ const s=nearStructure(["park"],FERRIS_RANGE); return { phase:ferrisPhase, near:!!s, wheel:s?ferrisWheelAt(s):null, queue:ferrisRebuildQ.length }; },
+  ferrisWheelAt:(s)=>ferrisWheelAt(s), ferrisStepOnce:(s)=>ferrisStepOnce(s),
   get poison(){ return +poisonT.toFixed(2); },
   get sandStep(){ return {cd:+sandStepState.cd.toFixed(2), evade:+sandStepState.evadeT.toFixed(2), feedback:+sandStepState.feedbackT.toFixed(2),
     counter:+sandStepState.counterT.toFixed(2), counterTarget:sandStepState.counterTarget&&sandStepState.counterTarget.type||null,
@@ -14918,6 +14971,50 @@ function selftest(){
         ruinExpeditionSave.runs=snapRE.runs; ruinExpeditionSave.completed=snapRE.completed;
         Object.assign(ruinExpeditionState, snapState);
       }
+    }
+
+    // 8q4. 摩天轮运转: 几何与生成一致 / 座舱守卫写入 / 不污染存档 diff / 整圈后逐字节复原
+    {
+      const snapF={ phase:ferrisPhase, timer:ferrisTimer, q:ferrisRebuildQ.slice() };
+      try{
+        const g0=ferrisWheelAt({x:100,z:100,h:40});
+        ok("摩天轮几何与生成公式一致", g0.wx===91 && g0.wz===109 && g0.wr===11 && g0.wcy===53 &&
+          ferrisSegCell(g0,0).join()===[91,53,120].join() && ferrisSegCell(g0,16)[1]===g0.wcy+g0.wr &&
+          ferrisCabinSides(g0,0).length===2, "g="+JSON.stringify(g0));
+        // 合成摩天轮: 在出生地上空用 transient 写入烘焙出与生成公式一致的轮体, 不依赖世界种子
+        const g={wx:Math.round(player.x)+26, wz:Math.round(player.z), wr:11, wcy:76};
+        const forceS={x:g.wx+9, z:g.wz-9, h:g.wcy-g.wr-2, type:"park"};   // 使 ferrisWheelAt(s) 还原 g
+        for(let cx2=(g.wx-1)>>4; cx2<=(g.wx+1)>>4; cx2++) for(let cz2=(g.wz-g.wr)>>4; cz2<=(g.wz+g.wr)>>4; cz2++) ensureData(cx2,cz2);
+        const setB=(x,y,z,id)=>{ const c=world.get(key(x>>4,z>>4)); if(c) c.blocks[((x&15)*CS+(z&15))*H+y]=id; _gcx=1e9; };
+        const touched=new Map();                                    // 记录原始值, 测完恢复
+        const putB=(x,y,z,id)=>{ const k2=x+","+y+","+z; if(!touched.has(k2)) touched.set(k2,[x,y,z,getBlock(x,y,z)]); setB(x,y,z,id); };
+        for(let seg=0;seg<FERRIS_SEGS;seg++){
+          const ang=seg/FERRIS_SEGS*Math.PI*2, y=g.wcy+Math.round(Math.sin(ang)*g.wr), z=g.wz+Math.round(Math.cos(ang)*g.wr);
+          const cabin=(seg%8===0);
+          putB(g.wx,y,z, cabin?NEON:METAL); putB(g.wx,y,z+((Math.cos(ang)>=0)?1:-1), METAL);
+          for(const sx2 of [g.wx-1,g.wx+1]) putB(sx2,y,z, cabin?WOOL:AIR);
+        }
+        ferrisPhase=0;
+        const woolAt=(seg)=>ferrisCabinSides(g,seg).every(c=>getBlock(c[0],c[1],c[2])===WOOL);
+        const countWool=()=>{ let n=0; for(let seg=0;seg<FERRIS_SEGS;seg++) for(const c of ferrisCabinSides(g,seg)) if(getBlock(c[0],c[1],c[2])===WOOL) n++; return n; };
+        const diffBefore=blockDiff.size;
+        const built=new Map();                                    // 记录烘焙后的轮体状态(步进的对照基准)
+        for(let seg=0;seg<FERRIS_SEGS;seg++){
+          const ang=seg/FERRIS_SEGS*Math.PI*2, y=g.wcy+Math.round(Math.sin(ang)*g.wr), z=g.wz+Math.round(Math.cos(ang)*g.wr);
+          const cabin=(seg%8===0);
+          built.set(g.wx+","+y+","+z, cabin?NEON:METAL); built.set(g.wx+","+y+","+(z+((Math.cos(ang)>=0)?1:-1)), METAL);
+          for(const sx2 of [g.wx-1,g.wx+1]) built.set(sx2+","+y+","+z, cabin?WOOL:AIR);
+        }
+        const woolBuilt=countWool(), hasWheelChunk=world.has(key(g.wx>>4,g.wz>>4));
+        const okStep1=ferrisStepOnce(forceS) && ferrisPhase===1 && countWool()===FERRIS_CABINS*2 && woolAt(1) && !woolAt(0);
+        for(let i=1;i<FERRIS_SEGS;i++) ferrisStepOnce(forceS);
+        let restored=true;
+        for(const [k2,v] of built){ const p=k2.split(","); if(getBlock(+p[0],+p[1],+p[2])!==v) restored=false; }
+        ok("摩天轮步进会移动座舱(旧格让出/新格入座, 全程恰 8 舱)", okStep1, "step1="+okStep1+" phase="+ferrisPhase+" wool="+countWool()+" built="+woolBuilt+" hasChunk="+hasWheelChunk);
+        ok("摩天轮整圈 64 步后座舱逐字节复原, 且不写入存档 diff", restored && ferrisPhase===0 && blockDiff.size===diffBefore,
+          "restored="+restored+" diff="+blockDiff.size+"/"+diffBefore);
+        for(const [x,y,z,v] of touched.values()) setB(x,y,z,v);   // 清场: 全部写回测试前原值
+      } finally { ferrisPhase=snapF.phase; ferrisTimer=snapF.timer; ferrisRebuildQ.length=0; ferrisRebuildQ.push(...snapF.q); }
     }
 
     // 8r. 神话遗物被动: 灯/羊毛/法尔不再只是一次性掉落; 图鉴可翻; 神灯可按 L
