@@ -378,17 +378,17 @@
   #bazaar-panel .bz-ware:hover { background:#ffd23f22; border-color:#ffd23f66; }
   #bazaar-panel .bz-poor { opacity:.45; cursor:not-allowed; }
   #bazaar-panel .bz-cost { color:#ffd23f; font-weight:700; white-space:nowrap; }
-  #pottery-panel, #sphinx-panel, #mythic-panel, #lamp-panel, #ruin-glyph-panel { position:fixed; inset:0; z-index:62; display:none; align-items:center; justify-content:center; padding:20px; background:rgba(8,6,3,.82); cursor:pointer; }
-  #pottery-panel.on, #sphinx-panel.on, #mythic-panel.on, #lamp-panel.on, #ruin-glyph-panel.on { display:flex; }
-  #pottery-panel .pt-card, #sphinx-panel .sx-card, #mythic-panel .pt-card, #lamp-panel .sx-card, #ruin-glyph-panel .sx-card { max-width:520px; width:100%; max-height:86vh; overflow:auto; background:linear-gradient(#1a140c,#120d07); border:2px solid #c9a24b; border-radius:12px; padding:20px 24px; color:#f0e6d0; box-shadow:0 10px 40px #000a; cursor:default; }
-  #pottery-panel h2, #sphinx-panel h2, #mythic-panel h2, #lamp-panel h2, #ruin-glyph-panel h2 { color:#ffd23f; margin:0 0 8px; font-size:19px; }
+  #pottery-panel, #sphinx-panel, #mythic-panel, #lamp-panel, #ruin-glyph-panel, #expedition-route, #meta-panel { position:fixed; inset:0; z-index:62; display:none; align-items:center; justify-content:center; padding:20px; background:rgba(8,6,3,.82); cursor:pointer; }
+  #pottery-panel.on, #sphinx-panel.on, #mythic-panel.on, #lamp-panel.on, #ruin-glyph-panel.on, #expedition-route.on, #meta-panel.on { display:flex; }
+  #pottery-panel .pt-card, #sphinx-panel .sx-card, #mythic-panel .pt-card, #lamp-panel .sx-card, #ruin-glyph-panel .sx-card, #expedition-route .sx-card, #meta-panel .pt-card { max-width:520px; width:100%; max-height:86vh; overflow:auto; background:linear-gradient(#1a140c,#120d07); border:2px solid #c9a24b; border-radius:12px; padding:20px 24px; color:#f0e6d0; box-shadow:0 10px 40px #000a; cursor:default; }
+  #pottery-panel h2, #sphinx-panel h2, #mythic-panel h2, #lamp-panel h2, #ruin-glyph-panel h2, #expedition-route h2, #meta-panel h2 { color:#ffd23f; margin:0 0 8px; font-size:19px; }
   #pottery-panel .pt-row { display:flex; justify-content:space-between; gap:12px; padding:8px 10px; margin:5px 0; border:1px solid #ffffff14; border-radius:8px; background:#ffffff08; }
   #pottery-panel .pt-row.locked { opacity:.42; }
   #pottery-panel .pt-n { font-weight:700; color:#ffe9c4; }
   #pottery-panel .pt-d { color:#c9b98a; font-size:12px; margin-top:2px; }
   #sphinx-panel .sx-q, #lamp-panel .sx-q { color:#ffe9c4; font-size:16px; line-height:1.7; margin:8px 0 14px; }
-  #sphinx-panel .sx-ans, #lamp-panel .sx-ans { padding:11px 13px; margin:7px 0; border:1px solid #ffffff1e; border-radius:9px; background:#ffffff08; cursor:pointer; transition:.15s; }
-  #sphinx-panel .sx-ans:hover, #lamp-panel .sx-ans:hover { background:#ffd23f22; border-color:#ffd23f66; }
+  #sphinx-panel .sx-ans, #lamp-panel .sx-ans, #expedition-route .sx-ans { padding:11px 13px; margin:7px 0; border:1px solid #ffffff1e; border-radius:9px; background:#ffffff08; cursor:pointer; transition:.15s; }
+  #sphinx-panel .sx-ans:hover, #lamp-panel .sx-ans:hover, #expedition-route .sx-ans:hover { background:#ffd23f22; border-color:#ffd23f66; }
   #ruin-glyph-panel .rg-clue { color:#ffe9c4; font-size:15px; line-height:1.65; margin:8px 0 14px; }
   #ruin-glyph-panel .rg-slots, #ruin-glyph-panel .rg-choices { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:9px; }
   #ruin-glyph-panel .rg-slots { margin:12px 0; }
@@ -536,7 +536,7 @@
       <p><b>木乃伊</b>贴近后会站定举手、身体泛紫，脚下亮起一圈紫色诅咒光环；约 0.75 秒后砸地，圈内受重伤并被击飞。重击打不断，看到光环就走出圈外，或者用沙步躲开；砸完它会慢半拍，正好反击。</p>
       <p><b>骷髅射手</b>放箭前会站定、身体泛红，弓前拉出一条红色瞄准线；瞄准线变亮表示方向已锁定。躲到掩体后可取消它的瞄准；锁定后横移就能躲开；瞄准时打它一下会打断，并让它僵直约 1 秒。</p>
     </section>
-    <b>F1</b> 拍照模式　<b>F2</b> 截图　<b>F5</b> 第三人称(Shift+F5 看正脸)　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成(可熔铸☀拉之烈阳剑、🔨塞特之锤)　<b>0</b> 第10格　<b>J</b> 附魔祭坛(献文物)　<b>C</b> 沙步闪避　<b>Esc</b> 暂停　<b>T</b> 编年史　<b>P</b> 陶片图鉴　<b>K</b> 神话遗物　<b>U</b> 开宝库　<b>R</b> 答斯芬克斯　<b>L</b> 神灯许愿　<b>N</b> 大地图(右上角为小地图)<br>
+    <b>F1</b> 拍照模式　<b>F2</b> 截图　<b>F5</b> 第三人称(Shift+F5 看正脸)　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成(可熔铸☀拉之烈阳剑、🔨塞特之锤)　<b>0</b> 第10格　<b>J</b> 附魔祭坛(献文物)　<b>C</b> 沙步闪避　<b>I</b> 遗迹专精　<b>Esc</b> 暂停　<b>T</b> 编年史　<b>P</b> 陶片图鉴　<b>K</b> 神话遗物　<b>U</b> 开宝库　<b>R</b> 答斯芬克斯　<b>L</b> 神灯许愿　<b>N</b> 大地图(右上角为小地图)<br>
     <b>物品栏</b>：1烟花 2钩爪 3可乐 4铁剑 5机关枪 6火箭筒 7弓 8=TNT(右键放·左键点燃) 9弹跳板<br>
     <b>2 钩爪</b>甩向准星把你拉过去；<b>3 可乐</b>回血+加速；<b>9 弹跳板</b>踩上去高高弹飞不摔伤<br>
     击杀获得<b>经验</b>升级(提升生命与伤害)。白天长、夜晚短而亮，敌人只是点缀<br>
@@ -545,7 +545,8 @@
     　<b>阵营声望</b>：助罗马/敬埃及各有回报，袭击军团会被<b>通缉</b>　<b>🔮天象</b>（希腊+罗马/埃及/波斯/阿拉伯/地中海）·<b>🐫波斯集市·🌊金羊毛远征·🌑亡者之夜</b>会不时自行降临，左下状态栏会挂着倒计时<br>
     　<b>宝库钥匙</b>：通关斗兽场或斩杀法老获得，站在金字塔/宫殿/斗兽场按 <b>U</b> 开启封印宝库（钥匙会真正被花掉）<br>
     　<b>神话遗物</b>：六文明碎片拼合后有被动神力（按 <b>K</b> 翻看）。拼合不灭神灯后按 <b>L</b> 自选一项愿望<br>
-    　<b>🏛 遗迹远征</b>：在 <b>B</b> 合成台用砂岩×8+金×2+钻×1 合成「遗迹远征石板」，立即开启一局：先解三符号机关（照石碑线索点选，错了可重来），解开后击退 3 波遗迹守卫。通关得金/钻/文物/核心与经验；同一存档每局首通奖励只发一次，重复通关只给少量纪念品。死亡、关面板或开新世界会中断远征（已完成次数保留）<br>
+    　<b>🏛 遗迹远征</b>：在 <b>B</b> 合成台用砂岩×8+金×2+钻×1 合成「遗迹远征石板」，立即开启一局：先解三符号机关（照石碑线索点选，错了可重来），再<b>选路线</b>（🛡稳扎稳打 / ⚠险中求胜——守卫全精英但回响+1），然后击退 3 波遗迹守卫。通关得金/钻/文物/核心与经验，并获得<b>遗迹回响</b>（首通+2、重复+1、精英路线+1）。同一存档每局首通奖励只发一次；死亡、关面板或开新世界会中断远征<br>
+    　<b>🏛 遗迹专精</b>：按 <b>I</b> 用回响研习三条专精树（测绘者/守墓者/沙步者，各 4 阶，成本 2/3/5/7）——<b>只在远征内生效</b>，开新世界不清零<br>
     <b>群系</b>：沙海·红土台地·干草原为主，另有盐湖·峡谷·火山·<b>晶洞高地·古代遗迹带</b><br>
     　💎 晶洞高地：地表紫晶标出入口，地下方解石洞可采　⛵ 遗迹带：沉船/商队残骸藏金<br>
     <b>地标</b>：金字塔(墓室石棺唤醒法老王Boss)·斗兽场·宫殿·绿洲·彩虹桥·机场·赛车场·陨石坑·游乐场<br>
@@ -604,6 +605,8 @@
 <div id="lamp-panel" onclick="closeLampPanel()"><div class="sx-card" onclick="event.stopPropagation()"></div></div>
 <div id="sphinx-panel" onclick="closeSphinxPanel()"><div class="sx-card" onclick="event.stopPropagation()"></div></div>
 <div id="ruin-glyph-panel" role="dialog" aria-modal="true" aria-hidden="true" aria-label="遗迹三符号机关" onclick="closeRuinGlyphPanel('backdrop')"><div class="sx-card" onclick="event.stopPropagation()"></div></div>
+<div id="expedition-route" role="dialog" aria-modal="true" aria-hidden="true" aria-label="远征路线" onclick="pickExpeditionRoute('safe')"><div class="sx-card" onclick="event.stopPropagation()"></div></div>
+<div id="meta-panel" role="dialog" aria-modal="true" aria-hidden="true" aria-label="遗迹专精" onclick="closeMetaPanel()"><div class="pt-card" onclick="event.stopPropagation()"></div></div>
 <div id="overlay" class="main-menu">
   <canvas id="brandmark" width="120" height="120"></canvas>
   <div id="title">沙海奇境</div>
@@ -4981,8 +4984,8 @@ const SAND_RIPOSTE_WINDOW=2.0, SAND_RIPOSTE_RATE=0.35, SAND_RIPOSTE_CAP=3;
 // 第十九轮·云端 P3: 能量核心战技(有上限)。沙步熟练: 每级冷却 -0.4s(4.5→3.3); 回砂反击: 每级反击加成 +10%、封顶 +1(35%/+3 → 65%/+6)。
 const MASTERY_MAX=3;
 const combatMastery={step:0, riposte:0};
-function sandStepCd(){ return SANDSTEP_CD-0.4*combatMastery.step; }
-function riposteRate(){ return SAND_RIPOSTE_RATE+0.1*combatMastery.riposte; }
+function sandStepCd(){ return SANDSTEP_CD-0.4*combatMastery.step-(ruinCombatActive()&&masteryLevel("duneStrider")>=1?0.2:0); }   // 沙步者「稳足」: 远征中再 -0.2
+function riposteRate(){ return SAND_RIPOSTE_RATE+0.1*combatMastery.riposte+(ruinCombatActive()&&masteryLevel("duneStrider")>=2?0.05:0); }   // 沙步者「回砂」: 远征中 +5%
 function riposteCap(){ return SAND_RIPOSTE_CAP+combatMastery.riposte; }
 function restoreCombatMastery(d){                 // 老存档无字段/坏值 → 0, 越界限幅到 0..3
   const o=d&&typeof d==="object"&&!Array.isArray(d)?d:{};
@@ -5015,7 +5018,7 @@ function sandRiposteDamage(target,baseDamage){
 }
 function sandStepPanelOpen(){
   const ids=["craftPanel","enchPanel","potionPanel","chestPanel","furnacePanel","npcPanel","fullhelp","settingsPanel",
-    "bazaar-panel","pottery-panel","mythic-panel","lamp-panel","sphinx-panel"];
+    "bazaar-panel","pottery-panel","mythic-panel","lamp-panel","sphinx-panel","ruin-glyph-panel","expedition-route","meta-panel"];
   return ids.some(id=>{
     const el=document.getElementById(id); if(!el) return false;
     const cs=getComputedStyle(el);
@@ -6181,7 +6184,11 @@ function updateBuffHUD(){
   }
   if(typeof ruinExpeditionState!=="undefined" && ruinExpeditionState.active){
     const rp=ruinExpeditionState.phase;
-    bits.push(rp==="puzzle" ? "🏛 遗迹远征 · 解谜中" : (rp==="combat" ? "🏛 遗迹远征 · 第 "+Math.min(ruinExpeditionState.wave,RUIN_EXPEDITION_WAVES.length)+"/"+RUIN_EXPEDITION_WAVES.length+" 波" : "🏛 遗迹远征 · 结算"));
+    const W=ruinExpeditionState.waves||RUIN_EXPEDITION_WAVES;
+    bits.push(rp==="puzzle" ? "🏛 遗迹远征 · 解谜中"
+           : rp==="route"  ? "🏛 遗迹远征 · 选择路线"
+           : rp==="combat" ? "🏛 遗迹远征 · 第 "+Math.min(ruinExpeditionState.wave,W.length)+"/"+W.length+" 波"+(ruinExpeditionState.route==="elite"?"（精英）":"")
+           : "🏛 遗迹远征 · 结算");
   }
   if(typeof mythicDone==="function" && mythicDone("arabia")){
     if(djinnState.cd>0) bits.push("🪔 神灯冷却 "+Math.ceil(djinnState.cd)+"s · 按 L");
@@ -6829,7 +6836,8 @@ function chronicleHTML(){
     + row('🔮 当前天象', om)
     + row('🐫 波斯集市', bz)
     + row('🌊 金羊毛远征', ex)
-    + row('🏛 遗迹远征', ruinExpeditionSave.completed+' 次通关'+(ruinExpeditionState.active?(' · '+(ruinExpeditionState.phase==="puzzle"?'解谜中':(ruinExpeditionState.phase==="combat"?('战斗第 '+ruinExpeditionState.wave+' 波'):'结算中'))):' · 石板在 B 合成台'))
+    + row('🏛 遗迹远征', ruinExpeditionSave.completed+' 次通关 · 回响 '+metaProgress.echoes+' · 专精 '+MASTERY_TREES.map(t=>masteryLevel(t.k)).reduce((a,b)=>a+b,0)+'/12 · 按 I'
+      +(ruinExpeditionState.active?(' · '+(ruinExpeditionState.phase==="puzzle"?'解谜中':(ruinExpeditionState.phase==="route"?'选路线':(ruinExpeditionState.phase==="combat"?('战斗第 '+ruinExpeditionState.wave+' 波'):'结算中')))):''))
     + row('🌑 亡者之夜', (undeadNight.active?('围城中 · 剩'+Math.ceil(undeadNight.t)+'s'):'平静')+' · 幸存 '+undeadNight.survived+' 夜')
     + row('✨ 神话遗物', mythicState.done.length+' / '+MYTHIC.length+'（碎片 '+Object.values(mythicState.frags).reduce((a,b)=>a+b,0)+'）· 按 K')
     + '<div style="margin-top:12px;color:#c9b98a;font-size:12px">按 <b style="color:#ffd23f">T</b> 关闭 · <b>P</b> 陶片图鉴 · <b>K</b> 神话遗物 · 声望随行为涨落，天象/集市/远征会自行降临</div>';
@@ -7052,6 +7060,7 @@ document.addEventListener("keydown",e=>{
   if(e.code==="KeyY" && !e.repeat){ e.preventDefault(); toggleBazaarPanel(); return; }
   if(e.code==="KeyP" && !e.repeat){ e.preventDefault(); togglePotteryPanel(); return; }
   if(e.code==="KeyK" && !e.repeat){ e.preventDefault(); toggleMythicPanel(); return; }
+  if(e.code==="KeyI" && !e.repeat){ e.preventDefault(); const mp3=document.getElementById("meta-panel"); if(mp3 && mp3.classList.contains("on")) closeMetaPanel(); else openMetaPanel(); return; }   // 第二十七轮·本地: 遗迹专精
   if(e.code==="KeyL" && !e.repeat){                                          // 须在 playing() 之前: 开面板会退指针锁并暂停, 否则再按 L 关不掉
     e.preventDefault();
     const lp=document.getElementById("lamp-panel");
@@ -7073,6 +7082,8 @@ document.addEventListener("keydown",e=>{
   if(e.code==="Escape" && myEl && myEl.classList.contains("on")){ closeMythicPanel(); return; }
   if(e.code==="Escape" && lpEl && lpEl.classList.contains("on")){ closeLampPanel(); return; }
   if(e.code==="Escape" && sxEl && sxEl.classList.contains("on")){ closeSphinxPanel(); return; }
+  { const mp4=document.getElementById("meta-panel"); if(e.code==="Escape" && mp4 && mp4.classList.contains("on")){ closeMetaPanel(); return; } }
+  { const erEl=document.getElementById("expedition-route"); if(e.code==="Escape" && erEl && erEl.classList.contains("on")){ pickExpeditionRoute("safe"); return; } }   // 未选路线按 Esc: 默认稳扎稳打
   if(e.code==="Escape" && softLock){ pauseGame(); return; }
   if(!playing()) return;
   if(e.code==="KeyM" && !e.repeat){ const on=setMusicEnabled(!musicOn); showName("音乐: "+(on?"开":"关")); }
@@ -9089,7 +9100,9 @@ function foeStrike(dmg,kx,kz,m,attackTag){
     return false;
   }
   const em=(m&&m.elite)?1.5:1;
-  damagePlayer(Math.max(1,Math.round(dmg*foeDmgMul()*em)), kx, kz);
+  let fdmg=foeDmgMul()*em;
+  if(ruinCombatActive() && masteryLevel("tombGuard")>=2) fdmg*=0.95;   // 守墓者「盐甲」: 远征战斗中敌击 -5%
+  damagePlayer(Math.max(1,Math.round(dmg*fdmg)), kx, kz);
   return true;
 }
 /* ---------- 蝎毒(敌人行为差异化 · 巨蝎) ----------
@@ -13358,9 +13371,9 @@ function renderRuinGlyphPanel(){
 function openRuinGlyphPanel(options={}){
   if(!options || typeof options!=="object" || ruinGlyphSession || !validRuinGlyphSolution(options.solution)) return false;
   const panel=document.getElementById("ruin-glyph-panel"); if(!panel) return false;
-  const {solution,clueText="依照遗迹刻痕的提示，按顺序各选择一次符号。",onSolved=null,onCancel=null}=options;
+  const {solution,clueText="依照遗迹刻痕的提示，按顺序各选择一次符号。",onSolved=null,onCancel=null,keep=false}=options;
   ruinGlyphSession={solution:solution.slice(),input:[],clueText:String(clueText).slice(0,240),previousFocus:document.activeElement,
-    message:"选择顺序中的第一个符号。",onSolved:typeof onSolved==="function"?onSolved:null,onCancel:typeof onCancel==="function"?onCancel:null};
+    message:"选择顺序中的第一个符号。",onSolved:typeof onSolved==="function"?onSolved:null,onCancel:typeof onCancel==="function"?onCancel:null,keep:!!keep};
   if(!renderRuinGlyphPanel()){ ruinGlyphSession=null; return false; }
   panel.classList.add("on"); panel.setAttribute("aria-hidden","false");
   if(document.pointerLockElement) document.exitPointerLock();
@@ -13383,7 +13396,9 @@ function selectRuinGlyph(id){
   if(!s || !Number.isInteger(id) || id<0 || id>=RUIN_GLYPHS.length || s.input.includes(id)) return false;
   const pos=s.input.length; s.input.push(id);
   if(id!==s.solution[pos]){
-    s.input.length=0; s.message="顺序不符，符号已归位；可以重新尝试。"; renderRuinGlyphPanel(); return false;
+    if(s.keep){ s.input.pop(); s.message="最后一位不符，已退回一格；可以重选。"; }   // 测绘者「稳手」: 只清最后一位
+    else { s.input.length=0; s.message="顺序不符，符号已归位；可以重新尝试。"; }
+    renderRuinGlyphPanel(); return false;
   }
   if(s.input.length<RUIN_GLYPHS.length){ s.message="符号吻合，继续。"; renderRuinGlyphPanel(); return true; }
   const onSolved=s.onSolved;
@@ -13574,7 +13589,8 @@ function tickExpedition(dt){
 
 /* ---- 🏛 遗迹远征: 把三符号机关接入一局可玩的短循环 ---- */
 const RUIN_EXPEDITION_WAVES=[["scarab","scarab","serqet"],["mummy","skeleton","serqet"],["anubis","mummy","scarab"]];
-const ruinExpeditionState={ active:false, phase:"idle", runId:0, wave:0, alive:[], nextT:0, rewardClaimed:false, solution:[0,1,2], clueText:"" };
+const RUIN_EXPEDITION_WAVES_ELITE=[["serqet","scarab"],["anubis","serqet"],["anubis","mummy"]];   // 险中求胜: 全精英路线(血×1.5+精英掉核心), 通关回响+1
+const ruinExpeditionState={ active:false, phase:"idle", runId:0, wave:0, alive:[], nextT:0, rewardClaimed:false, solution:[0,1,2], clueText:"", route:"safe", waves:null, bandaged:false };
 const ruinExpeditionSave={ runs:[], completed:0 };
 function hashRuin(seed,runId,n){ return Math.abs(Math.sin(seed*0.317+runId*0.719+n*1.337)); }
 function generateRuinExpedition(seed,runId){
@@ -13582,7 +13598,11 @@ function generateRuinExpedition(seed,runId){
   const solution=perms[(hashRuin(seed,runId,0)*perms.length)|0];
   const names={0:"日轮",1:"圣甲虫",2:"羽毛"};
   const clueOrder=solution.map(id=>names[id]);
-  const clueText="石碑上刻着三行小字：先"+clueOrder[0]+"，再"+clueOrder[1]+"，最后"+clueOrder[2]+"。";
+  let clueText="石碑上刻着三行小字：先"+clueOrder[0]+"，再"+clueOrder[1]+"，最后"+clueOrder[2]+"。";
+  if(masteryLevel("surveyor")>=1){                       // 测绘者 I「壁画释读」: 追加一条排除式提示(不直接给答案)
+    const y=(hashRuin(seed,runId,7)*3)|0, wrong=(solution[y]+1+((hashRuin(seed,runId,9)*2)|0))%3;
+    clueText+=" 刻痕特写：第"+(y+1)+"位不是「"+names[wrong]+"」。";
+  }
   return {solution, clueText};
 }
 function canStartRuinExpedition(){
@@ -13600,11 +13620,16 @@ function startRuinExpedition(){
   ruinExpeditionState.alive=[];
   ruinExpeditionState.nextT=0;
   ruinExpeditionState.rewardClaimed=false;
+  ruinExpeditionState.route="safe";
+  ruinExpeditionState.waves=null;
+  ruinExpeditionState.bandaged=false;
+  if(masteryLevel("tombGuard")>=1 && hp<maxHp){ hp=Math.min(maxHp,hp+2); updateHearts(); }   // 守墓者 I「干粮」: 启程回 2 血
   if(document.pointerLockElement) document.exitPointerLock();
   const opened=openRuinGlyphPanel({
     solution:ruinExpeditionState.solution,
     clueText:ruinExpeditionState.clueText,
-    onSolved:()=>{ if(ruinExpeditionState.active && ruinExpeditionState.phase==="puzzle"){ ruinExpeditionState.phase="combat"; ruinExpeditionState.nextT=1.2; showName("🏛 机关开启！遗迹守卫正在苏醒…"); } },
+    keep:masteryLevel("surveyor")>=2,                    // 测绘者 II「稳手」: 输错只清最后一位
+    onSolved:()=>{ if(ruinExpeditionState.active && ruinExpeditionState.phase==="puzzle"){ ruinExpeditionState.phase="route"; openExpeditionRoutePanel(); updateBuffHUD(); } },
     onCancel:()=>{ abortRuinExpedition("你暂时离开了遗迹机关"); }
   });
   if(!opened){ abortRuinExpedition(); return false; }
@@ -13613,52 +13638,178 @@ function startRuinExpedition(){
 }
 function abortRuinExpedition(msg){
   for(const m of ruinExpeditionState.alive){ const i=mobs.indexOf(m); if(i>=0){ deathPoof(m); mobs.splice(i,1); } }
-  Object.assign(ruinExpeditionState,{active:false,phase:"idle",wave:0,alive:[],nextT:0,rewardClaimed:false});
+  closeExpeditionRoutePanel(true);
+  if(ruinGlyphSession){   // 中断时一并丢弃机关会话(不触发 onCancel, 免得递归 abort / 死亡画面残留面板)
+    ruinGlyphSession=null;
+    const gp=document.getElementById("ruin-glyph-panel");
+    if(gp){ gp.classList.remove("on"); gp.setAttribute("aria-hidden","true"); }
+  }
+  Object.assign(ruinExpeditionState,{active:false,phase:"idle",wave:0,alive:[],nextT:0,rewardClaimed:false,waves:null,bandaged:false});
   if(msg) showName(msg);
+}
+function pickExpeditionRoute(r){
+  if(!ruinExpeditionState.active || ruinExpeditionState.phase!=="route") return false;
+  const elite=r==="elite";
+  ruinExpeditionState.route=elite?"elite":"safe";
+  ruinExpeditionState.waves=elite?RUIN_EXPEDITION_WAVES_ELITE:RUIN_EXPEDITION_WAVES;
+  ruinExpeditionState.phase="combat";
+  ruinExpeditionState.nextT=1.2;
+  closeExpeditionRoutePanel(true);
+  showName(elite?"⚠ 险中求胜：守卫皆为精英（血×1.5），通关回响 +1":"🛡 稳扎稳打：常规守卫三波");
+  updateBuffHUD();
+  return true;
 }
 function claimRuinExpeditionReward(){
   if(!ruinExpeditionState.active || ruinExpeditionState.rewardClaimed) return;
   ruinExpeditionState.rewardClaimed=true;
   const already=ruinExpeditionSave.runs.includes(ruinExpeditionState.runId);
+  const elite=ruinExpeditionState.route==="elite";
+  const got=[];
   if(!already){
     ruinExpeditionSave.runs.push(ruinExpeditionState.runId);
     ruinExpeditionSave.completed++;
     giveBlock(GOLD_ORE, 6); giveBlock(GEM_ORE, 2); npcState.relics+=3; cores+=2; addXP(120);
     addFaction("egypt", 4);
-    showName("🏆 遗迹远征通关！古物到手（金x6 钻x2 文物x3 ⚡核心x2 +120经验） · 累计完成 "+ruinExpeditionSave.completed+" 次");
+    got.push("金x6 钻x2 文物x3 ⚡核心x2 +120经验");
   } else {
     giveBlock(GOLD_ORE, 2); npcState.relics+=1; addXP(40);
-    showName("🏛 遗迹远征已结算过，只获得少量纪念品（金x2 文物x1 +40经验）");
+    got.push("金x2 文物x1 +40经验");
   }
+  if(masteryLevel("surveyor")>=3){ npcState.relics+=1; addXP(40); got.push("🏺侧室文物+1 +40经验"); }   // 测绘者 III「隐匿侧室」
+  if(masteryLevel("tombGuard")>=4){ cores+=1; got.push("⚡安魂核心+1"); }                              // 守墓者 IV「安魂」
+  if(masteryLevel("duneStrider")>=4){ addXP(60); got.push("⭐终结赏金+60经验"); }                      // 沙步者 IV「终结赏金」
+  // 遗迹回响(局外): 首通 +2, 重复 +1, 精英路线 +1; 测绘者 IV「文书封存」每连满 3 局再 +1
+  metaProgress.streak++;
+  let echoGain=(already?1:2)+(elite?1:0);
+  if(masteryLevel("surveyor")>=4 && metaProgress.streak%3===0){ echoGain++; got.push("📜文书封存回响+1"); }
+  metaProgress.echoes+=echoGain;
+  saveMeta();
+  showName((already?"🏛 遗迹远征已结算过，只获得少量纪念品（":"🏆 遗迹远征通关！古物到手（")+got.join(" · ")+"） · 回响 +"+echoGain+"（共 "+metaProgress.echoes+"）· 按 I 研习专精");
   updateBuffHUD();
 }
 function completeRuinExpedition(){ ruinExpeditionState.phase="reward"; claimRuinExpeditionReward(); }
-function spawnRuinMob(type){
+function spawnRuinMob(type,elite){
   const ang=Math.random()*Math.PI*2, dist=4+Math.random()*5;
   const x=Math.round(player.x+Math.cos(ang)*dist), z=Math.round(player.z+Math.sin(ang)*dist);
   const y=(typeof groundY==="function"?groundY(x,z):Math.round(player.y))+1;
-  const m=spawnTrialMob(type, x, y, z, false);
+  const m=spawnTrialMob(type, x, y, z, !!elite);
   if(m) ruinExpeditionState.alive.push(m);
   return !!m;
 }
 function tickRuinExpedition(dt){
   if(!ruinExpeditionState.active) return;
   if(dead){ abortRuinExpedition("🏛 你在遗迹中倒下，远征中断"); return; }
-  if(ruinGlyphSession) return; // 解谜期间不推进战斗
+  if(ruinGlyphSession || ruinExpeditionState.phase==="route") return; // 解谜/选路期间不推进战斗
   if(ruinExpeditionState.phase==="combat"){
+    if(masteryLevel("tombGuard")>=3 && !ruinExpeditionState.bandaged && hp<maxHp*0.25){   // 守墓者 III「应急绷带」
+      ruinExpeditionState.bandaged=true; hp=Math.min(maxHp,hp+4); updateHearts(); showName("🩹 应急绷带缠上（+4 生命）");
+    }
     ruinExpeditionState.alive=ruinExpeditionState.alive.filter(m=>m.hp>0 && mobs.includes(m));
     if(ruinExpeditionState.alive.length>0) return;
-    if(ruinExpeditionState.wave>=RUIN_EXPEDITION_WAVES.length){ completeRuinExpedition(); return; }
+    const WAVES=ruinExpeditionState.waves||RUIN_EXPEDITION_WAVES;
+    if(ruinExpeditionState.wave>=WAVES.length){ completeRuinExpedition(); return; }
     ruinExpeditionState.nextT-=dt;
     if(ruinExpeditionState.nextT>0) return;
-    const list=RUIN_EXPEDITION_WAVES[ruinExpeditionState.wave++];
-    for(const type of list) spawnRuinMob(type);
+    const list=WAVES[ruinExpeditionState.wave++];
+    const elite=ruinExpeditionState.route==="elite";
+    for(const type of list) spawnRuinMob(type, elite);
+    if(masteryLevel("duneStrider")>=3 && ruinExpeditionState.wave>1){ hp=Math.min(maxHp,hp+1); updateHearts(); }   // 沙步者 III「战后包扎」
     ruinExpeditionState.nextT=2.5;
-    showName("🏛 遗迹守卫 第 "+ruinExpeditionState.wave+"/"+RUIN_EXPEDITION_WAVES.length+" 波");
+    showName("🏛 遗迹守卫 第 "+ruinExpeditionState.wave+"/"+WAVES.length+" 波"+(elite?"（精英）":""));
   } else if(ruinExpeditionState.phase==="reward"){
     if(!ruinExpeditionState.rewardClaimed) claimRuinExpeditionReward();
   }
 }
+
+/* ---- 🏛 遗迹回响与局外专精 (第二十七轮·本地, PR A): 远征产出回响, 三条专精树只作用于远征 ----
+   回响与专精存独立的 sandsea_meta_v1(对齐"局外永久保留"语义: 开新世界不清零); selftest 的 sandsea* 快照会自动覆盖它。 */
+const MASTERY_TREES=[
+  {k:"surveyor", n:"测绘者", d:"探索与机关", tiers:[
+    {n:"壁画释读", d:"机关线索追加一条排除式提示（不直接给答案）"},
+    {n:"稳手",     d:"机关输错只清空最后一位，已对的不用重来"},
+    {n:"隐匿侧室", d:"通关时搜刮侧室：文物 +1、经验 +40"},
+    {n:"文书封存", d:"每连续完成 3 局，额外 +1 回响"},
+  ]},
+  {k:"tombGuard", n:"守墓者", d:"生存与容错", tiers:[
+    {n:"干粮",     d:"远征启程时回复 2 点生命（不超上限）"},
+    {n:"盐甲",     d:"远征战斗中受到的敌击伤害 -5%"},
+    {n:"应急绷带", d:"每局一次，生命低于 25% 时自动回 4 点"},
+    {n:"安魂",     d:"通关奖励额外 +1 能量核心"},
+  ]},
+  {k:"duneStrider", n:"沙步者", d:"机动与反击", tiers:[
+    {n:"稳足",     d:"远征中沙步冷却 -0.2 秒"},
+    {n:"回砂",     d:"远征中精准反击伤害加成 +5%"},
+    {n:"战后包扎", d:"每清一波守卫回复 1 点生命"},
+    {n:"终结赏金", d:"通关额外 +60 经验"},
+  ]},
+];
+const MASTERY_TIER_COST=[2,3,5,7], MASTERY_TIER_MAX=4;
+const META_SAVE_KEY="sandsea_meta_v1";
+const metaProgress={ echoes:0, mastery:{surveyor:0,tombGuard:0,duneStrider:0}, streak:0 };
+function normalizeMeta(raw){
+  const src=(raw&&typeof raw==="object"&&!Array.isArray(raw))?raw:{};
+  metaProgress.echoes=Math.max(0,src.echoes|0);
+  const m=(src.mastery&&typeof src.mastery==="object")?src.mastery:{};
+  for(const t of MASTERY_TREES) metaProgress.mastery[t.k]=Math.max(0,Math.min(MASTERY_TIER_MAX,(m[t.k]|0)));
+  metaProgress.streak=Math.max(0,src.streak|0);
+}
+function saveMeta(){ try{ localStorage.setItem(META_SAVE_KEY, JSON.stringify({version:1, echoes:metaProgress.echoes, mastery:Object.assign({},metaProgress.mastery), streak:metaProgress.streak})); }catch(e){} }
+function loadMeta(){ try{ normalizeMeta(JSON.parse(localStorage.getItem(META_SAVE_KEY)||"null")); }catch(e){ normalizeMeta(null); } }
+loadMeta();
+function masteryLevel(k){ return metaProgress.mastery[k]|0; }
+function ruinCombatActive(){ return ruinExpeditionState.active && ruinExpeditionState.phase==="combat"; }
+function buyMastery(k){
+  const tree=MASTERY_TREES.find(t=>t.k===k); if(!tree) return false;
+  const lv=masteryLevel(k);
+  if(lv>=MASTERY_TIER_MAX){ showName("📘 "+tree.n+"已研满 4 阶"); return false; }
+  const cost=MASTERY_TIER_COST[lv];
+  if(metaProgress.echoes<cost){ showName("💠 回响不足：下一阶需要 "+cost+"（现有 "+metaProgress.echoes+"）"); return false; }
+  metaProgress.echoes-=cost; metaProgress.mastery[k]=lv+1; saveMeta();
+  showName("🏛 "+tree.n+"·"+tree.tiers[lv].n+" 研成 "+(lv+1)+"/4（回响剩 "+metaProgress.echoes+"）");
+  if(document.getElementById("meta-panel") && document.getElementById("meta-panel").classList.contains("on")) renderMeta();
+  return true;
+}
+/* 专精面板 UI(按 I): 复用图鉴面板的卡片样式 */
+function renderMeta(){
+  const card=document.querySelector("#meta-panel .pt-card"); if(!card) return;
+  let h='<h2>🏛 遗迹专精 · 回响 '+metaProgress.echoes+'</h2>'
+    +'<div style="color:#c9b98a;font-size:12px;margin:0 0 10px;line-height:1.6">完成遗迹远征获得「遗迹回响」；专精<b style="color:#ffd23f">只在远征内生效</b>，开新世界不清零。每阶成本 2/3/5/7。</div>';
+  for(const tree of MASTERY_TREES){
+    const lv=masteryLevel(tree.k);
+    h+='<div style="margin:10px 0 4px;color:#e8bb6a;font-weight:bold">'+tree.n+' <span style="font-weight:normal;color:#c9b98a;font-size:12px">'+tree.d+' · '+lv+'/4</span></div>';
+    tree.tiers.forEach((tier,i)=>{
+      const owned=lv>i, next=lv===i, cost=MASTERY_TIER_COST[i];
+      const cls=owned?"color:#8ce6a0":(next?"cursor:pointer;color:#ffd23f":"opacity:.45");
+      const tag=owned?"✓ 已研成":(next?"💠 研习（"+cost+" 回响）":"🔒 需先研上一阶");
+      h+='<div class="mx-tier" data-k="'+tree.k+'" data-i="'+i+'" style="'+cls+';padding:7px 10px;margin:4px 0;border:1px solid #ffffff1a;border-radius:8px;font-size:12.5px;line-height:1.5;'
+        +(next?'background:#ffd23f14;':'')+'"><b>'+("ⅠⅡⅢⅣ"[i])+' '+tier.n+'</b> — '+tier.d+'<span style="float:right">'+tag+'</span></div>';
+    });
+  }
+  h+='<div style="margin-top:12px;color:#c9b98a;font-size:12px">按 <b style="color:#ffd23f">I</b> 或 Esc 关闭</div>';
+  card.innerHTML=h;
+  card.querySelectorAll(".mx-tier").forEach(el=>{
+    el.onclick=()=>{ const t=MASTERY_TREES.find(t=>t.k===el.dataset.k); if(t && masteryLevel(t.k)===+el.dataset.i) buyMastery(t.k); };
+  });
+}
+function openMetaPanel(){ const el=document.getElementById("meta-panel"); if(!el) return false;
+  renderMeta(); el.classList.add("on"); el.setAttribute("aria-hidden","false");
+  if(document.pointerLockElement) document.exitPointerLock(); return true; }
+function closeMetaPanel(){ const el=document.getElementById("meta-panel"); if(!el) return false;
+  const was=el.classList.contains("on"); el.classList.remove("on"); el.setAttribute("aria-hidden","true"); return was; }
+/* 段间路线选择面板: 解谜后弹出, 稳扎(常规三波) vs 险中求胜(精英三波, 回响+1); Esc 默认稳扎不惩罚 */
+function renderExpeditionRoute(){
+  const card=document.querySelector("#expedition-route .sx-card"); if(!card) return;
+  card.innerHTML='<h2>🗿 机关已开启 · 选择路线</h2>'
+    +'<div class="sx-ans" data-r="safe"><b>🛡 稳扎稳打</b><br><span style="color:#a99b82;font-size:12px">常规守卫三波：甲虫/巨蝎 → 木乃伊/骷髅 → 阿努比斯压阵</span></div>'
+    +'<div class="sx-ans" data-r="elite"><b>⚠ 险中求胜</b><br><span style="color:#a99b82;font-size:12px">守卫皆为精英（血×1.5、掉能量核心），通关回响 +1</span></div>'
+    +'<div style="margin-top:10px;color:#c9b98a;font-size:12px">点选一条 · Esc 视为稳扎稳打</div>';
+  card.querySelectorAll(".sx-ans").forEach(el=>el.onclick=()=>pickExpeditionRoute(el.dataset.r));
+}
+function openExpeditionRoutePanel(){ const el=document.getElementById("expedition-route"); if(!el) return false;
+  renderExpeditionRoute(); el.classList.add("on"); el.setAttribute("aria-hidden","false");
+  if(document.pointerLockElement) document.exitPointerLock(); return true; }
+function closeExpeditionRoutePanel(silent){ const el=document.getElementById("expedition-route"); if(!el) return false;
+  const was=el.classList.contains("on"); el.classList.remove("on"); el.setAttribute("aria-hidden","true"); return was; }
 
 /* ---- 🌑 亡者之夜围城: 定期降临的亡者之潮, 刷怪暴增, 撑到潮落得厚赏; 阿瑞斯天象使其更勤(连锁) ---- */
 const undeadNight={ active:false, t:0, cd:280, survived:0, bossSpawned:false };
@@ -14046,8 +14197,13 @@ window.__game = {
   get streak(){ return { cur:killStreak, best:bestStreak, elites:elitesSlain }; },
   get cores(){ return cores; }, get armor(){ return armor; },
   get combatMastery(){ return {step:combatMastery.step, riposte:combatMastery.riposte, sandStepCd:sandStepCd(), riposteRate:riposteRate(), riposteCap:riposteCap()}; },
-  get ruinExpedition(){ return { active:ruinExpeditionState.active, phase:ruinExpeditionState.phase, wave:ruinExpeditionState.wave, runId:ruinExpeditionState.runId, completed:ruinExpeditionSave.completed, runs:ruinExpeditionSave.runs.slice() }; },
-  startRuinExpedition:()=>startRuinExpedition(), abortRuinExpedition:()=>abortRuinExpedition(),
+  get ruinExpedition(){ return { active:ruinExpeditionState.active, phase:ruinExpeditionState.phase, wave:ruinExpeditionState.wave, runId:ruinExpeditionState.runId, route:ruinExpeditionState.route, completed:ruinExpeditionSave.completed, runs:ruinExpeditionSave.runs.slice() }; },
+  startRuinExpedition:()=>startRuinExpedition(), abortRuinExpedition:()=>abortRuinExpedition(), pickExpeditionRoute:(r)=>pickExpeditionRoute(r),
+  get meta(){ return { echoes:metaProgress.echoes, streak:metaProgress.streak, mastery:Object.assign({},metaProgress.mastery),
+    total:MASTERY_TREES.reduce((a,t)=>a+masteryLevel(t.k),0), costs:MASTERY_TIER_COST.slice() }; },
+  buyMastery:(k)=>buyMastery(k),
+  setEchoes:(n)=>{ metaProgress.echoes=Math.max(0,n|0); saveMeta(); return metaProgress.echoes; },
+  setMastery:(k,n)=>{ normalizeMeta({echoes:metaProgress.echoes, mastery:Object.assign({},metaProgress.mastery,{[k]:n}), streak:metaProgress.streak}); saveMeta(); return masteryLevel(k); },
   get ferris(){ const s=nearStructure(["park"],FERRIS_RANGE); return { phase:ferrisPhase, near:!!s, wheel:s?ferrisWheelAt(s):null, queue:ferrisRebuildQ.length }; },
   ferrisWheelAt:(s)=>ferrisWheelAt(s), ferrisStepOnce:(s)=>ferrisStepOnce(s),
   get poison(){ return +poisonT.toFixed(2); },
@@ -14941,7 +15097,8 @@ function selftest(){
     {
       closeRuinGlyphPanel("selftest-reset");
       const snapRE={ runs:ruinExpeditionSave.runs.slice(), completed:ruinExpeditionSave.completed };
-      const snapState={ active:ruinExpeditionState.active, phase:ruinExpeditionState.phase, runId:ruinExpeditionState.runId, wave:ruinExpeditionState.wave, alive:ruinExpeditionState.alive.slice(), nextT:ruinExpeditionState.nextT, rewardClaimed:ruinExpeditionState.rewardClaimed, solution:ruinExpeditionState.solution.slice(), clueText:ruinExpeditionState.clueText };
+      const snapState={ active:ruinExpeditionState.active, phase:ruinExpeditionState.phase, runId:ruinExpeditionState.runId, wave:ruinExpeditionState.wave, alive:ruinExpeditionState.alive.slice(), nextT:ruinExpeditionState.nextT, rewardClaimed:ruinExpeditionState.rewardClaimed, solution:ruinExpeditionState.solution.slice(), clueText:ruinExpeditionState.clueText, route:ruinExpeditionState.route, waves:ruinExpeditionState.waves, bandaged:ruinExpeditionState.bandaged };
+      const snapMeta={ echoes:metaProgress.echoes, streak:metaProgress.streak, mastery:Object.assign({},metaProgress.mastery) };
       abortRuinExpedition();
       try {
         const g1=generateRuinExpedition(12345, 1);
@@ -14970,6 +15127,8 @@ function selftest(){
       } finally {
         ruinExpeditionSave.runs=snapRE.runs; ruinExpeditionSave.completed=snapRE.completed;
         Object.assign(ruinExpeditionState, snapState);
+        metaProgress.echoes=snapMeta.echoes; metaProgress.streak=snapMeta.streak; metaProgress.mastery=snapMeta.mastery; saveMeta();
+        closeExpeditionRoutePanel(true);
       }
     }
 
@@ -15015,6 +15174,137 @@ function selftest(){
           "restored="+restored+" diff="+blockDiff.size+"/"+diffBefore);
         for(const [x,y,z,v] of touched.values()) setB(x,y,z,v);   // 清场: 全部写回测试前原值
       } finally { ferrisPhase=snapF.phase; ferrisTimer=snapF.timer; ferrisRebuildQ.length=0; ferrisRebuildQ.push(...snapF.q); }
+    }
+
+    // 8q5. 遗迹回响与局外专精: 归一/购买事务/12 效果钩子/回响经济/路线选择/稳手保进度
+    {
+      closeRuinGlyphPanel("selftest-reset"); closeExpeditionRoutePanel(true); abortRuinExpedition(); closeMetaPanel();
+      const snapM={ echoes:metaProgress.echoes, streak:metaProgress.streak, mastery:Object.assign({},metaProgress.mastery) };
+      const snapH5={hp,maxHp,armor,xp,lvl,dmgMul}, snapCore5=cores, snapRel5=npcState.relics, xp5=xp;
+      const snapBless5={t:blessT,k:blessKind}, snapMyth5=mythicState.done.slice();
+      const snapRuns5=ruinExpeditionSave.runs.slice(), snapC5=ruinExpeditionSave.completed;
+      const snapSt5={cd:sandStepState.cd,evadeT:sandStepState.evadeT,feedbackT:sandStepState.feedbackT};
+      const snapMob5=mobs.slice(), snapRun5=Object.assign({},ruinExpeditionState);
+      blessT=0; blessKind=""; mythicState.done=mythicState.done.filter(c=>c!=="greece");   // 排除祝福/埃癸斯/经验乘数对数值断言的干扰
+      try{
+        normalizeMeta(undefined);
+        ok("meta 归一: 无存档全零", metaProgress.echoes===0 && metaProgress.streak===0 && masteryLevel("surveyor")===0 && masteryLevel("tombGuard")===0 && masteryLevel("duneStrider")===0);
+        normalizeMeta({echoes:-5, mastery:{surveyor:9, tombGuard:2.7, duneStrider:-1}, streak:-3});
+        ok("meta 归一: 负值钳 0、越界钳 4、小数取整", metaProgress.echoes===0 && masteryLevel("surveyor")===4 && masteryLevel("tombGuard")===2 && masteryLevel("duneStrider")===0 && metaProgress.streak===0);
+        normalizeMeta(null);
+        metaProgress.echoes=7;
+        const b1=buyMastery("surveyor"), b2=buyMastery("surveyor"), b3=buyMastery("tombGuard"), b4=buyMastery("duneStrider");
+        ok("专精购买: 扣款升阶、不足拒绝且不产生负回响", b1 && b2 && b3 && !b4 && metaProgress.echoes===0 && masteryLevel("surveyor")===2 && masteryLevel("tombGuard")===1 && masteryLevel("duneStrider")===0, "e="+metaProgress.echoes);
+        metaProgress.echoes=12; buyMastery("surveyor"); buyMastery("surveyor");
+        ok("专精购买: 满 4 阶后拒绝", masteryLevel("surveyor")===4 && !buyMastery("surveyor"), "lv="+masteryLevel("surveyor"));
+        ok("meta 持久化: 购买后写入独立 localStorage", JSON.parse(localStorage.getItem(META_SAVE_KEY)).echoes===metaProgress.echoes && JSON.parse(localStorage.getItem(META_SAVE_KEY)).mastery.surveyor===4);
+        normalizeMeta(null);
+        // 测绘者 I 壁画释读: 线索追加排除式提示(确定性)
+        metaProgress.mastery.surveyor=1;
+        const gA=generateRuinExpedition(SEED, 42);
+        metaProgress.mastery.surveyor=0;
+        const gB=generateRuinExpedition(SEED, 42);
+        ok("测绘者I 壁画释读: 有专精时线索追加「不是」提示且确定性", /不是/.test(gA.clueText) && !/不是/.test(gB.clueText) && gA.clueText.indexOf(gB.clueText)===0, "tail="+gA.clueText.slice(-16));
+        // 测绘者 II 稳手: keep 会话输错只退一格
+        metaProgress.mastery.surveyor=2;
+        let solved5=0;
+        openRuinGlyphPanel({solution:[2,0,1], keep:true, onSolved:()=>solved5++});
+        selectRuinGlyph(2);
+        const w5=selectRuinGlyph(1);
+        const kept5=!!ruinGlyphSession && ruinGlyphSession.input.length===1 && ruinGlyphSession.input[0]===2;
+        selectRuinGlyph(0); selectRuinGlyph(1);
+        ok("测绘者II 稳手: 输错只清最后一位、保留已对前缀、可继续完成", !w5 && kept5 && solved5===1 && !ruinGlyphSession, "kept="+kept5+" solved="+solved5);
+        metaProgress.mastery.surveyor=0;
+        // 战斗钩子: 盐甲/稳足/回砂/绷带/包扎 —— 全部只在远征 combat 相位生效
+        ruinExpeditionState.active=true; ruinExpeditionState.phase="combat"; ruinExpeditionState.waves=RUIN_EXPEDITION_WAVES; ruinExpeditionState.wave=1; ruinExpeditionState.alive=[]; ruinExpeditionState.nextT=99; ruinExpeditionState.bandaged=false;
+        sandStepState.evadeT=0; armor=0;
+        hp=maxHp=999;
+        let h05=hp; foeStrike(200,0,0,null); const dropNo=h05-hp;
+        metaProgress.mastery.tombGuard=2;
+        let h06=hp; foeStrike(200,0,0,null); const dropYes=h06-hp;
+        ok("守墓者II 盐甲: 远征战斗中敌击 -5%（200→190）", dropNo===200 && Math.abs(dropYes-190)<=1, "no="+dropNo+" yes="+dropYes);
+        metaProgress.mastery.tombGuard=0;
+        const cdBase=sandStepCd();
+        const rrBase=riposteRate();
+        metaProgress.mastery.duneStrider=1;
+        const cdWith=sandStepCd();
+        metaProgress.mastery.duneStrider=2;
+        const rrWith=riposteRate();
+        ok("沙步者I/II 稳足+回砂: 远征中沙步冷却 -0.2、反击加成 +5%", Math.abs(cdBase-cdWith-0.2)<1e-9 && Math.abs(rrWith-rrBase-0.05)<1e-9, "cd="+cdBase.toFixed(2)+"→"+cdWith.toFixed(2)+" rr=+"+(rrWith-rrBase).toFixed(2));
+        metaProgress.mastery.duneStrider=0;
+        metaProgress.mastery.tombGuard=3;
+        hp=4; maxHp=20;
+        tickRuinExpedition(0.1);
+        const band1=hp===8 && ruinExpeditionState.bandaged;
+        tickRuinExpedition(0.1);
+        ok("守墓者III 应急绷带: 生命<25% 触发一次回 4", band1 && hp===8 && ruinExpeditionState.bandaged, "hp="+hp);
+        metaProgress.mastery.duneStrider=3;
+        ruinExpeditionState.nextT=0; ruinExpeditionState.wave=1; ruinExpeditionState.alive=[];
+        tickRuinExpedition(0.1);
+        ok("沙步者III 战后包扎: 第 2 波开始时回 1 血", ruinExpeditionState.wave===2 && hp===9, "wave="+ruinExpeditionState.wave+" hp="+hp);
+        abortRuinExpedition();
+        metaProgress.mastery.duneStrider=0; metaProgress.mastery.tombGuard=0;
+        // 回响经济: 首通 +2 / 重复 +1; 三类通关加成; 文书封存每 3 局 +1
+        metaProgress.mastery.surveyor=4; metaProgress.mastery.tombGuard=4; metaProgress.mastery.duneStrider=4;
+        metaProgress.streak=2; metaProgress.echoes=0;
+        ruinExpeditionState.active=true; ruinExpeditionState.phase="combat"; ruinExpeditionState.waves=RUIN_EXPEDITION_WAVES; ruinExpeditionState.wave=3; ruinExpeditionState.alive=[]; ruinExpeditionState.nextT=0; ruinExpeditionState.runId=2001; ruinExpeditionState.rewardClaimed=false; ruinExpeditionState.route="safe";
+        const rel0=npcState.relics, core0=cores, xpA=xp, lvlA=lvl;
+        const xm5=omenXpMul()*mythicXpMul();   // addXP 内部乘数与升级折算都要计入
+        tickRuinExpedition(0.1);
+        const gain1=(()=>{ let g5=xp-xpA; for(let l=lvlA;l<lvl;l++) g5+=xpNeed(l); return g5; })();
+        ok("回响经济: 首通 +2、文书封存(第3局)+1、侧室/安魂/赏金到账", metaProgress.echoes===3 && metaProgress.streak===3 && npcState.relics===rel0+3+1 && cores===core0+2+1 &&
+           gain1===Math.round(120*xm5)+Math.round(40*xm5)+Math.round(60*xm5), "echo="+metaProgress.echoes+" streak="+metaProgress.streak+" gain="+gain1);
+        abortRuinExpedition();
+        ruinExpeditionState.active=true; ruinExpeditionState.phase="combat"; ruinExpeditionState.waves=RUIN_EXPEDITION_WAVES; ruinExpeditionState.wave=3; ruinExpeditionState.alive=[]; ruinExpeditionState.nextT=0; ruinExpeditionState.runId=2001; ruinExpeditionState.rewardClaimed=false;
+        const echoB=metaProgress.echoes, xpB=xp, lvlB=lvl;
+        tickRuinExpedition(0.1);
+        const gain2=(()=>{ let g5=xp-xpB; for(let l=lvlB;l<lvl;l++) g5+=xpNeed(l); return g5; })();
+        ok("回响经济: 同 runId 重复通关只 +1 回响、纪念+专精经验", metaProgress.echoes===echoB+1 && gain2===Math.round((40+40+60)*xm5), "echo="+metaProgress.echoes+" gain="+gain2);
+        abortRuinExpedition();
+        metaProgress.mastery.surveyor=0; metaProgress.mastery.tombGuard=0; metaProgress.mastery.duneStrider=0;
+        // 路线选择: 解谜 → route 面板 → 精英路线生效; Esc 落稳扎
+        hp=10; maxHp=20;
+        const st5=startRuinExpedition();
+        const dryNo=st5 && hp===10;   // 守墓者0: 干粮不回血
+        const sol5=ruinExpeditionState.solution.slice();
+        for(const gid of sol5) selectRuinGlyph(gid);
+        const routeOpen=document.getElementById("expedition-route").classList.contains("on") && ruinExpeditionState.phase==="route";
+        const pE=pickExpeditionRoute("elite");
+        ok("段间路线: 解谜后弹出路线面板, 精英路线切换波次表", dryNo && routeOpen && pE && ruinExpeditionState.phase==="combat" && ruinExpeditionState.waves===RUIN_EXPEDITION_WAVES_ELITE && ruinExpeditionState.route==="elite" && !document.getElementById("expedition-route").classList.contains("on"), "open="+routeOpen+" phase="+ruinExpeditionState.phase);
+        abortRuinExpedition();
+        // 守墓者 I 干粮: 启程回 2 血
+        metaProgress.mastery.tombGuard=1;
+        hp=10;
+        startRuinExpedition();
+        const heal2=hp===12;
+        abortRuinExpedition();
+        ok("守墓者I 干粮: 启程回 2 血（不超上限）", heal2, "hp="+hp);
+        metaProgress.mastery.tombGuard=0;
+        // Esc 未选路线 → 稳扎稳打
+        startRuinExpedition();
+        for(const gid of ruinExpeditionState.solution.slice()) selectRuinGlyph(gid);
+        document.dispatchEvent(new KeyboardEvent("keydown",{code:"Escape",bubbles:true,cancelable:true}));
+        ok("路线面板 Esc 视为稳扎稳打", ruinExpeditionState.phase==="combat" && ruinExpeditionState.route==="safe" && !document.getElementById("expedition-route").classList.contains("on"), "route="+ruinExpeditionState.route);
+        abortRuinExpedition();
+        // 专精面板 UI
+        metaProgress.echoes=5; saveMeta();
+        openMetaPanel();
+        const mpOn=document.getElementById("meta-panel").classList.contains("on");
+        const mpTxt=document.querySelector("#meta-panel .pt-card").textContent;
+        closeMetaPanel();
+        ok("专精面板: 按 I 打开、展示回响与三棵树、可关闭", mpOn && /回响 5/.test(mpTxt) && /测绘者/.test(mpTxt) && /守墓者/.test(mpTxt) && /沙步者/.test(mpTxt) && !document.getElementById("meta-panel").classList.contains("on"), "on="+mpOn);
+        normalizeMeta(null);
+      } finally {
+        metaProgress.echoes=snapM.echoes; metaProgress.streak=snapM.streak; metaProgress.mastery=snapM.mastery; saveMeta();
+        hp=snapH5.hp; maxHp=snapH5.maxHp; armor=snapH5.armor; xp=snapH5.xp; lvl=snapH5.lvl; dmgMul=snapH5.dmgMul;
+        cores=snapCore5; npcState.relics=snapRel5; blessT=snapBless5.t; blessKind=snapBless5.k; mythicState.done=snapMyth5;
+        ruinExpeditionSave.runs=snapRuns5; ruinExpeditionSave.completed=snapC5;
+        abortRuinExpedition(); closeExpeditionRoutePanel(true); closeRuinGlyphPanel("8q5-cleanup"); closeMetaPanel();
+        Object.assign(ruinExpeditionState, snapRun5);
+        mobs.length=0; for(const m of snapMob5) mobs.push(m);
+        sandStepState.evadeT=snapSt5.evadeT; sandStepState.cd=snapSt5.cd; sandStepState.feedbackT=snapSt5.feedbackT;
+        updateHearts(); updateXPHUD(); updateBuffHUD();
+      }
     }
 
     // 8r. 神话遗物被动: 灯/羊毛/法尔不再只是一次性掉落; 图鉴可翻; 神灯可按 L

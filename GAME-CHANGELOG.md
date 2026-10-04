@@ -2,6 +2,22 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-10-04 — 沙海奇境 第二十七轮·本地：遗迹回响 + 局外专精树（PR A）+ 远征段间路线选择
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only. 按《SANDSEA-META-GROWTH-AFFIX-DESIGN-2026-10-04.md》PR A 落地：只做专精与经济，**不做随机装备词缀**。新增独立存档键 `sandsea_meta_v1`（不在 `sandsea_save_v1` 内）。
+
+| Change | Player-visible behavior |
+| --- | --- |
+| 💠 遗迹回响 | 通关遗迹远征获得回响：首通 +2、重复 +1、精英路线 +1。回响是局外货币，只用于专精，开新世界不清零。 |
+| 🏛 局外专精树（按 I） | 三条树各 4 阶（成本 2/3/5/7），按顺序研习，**效果只在远征内生效**：测绘者（壁画释读=线索排除式提示 / 稳手=机关输错只退一位 / 隐匿侧室=通关+文物经验 / 文书封存=每连满3局+1回响）；守墓者（干粮=启程回2血 / 盐甲=远征战斗敌击-5% / 应急绷带=每局一次<25%自动回4 / 安魂=通关+1核心）；沙步者（稳足=远征沙步冷却-0.2s / 回砂=远征反击+5% / 战后包扎=每清一波回1血 / 终结赏金=通关+60经验）。 |
+| 🗺 段间路线选择 | 解开三符号机关后弹出路线面板：🛡稳扎稳打（常规三波）/ ⚠险中求胜（全精英×1.5血、掉核心，通关回响+1）。Esc/点遮罩默认稳扎，无惩罚。 |
+| 🧭 一致性收尾 | 中断远征（死亡/离开）现在会一并关闭三符号机关面板（修复：死亡画面残留机关面板、重开远征失败）；编年史远征行并入回响/专精进度；左下状态栏显示选路线阶段与精英标记；H 帮助与快捷键行补 I 键。 |
+| 调试接口 | `window.__game.meta`（回响/专精/连满计数只读）+ `buyMastery(k)` / `pickExpeditionRoute(r)` / `setEchoes(n)` / `setMastery(k,n)`。 |
+
+**How:** `MASTERY_TREES/MASTERY_TIER_COST/META_SAVE_KEY/metaProgress`；`normalizeMeta/saveMeta/loadMeta`（负值钳0、越界钳4、非整取整、坏档回默认）；`masteryLevel/ruinCombatActive`；效果钩子——`generateRuinExpedition`(线索)、`openRuinGlyphPanel/selectRuinGlyph`(keep 进度)、`startRuinExpedition`(干粮)、`foeStrike`(盐甲, 局部 `fdmg` 避免遮蔽全局 `dmgMul`)、`tickRuinExpedition`(绷带/包扎/按 state.waves 推波)、`sandStepCd/riposteRate`(稳足/回砂)、`claimRuinExpeditionReward`(侧室/安魂/赏金/回响/文书封存)；`pickExpeditionRoute` + 路线面板；`buyMastery/renderMeta/openMetaPanel` + KeyI/Esc 接线、`sandStepPanelOpen` 收录新面板。
+
+**Verification:** `node tools/headless.mjs selftest` **420/420** 于默认种子、`?seed=424242`、`?seed=2718281`（新增 14 条：meta 归一×2、购买事务×2、持久化、壁画释读、稳手、盐甲、稳足+回砂、绷带、包扎、回响经济×2、路线选择、干粮、Esc 落稳扎、专精面板）；8q3 补 meta 快照防跨测试污染。数值平衡与真人手感待点测；`ruinExpeditionSave` 仍随世界存档，专精/回响独立持久。
+
 ## 2026-10-04 — 沙海奇境 第二十六轮·本地：两条偶发失败的自测加固（测试前提显式化）
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) 的 selftest 测试代码 only。不改任何游戏行为、数值、存档结构；断言一律未放宽，只把**测试前提**做成确定性。
