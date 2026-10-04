@@ -15166,16 +15166,23 @@ function selftest(){
       const H0={hp,maxHp,armor,blessT,particles:particles.length};
       try{
         // 在已生成区域中找一个脚底/头顶/前方都空的确定性测试位；不改世界或存档。
+        // 前提显式化(优先级 A): 起步格必须无水/无岩浆(inWater/inLava 会挡 sandStep), 找不到就回出生点周围再找 —— 消除"随机出生地附近全是海/崖"的偶发失败
         let spot=null;
-        for(let rz=0;rz<=16&&!spot;rz+=2) for(let rx=-16;rx<=16&&!spot;rx+=2){
-          const x=Math.floor(P0.x)+rx+0.5, z=Math.floor(P0.z)+rz+0.5, y=groundY(Math.floor(x),Math.floor(z));
-          if(y<=0 || !aabbFits(x,y,z,PW,PH)) continue;
-          for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
-            const to=sandStepLanding(x,y,z,dx,dz);
-            if(to && to.d>=1.8){ spot={x,y,z,dx,dz}; break; }
+        const findSpotAround=(cx0,cz0,R)=>{
+          for(let rz=0;rz<=R&&!spot;rz+=2) for(let rx=-R;rx<=R&&!spot;rx+=2){
+            const x=Math.floor(cx0)+rx+0.5, z=Math.floor(cz0)+rz+0.5, y=groundY(Math.floor(x),Math.floor(z));
+            if(y<=0 || !aabbFits(x,y,z,PW,PH)) continue;
+            const fb=getBlock(Math.floor(x),Math.floor(y+0.4),Math.floor(z));   // inWater 检查脚+0.4 格: 起步格必须是无水/无岩浆的陆地
+            if(fb===WATER||fb===LAVA) continue;
+            for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
+              const to=sandStepLanding(x,y,z,dx,dz);
+              if(to && to.d>=1.8){ spot={x,y,z,dx,dz}; break; }
+            }
           }
-        }
-        if(spot){ player.x=spot.x; player.y=spot.y; player.z=spot.z; player.onGround=true; }
+        };
+        findSpotAround(P0.x,P0.z,16);
+        if(!spot){ ensureData(Math.floor(spawnPt.x)>>4,Math.floor(spawnPt.z)>>4); findSpotAround(spawnPt.x,spawnPt.z,20); }
+        if(spot){ ensureData(Math.floor(spot.x)>>4,Math.floor(spot.z)>>4); player.x=spot.x; player.y=spot.y; player.z=spot.z; player.onGround=true; }
         sandStepState.cd=0; sandStepState.evadeT=0; sandStepState.dodged=false; sandStepState.feedbackT=0; clearSandRiposte();
         const used=!!spot && sandStep(spot.dx,spot.dz,true);
         const moved=Math.hypot(player.x-(spot?spot.x:P0.x),player.z-(spot?spot.z:P0.z));
@@ -15243,7 +15250,18 @@ function selftest(){
         reject("面板打开",()=>{craft.classList.add("on"); craft.style.display="flex";},()=>{craft.className=craftC; craft.style.display=craftD;});
         const yawR=player.yaw; if(spot) player.yaw=Math.atan2(spot.dx,-spot.dz);   // 真实按键走视线方向: 对准已知可走的方向, 免得随机朝向正对墙而没触发
         const kR=Object.assign({},keys); for(const k in keys) keys[k]=false;          // 先前测试可能留下按住的方向键, 会把方向拐到侧面
-        resetStep(); const repeatBefore={x:player.x,z:player.z}; sandStepState.cd=0; document.dispatchEvent(new KeyboardEvent("keydown",{code:"KeyC",bubbles:true})); const once={x:player.x,z:player.z,cd:sandStepState.cd}; document.dispatchEvent(new KeyboardEvent("keydown",{code:"KeyC",repeat:true,bubbles:true}));
+        // 真实按键前把 sandStep 的全部守卫前提显式固定(优先级 A): 面板/触屏/骑乘/钩爪/飞行 —— 快照→派发→恢复, 断言本身不放宽
+        const PANEL_IDS=["craftPanel","enchPanel","potionPanel","chestPanel","furnacePanel","npcPanel","fullhelp","settingsPanel","bazaar-panel","pottery-panel","mythic-panel","lamp-panel","sphinx-panel"];
+        const panelSnap=PANEL_IDS.map(id=>{ const el=document.getElementById(id); return el?{id,cn:el.className,dp:el.style.display}:null; }).filter(Boolean);
+        for(const p of panelSnap){ const el=document.getElementById(p.id); el.classList.remove("on"); el.style.display="none"; }
+        const touch0=touchState.active, rideK=riding, gtK=grappleTarget, flyK=player.flying;
+        touchState.active=false; riding=null; grappleTarget=null; player.flying=false;
+        resetStep(); const repeatBefore={x:player.x,z:player.z}; sandStepState.cd=0;
+        document.dispatchEvent(new KeyboardEvent("keydown",{code:"KeyC",bubbles:true}));
+        const once={x:player.x,z:player.z,cd:sandStepState.cd};
+        document.dispatchEvent(new KeyboardEvent("keydown",{code:"KeyC",repeat:true,bubbles:true}));
+        for(const p of panelSnap){ const el=document.getElementById(p.id); if(el){ el.className=p.cn; el.style.display=p.dp; } }
+        touchState.active=touch0; riding=rideK; grappleTarget=gtK; player.flying=flyK;
         const heldKeys=Object.keys(kR).filter(k=>kR[k]).join("+")||"none"; Object.assign(keys,kR);
         player.yaw=yawR;
         const why=once.cd>=4.49?"":(" playing="+playing()+" panel="+sandStepPanelOpen()+" water="+inWater()+" lava="+inLava()+" ground="+player.onGround+" fly="+player.flying+" ride="+!!riding+" grapple="+!!grappleTarget+" touch="+touchState.active+" keys="+heldKeys);
@@ -15958,9 +15976,18 @@ function selftest(){
         player.x+=5; player.y+=1; const R1=driveReadout(0.5);                    // 0.5 秒走 5 格 → 10 m/s = 36 km/h, 爬升 2 m/s
         const spdOk=Math.abs(R1.kmh-36)<0.5 && Math.abs(R1.vs-2)<0.05;
         player.x+=500; const R2=driveReadout(0.5); const jumpOk=R2.kmh<36;         // 传送不算速度(平滑后只会变小)
-        let gx=Math.floor(player.x); const gz=Math.floor(player.z); ensureData(gx>>4,gz>>4);
-        for(let i=0;i<40 && groundY(gx,gz)<=0;i++){ gx+=3; ensureData(gx>>4,gz>>4); }   // 水面/树冠上 groundY=-1: 挪到实地再测
-        player.x=gx+0.5; driveHud.lx=player.x; player.y=groundY(gx,gz)+7.5;
+        // 离地高度需要一格"实心地面列"(水面/树冠 groundY=-1): 从传送点向外环形找, 找不到再回出生点周围 —— 消除传送落进大海时线性探测耗尽的偶发
+        const findLandCol=(cx0,cz0)=>{
+          for(let r=0;r<=48;r+=2) for(let dx=-r;dx<=r;dx+=2) for(let dz=-r;dz<=r;dz+=2){
+            if(Math.max(Math.abs(dx),Math.abs(dz))!==r) continue;
+            const gx2=cx0+dx, gz2=cz0+dz; ensureData(gx2>>4,gz2>>4);
+            if(groundY(gx2,gz2)>0) return [gx2,gz2];
+          }
+          return null;
+        };
+        const col=findLandCol(Math.floor(player.x),Math.floor(player.z))||findLandCol(Math.floor(spawnPt.x),Math.floor(spawnPt.z))||[Math.floor(player.x),Math.floor(player.z)];
+        const gx=col[0], gz=col[1];
+        player.x=gx+0.5; player.z=gz+0.5; driveHud.lx=player.x; player.y=groundY(gx,gz)+7.5;
         const R3=driveReadout(0.1); const aglOk=R3.agl!=null && Math.abs(R3.agl-7.5)<1.01;
         const aglDiag=aglOk?"":(" diag: col="+Math.floor(player.x)+","+Math.floor(player.z)+" py="+player.y.toFixed(1)+" gy="+groundY(Math.floor(player.x),Math.floor(player.z))+" below="+[0,1,2,3,4,5,6,7,8].map(d=>getBlock(Math.floor(player.x),Math.floor(player.y)-d,Math.floor(player.z))).join("/"));   // 偶发失败时直接看原因
         const cv=document.getElementById("driveHud");

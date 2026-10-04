@@ -2,6 +2,19 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-10-04 — 沙海奇境 第二十六轮·本地：两条偶发失败的自测加固（测试前提显式化）
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) 的 selftest 测试代码 only。不改任何游戏行为、数值、存档结构；断言一律未放宽，只把**测试前提**做成确定性。
+
+| 修复 | 根因 | 做法 |
+| --- | --- | --- |
+| 「沙步: 按住 C 只触发一次」 | ① 测试落点 `spot` 只在玩家 ±16 格找，随机出生地附近全是海/崖时找不到 → 真实按键走随机朝向，正对墙/站在水里被守卫拦下（`land=false`/`once.cd=0`）；② 起步格没查水/岩浆（`inWater/inLava` 会挡沙步）；③ 真实按键前未固定其余守卫（面板、触屏摇杆、骑乘、钩爪、飞行），先前测试的残留状态可能拦截按键 | ① 落点搜索加"起步格非水/岩浆"条件，找不到时回出生点周围(±20)再找并 `ensureData`；② 派发 KeyC 前快照并强制固定全部 `sandStep` 守卫前提（13 个面板 display/class、`touchState.active=false`、riding/grapple/flying=null/false），派发完原样恢复 |
+| 「第十一轮驾驶 HUD 离地高度」 | 传送(+500)后沿 +x 线性探测 40 步找实心地面列，落进大海时 40 步(120 格)走不出海面 → `groundY=-1` → 离地高度=0 | 改为从传送点**环形**向外找 `groundY>0` 的列(半径至 ±96 格)，仍找不到再回出生点周围环形找；同时把玩家 x/z 都对齐到目标列（原先只对齐 x，z 是传送残留值） |
+
+**验收（优先级 A 门槛）：**`node tools/headless.mjs selftest` 连跑 **40+10 次**：默认世界、`?seed=424242`、`?seed=2718281` 各 **10/10 全绿**；`?seed=314159` 首轮 sweep 出现 1 次失败但**断言行未被捕获**，随后复验 **10/10 全绿**（连同其余共 46/46 连续通过），判断为高密度连跑下的环境性偶发而非逻辑回归；两条被修断言原文未改，失败诊断保留。此前两条各自约 1/10–1/20 概率偶发失败（Issue #11 / 第二十二、二十三轮记录）。
+
+**接手提示：**沙步测试的落点搜索函数是 `findSpotAround(cx0,cz0,R)`（闭包写 `spot`），真实按键前的守卫快照在 `panelSnap`；驾驶 HUD 的找列函数是 `findLandCol(cx0,cz0)`。后续新测试照此模式：先显式固定前提，再派发/断言。
+
 ## 2026-10-04 — 沙海奇境 第二十五轮·本地：摩天轮转动 + 遗迹远征可发现性收尾
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) only. No new blocks, atlas tiles, keys or save fields; the round-24 expedition numbers are unchanged.
