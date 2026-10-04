@@ -2,6 +2,24 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-10-04 — 沙海奇境 第二十四轮·本地：遗迹远征 MVP 垂直切片
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only. Builds on the existing three-symbol glyph UI; no new blocks, atlas tiles, keys or hotbar slots. **One new save field:** `ruinExpedition`.
+
+| Change | Player-visible behavior |
+| --- | --- |
+| 🏛 遗迹远征石板 | B 合成台新增配方：砂岩×8 + 金矿石×2 + 钻石×1 → 石板。点击合成即开启一局遗迹远征。 |
+| 三符号机关 | 进入远征后立即弹出已有的三符号机关面板；顺序由世界种子 + 局序号确定性生成；错误只清空输入，可无限重试；取消无惩罚。 |
+| 三波守卫 | 解对后刷出 3 波遗迹守卫：甲虫/巨蝎 → 木乃伊/骷髅/巨蝎 → 阿努比斯/木乃伊/甲虫。战斗复用现有试炼刷怪逻辑，在玩家周围空地生成。 |
+| 幂等结算 | 通关奖励（金×6、钻×2、文物×3、能量核心×2、+120 经验、埃及声望+4）只按 `runId` 发一次；重载/重开同一世界再次完成时只给少量纪念品。 |
+| 中断规则 | 死亡、离开机关面板或新开世界都会中断远征；已结算的完成记录随世界存档保留。 |
+| 存档兼容 | `ruinExpedition {runs, completed}` 写入 `sandsea_save_v1`；老存档无此字段时归零；坏值/非法 runId 被过滤，负数 completed 钳为 0。 |
+| 调试接口 | `window.__game.ruinExpedition` 只读状态，`startRuinExpedition()` / `abortRuinExpedition()` 可调。 |
+
+**How:** `RUIN_EXPEDITION_WAVES`, `ruinExpeditionState`, `ruinExpeditionSave`, `generateRuinExpedition()`, `startRuinExpedition()`, `abortRuinExpedition()`, `tickRuinExpedition(dt)`, `claimRuinExpeditionReward()`, `completeRuinExpedition()`, `spawnRuinMob()`; hooked into `frame()` after `tickExpedition`, into `doDie()` and new-world reset; `RECIPES` 追加石板配方；`collectSave`/`loadGame` 处理新字段；`window.__game` 暴露调试入口；selftest 8q3 覆盖确定性、状态机、幂等、存档往返、旧档兼容。
+
+**Verification:** `node tools/headless.mjs selftest` 目标全绿（基线 392 + 新增断言）于默认种子与 `?seed=424242`。显示态浏览器可手动走通：合成石板 → 解机关 → 三波战斗 → 领奖 → 再次合成提示已结算/只给纪念品。
+
 ## 2026-10-03 — 沙海奇境 第二十三轮·云端：躲开木乃伊重击也能精准反击
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) only. No save, key, block or atlas changes; riposte numbers unchanged.

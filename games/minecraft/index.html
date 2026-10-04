@@ -5542,6 +5542,10 @@ const RECIPES=[
    get coreCost(){ return 4+combatMastery.riposte; }, cost:[],
    ok(){ return combatMastery.riposte<MASTERY_MAX; }, lockMsg:"回砂反击已满 3 级",
    run(){ combatMastery.riposte++; return "🌀 回砂反击 "+combatMastery.riposte+"/3（加成 "+Math.round(riposteRate()*100)+"%，最多 +"+riposteCap()+"）"; }},
+  // 第二十四轮·本地: 遗迹远征石板——合成后立即开启一局可玩远征(解谜+3波战斗+幂等奖励)
+  {name:"🏛 遗迹远征石板", desc:"刻有三符号谜面的石板，在合成台使用即可进入一局遗迹远征", cost:[[SANDSTONE,8],[GOLD_ORE,2],[GEM_ORE,1]],
+   ok(){ return canStartRuinExpedition(); }, lockMsg:"正在远征/试炼/斗兽场中，或当前无法开启",
+   run(){ if(craftOpen) toggleCraft(); return startRuinExpedition()?"遗迹远征已开启！解开三符号机关，击退守卫":"无法开启遗迹远征"; }},
 ];
 // 第七轮③·本地: 其余材质的半砖/楼梯配方由材质表生成(砂岩的两条在上面手写)
 for(const M of SHAPE_MATS.slice(1)){
@@ -6537,6 +6541,7 @@ function damagePlayer(d,kx,kz){
 }
 function doDie(){
   dead=true; softLock=false;
+  abortRuinExpedition();
   sandStepState.feedbackT=0;
   clearSandRiposte();
   grappleTarget=null;                             // 死亡时清掉钩爪状态, 避免复活后诡异位移
@@ -7156,6 +7161,7 @@ newworldbtn.addEventListener("click",()=>{
   world.clear(); meshQueue.length=0; queued.clear();
   mobs.length=0; arrows.length=0; drops.length=0; particles.length=0;
   hp=maxHp=20; lvl=1; xp=0; armor=0; cores=0; restoreCombatMastery({}); kills=0; dayCount=1; dmgMul=1; dead=false; setSunblade(false); setMace(false); for(const k in gearWear) gearWear[k]=0; updateGearHud(); for(const k in enchState) enchState[k]=0; vaultKeys.trial=0; vaultKeys.omen=0; vaultKeys.omenDay={};
+  ruinExpeditionSave.runs=[]; ruinExpeditionSave.completed=0; abortRuinExpedition();
   for(const k in potions) potions[k]=0; for(const k in potionFx) potionFx[k]=0;   // 第五轮·云端
   fishState.on=false; fishState.fish=0; fishState.caught=0;
   for(const k in chests) delete chests[k]; bundleState.owned=false; bundleState.items={};   // 第六轮·云端
@@ -12430,6 +12436,7 @@ function frame(now){
     tickOmen(dt);
     tickBazaar(dt);
     tickExpedition(dt);
+    tickRuinExpedition(dt);
     tickUndeadNight(dt);
     tickPotions(dt);                              // 第五轮·云端
     tickFishing(dt);                              // 第五轮·云端
@@ -12523,6 +12530,7 @@ function collectSave(){
     chests:JSON.parse(JSON.stringify(chests)), bundle:{ owned:bundleState.owned, items:Object.assign({},bundleState.items) },   // 第六轮·云端: 储物箱/收纳袋(老存档无 → 空)
     furnaces:JSON.parse(JSON.stringify(furnaces)),   // 第七轮·云端: 熔炉(老存档无 → 空)
     combatMastery:Object.assign({},combatMastery),   // 第十九轮·云端 P3: 能量核心战技等级(老存档无 → 0 级)
+    ruinExpedition:{ runs:ruinExpeditionSave.runs.slice(), completed:ruinExpeditionSave.completed },   // 第二十四轮·本地: 遗迹远征完成记录(老存档无 → 空/0)
     questIdx, questId:(QUESTS[questIdx]||{}).id||null,
     questProg:+questProg.toFixed(1), questDone,
     bounty:{ idx:bountyIdx, prog:bountyProg, done:bountyDone },
@@ -12612,6 +12620,7 @@ function loadGame(){
   setMace(!!s.mace);
   restoreGearWear(s.gearWear);
   restoreCombatMastery(s.combatMastery);         // 第十九轮·云端 P3
+  { const RE=s.ruinExpedition||{}; ruinExpeditionSave.runs=Array.isArray(RE.runs)?RE.runs.filter(v=>Number.isInteger(v)&&v>0):[]; ruinExpeditionSave.completed=Math.max(0,RE.completed|0); abortRuinExpedition(); }   // 第二十四轮·本地: 遗迹远征完成记录(老存档无 → 空/0); 读档时强制结束进行中的远征
   for(const D of ENCH_DEFS) enchState[D.k]=Math.max(0,Math.min(D.max,(s.ench&&s.ench[D.k])|0));
   { const V=s.trialVault||{}; vaultKeys.trial=Math.max(0,V.trial|0); vaultKeys.omen=Math.max(0,V.omen|0); vaultKeys.omenDay=(V.omenDay&&typeof V.omenDay==="object")?V.omenDay:{}; }
   for(const P of POTIONS){ potions[P.k]=Math.max(0,(s.potions&&s.potions[P.k])|0); if(P.k in potionFx) potionFx[P.k]=0; }   // 第五轮·云端: 老存档无 potions → 全 0
@@ -13512,6 +13521,94 @@ function tickExpedition(dt){
   } else { expeditionState.cd-=dt; if(expeditionState.cd<=0){ expeditionState.cd=200; startExpedition(); } }
 }
 
+/* ---- 🏛 遗迹远征: 把三符号机关接入一局可玩的短循环 ---- */
+const RUIN_EXPEDITION_WAVES=[["scarab","scarab","serqet"],["mummy","skeleton","serqet"],["anubis","mummy","scarab"]];
+const ruinExpeditionState={ active:false, phase:"idle", runId:0, wave:0, alive:[], nextT:0, rewardClaimed:false, solution:[0,1,2], clueText:"" };
+const ruinExpeditionSave={ runs:[], completed:0 };
+function hashRuin(seed,runId,n){ return Math.abs(Math.sin(seed*0.317+runId*0.719+n*1.337)); }
+function generateRuinExpedition(seed,runId){
+  const perms=[[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]];
+  const solution=perms[(hashRuin(seed,runId,0)*perms.length)|0];
+  const names={0:"日轮",1:"圣甲虫",2:"羽毛"};
+  const clueOrder=solution.map(id=>names[id]);
+  const clueText="石碑上刻着三行小字：先"+clueOrder[0]+"，再"+clueOrder[1]+"，最后"+clueOrder[2]+"。";
+  return {solution, clueText};
+}
+function canStartRuinExpedition(){
+  return !ruinExpeditionState.active && !trialState.active && !arenaState.active && !dead;
+}
+function startRuinExpedition(){
+  if(!canStartRuinExpedition()){ showName("🏛 现在无法开启遗迹远征"); return false; }
+  ruinExpeditionState.runId++;
+  const g=generateRuinExpedition(SEED, ruinExpeditionState.runId);
+  ruinExpeditionState.solution=g.solution.slice();
+  ruinExpeditionState.clueText=g.clueText;
+  ruinExpeditionState.active=true;
+  ruinExpeditionState.phase="puzzle";
+  ruinExpeditionState.wave=0;
+  ruinExpeditionState.alive=[];
+  ruinExpeditionState.nextT=0;
+  ruinExpeditionState.rewardClaimed=false;
+  if(document.pointerLockElement) document.exitPointerLock();
+  const opened=openRuinGlyphPanel({
+    solution:ruinExpeditionState.solution,
+    clueText:ruinExpeditionState.clueText,
+    onSolved:()=>{ if(ruinExpeditionState.active && ruinExpeditionState.phase==="puzzle"){ ruinExpeditionState.phase="combat"; ruinExpeditionState.nextT=1.2; showName("🏛 机关开启！遗迹守卫正在苏醒…"); } },
+    onCancel:()=>{ abortRuinExpedition("你暂时离开了遗迹机关"); }
+  });
+  if(!opened){ abortRuinExpedition(); return false; }
+  showName("🏛 遗迹远征开始！解开三符号机关，击退守卫，领取古物");
+  return true;
+}
+function abortRuinExpedition(msg){
+  for(const m of ruinExpeditionState.alive){ const i=mobs.indexOf(m); if(i>=0){ deathPoof(m); mobs.splice(i,1); } }
+  Object.assign(ruinExpeditionState,{active:false,phase:"idle",wave:0,alive:[],nextT:0,rewardClaimed:false});
+  if(msg) showName(msg);
+}
+function claimRuinExpeditionReward(){
+  if(!ruinExpeditionState.active || ruinExpeditionState.rewardClaimed) return;
+  ruinExpeditionState.rewardClaimed=true;
+  const already=ruinExpeditionSave.runs.includes(ruinExpeditionState.runId);
+  if(!already){
+    ruinExpeditionSave.runs.push(ruinExpeditionState.runId);
+    ruinExpeditionSave.completed++;
+    giveBlock(GOLD_ORE, 6); giveBlock(GEM_ORE, 2); npcState.relics+=3; cores+=2; addXP(120);
+    addFaction("egypt", 4);
+    showName("🏆 遗迹远征通关！古物到手（金x6 钻x2 文物x3 ⚡核心x2 +120经验） · 累计完成 "+ruinExpeditionSave.completed+" 次");
+  } else {
+    giveBlock(GOLD_ORE, 2); npcState.relics+=1; addXP(40);
+    showName("🏛 遗迹远征已结算过，只获得少量纪念品（金x2 文物x1 +40经验）");
+  }
+  updateBuffHUD();
+}
+function completeRuinExpedition(){ ruinExpeditionState.phase="reward"; claimRuinExpeditionReward(); }
+function spawnRuinMob(type){
+  const ang=Math.random()*Math.PI*2, dist=4+Math.random()*5;
+  const x=Math.round(player.x+Math.cos(ang)*dist), z=Math.round(player.z+Math.sin(ang)*dist);
+  const y=(typeof groundY==="function"?groundY(x,z):Math.round(player.y))+1;
+  const m=spawnTrialMob(type, x, y, z, false);
+  if(m) ruinExpeditionState.alive.push(m);
+  return !!m;
+}
+function tickRuinExpedition(dt){
+  if(!ruinExpeditionState.active) return;
+  if(dead){ abortRuinExpedition("🏛 你在遗迹中倒下，远征中断"); return; }
+  if(ruinGlyphSession) return; // 解谜期间不推进战斗
+  if(ruinExpeditionState.phase==="combat"){
+    ruinExpeditionState.alive=ruinExpeditionState.alive.filter(m=>m.hp>0 && mobs.includes(m));
+    if(ruinExpeditionState.alive.length>0) return;
+    if(ruinExpeditionState.wave>=RUIN_EXPEDITION_WAVES.length){ completeRuinExpedition(); return; }
+    ruinExpeditionState.nextT-=dt;
+    if(ruinExpeditionState.nextT>0) return;
+    const list=RUIN_EXPEDITION_WAVES[ruinExpeditionState.wave++];
+    for(const type of list) spawnRuinMob(type);
+    ruinExpeditionState.nextT=2.5;
+    showName("🏛 遗迹守卫 第 "+ruinExpeditionState.wave+"/"+RUIN_EXPEDITION_WAVES.length+" 波");
+  } else if(ruinExpeditionState.phase==="reward"){
+    if(!ruinExpeditionState.rewardClaimed) claimRuinExpeditionReward();
+  }
+}
+
 /* ---- 🌑 亡者之夜围城: 定期降临的亡者之潮, 刷怪暴增, 撑到潮落得厚赏; 阿瑞斯天象使其更勤(连锁) ---- */
 const undeadNight={ active:false, t:0, cd:280, survived:0, bossSpawned:false };
 function startUndeadNight(){ undeadNight.active=true; undeadNight.t=100; undeadNight.bossSpawned=false; updateBuffHUD();
@@ -13898,6 +13995,8 @@ window.__game = {
   get streak(){ return { cur:killStreak, best:bestStreak, elites:elitesSlain }; },
   get cores(){ return cores; }, get armor(){ return armor; },
   get combatMastery(){ return {step:combatMastery.step, riposte:combatMastery.riposte, sandStepCd:sandStepCd(), riposteRate:riposteRate(), riposteCap:riposteCap()}; },
+  get ruinExpedition(){ return { active:ruinExpeditionState.active, phase:ruinExpeditionState.phase, wave:ruinExpeditionState.wave, runId:ruinExpeditionState.runId, completed:ruinExpeditionSave.completed, runs:ruinExpeditionSave.runs.slice() }; },
+  startRuinExpedition:()=>startRuinExpedition(), abortRuinExpedition:()=>abortRuinExpedition(),
   get poison(){ return +poisonT.toFixed(2); },
   get sandStep(){ return {cd:+sandStepState.cd.toFixed(2), evade:+sandStepState.evadeT.toFixed(2), feedback:+sandStepState.feedbackT.toFixed(2),
     counter:+sandStepState.counterT.toFixed(2), counterTarget:sandStepState.counterTarget&&sandStepState.counterTarget.type||null,
@@ -14783,6 +14882,42 @@ function selftest(){
         const save=collectSave();
         ok("机关会话不新增任何存档字段", !Object.prototype.hasOwnProperty.call(save,"ruinGlyph") && !Object.prototype.hasOwnProperty.call(save,"expeditionPuzzle"), "save fields unchanged");
       } finally { closeRuinGlyphPanel("selftest-cleanup"); if(focusProbe.isConnected) focusProbe.remove(); }
+    }
+
+    // 8q3. 遗迹远征 MVP: 状态机、奖励幂等、旧档兼容
+    {
+      closeRuinGlyphPanel("selftest-reset");
+      const snapRE={ runs:ruinExpeditionSave.runs.slice(), completed:ruinExpeditionSave.completed };
+      const snapState={ active:ruinExpeditionState.active, phase:ruinExpeditionState.phase, runId:ruinExpeditionState.runId, wave:ruinExpeditionState.wave, alive:ruinExpeditionState.alive.slice(), nextT:ruinExpeditionState.nextT, rewardClaimed:ruinExpeditionState.rewardClaimed, solution:ruinExpeditionState.solution.slice(), clueText:ruinExpeditionState.clueText };
+      abortRuinExpedition();
+      try {
+        const g1=generateRuinExpedition(12345, 1);
+        const g2=generateRuinExpedition(12345, 1);
+        ok("遗迹远征解与线索由种子确定性生成", JSON.stringify(g1)===JSON.stringify(g2) && validRuinGlyphSolution(g1.solution) && g1.clueText.includes("先"), "g1="+JSON.stringify(g1));
+
+        const recipeIdx=RECIPES.findIndex(r=>r.name.indexOf("遗迹远征石板")>=0);
+        ok("遗迹远征石板配方存在且消耗砂岩/金/钻", recipeIdx>=0 && RECIPES[recipeIdx].cost.some(c=>c[0]===SANDSTONE) && RECIPES[recipeIdx].cost.some(c=>c[0]===GOLD_ORE) && RECIPES[recipeIdx].cost.some(c=>c[0]===GEM_ORE), "idx="+recipeIdx);
+
+        ruinExpeditionState.active=true; ruinExpeditionState.phase="combat"; ruinExpeditionState.wave=RUIN_EXPEDITION_WAVES.length; ruinExpeditionState.alive=[]; ruinExpeditionState.runId=100; ruinExpeditionState.rewardClaimed=false;
+        tickRuinExpedition(0.1);
+        ok("遗迹远征三波清完后结算奖励", ruinExpeditionState.phase==="reward" && ruinExpeditionState.rewardClaimed && ruinExpeditionSave.runs.includes(100), "phase="+ruinExpeditionState.phase+" claimed="+ruinExpeditionState.rewardClaimed);
+
+        const completed=ruinExpeditionSave.completed;
+        tickRuinExpedition(0.1);
+        ok("同一 runId 不重复发首通奖励", ruinExpeditionSave.completed===completed, "completed="+ruinExpeditionSave.completed);
+
+        abortRuinExpedition();
+        ok("中断远征后状态归零", !ruinExpeditionState.active && ruinExpeditionState.phase==="idle", "active="+ruinExpeditionState.active+" phase="+ruinExpeditionState.phase);
+
+        const save=collectSave();
+        ok("存档写入遗迹远征完成记录", save.ruinExpedition && Array.isArray(save.ruinExpedition.runs) && Number.isFinite(save.ruinExpedition.completed), "field="+JSON.stringify(save.ruinExpedition));
+
+        { const RE=undefined; const runs=Array.isArray(RE&&RE.runs)?RE.runs.filter(v=>Number.isInteger(v)&&v>0):[]; const completed=Math.max(0,(RE&&RE.completed)|0); ok("老存档缺 ruinExpedition 字段时归零", runs.length===0 && completed===0); }
+        { const RE={runs:[1,"x",3,-5,2.5], completed:-3}; const runs=Array.isArray(RE.runs)?RE.runs.filter(v=>Number.isInteger(v)&&v>0):[]; const completed=Math.max(0,RE.completed|0); ok("坏远征存档被过滤/钳位", runs.length===2 && runs.indexOf(1)>=0 && runs.indexOf(3)>=0 && completed===0, "runs="+runs.join(",")); }
+      } finally {
+        ruinExpeditionSave.runs=snapRE.runs; ruinExpeditionSave.completed=snapRE.completed;
+        Object.assign(ruinExpeditionState, snapState);
+      }
     }
 
     // 8r. 神话遗物被动: 灯/羊毛/法尔不再只是一次性掉落; 图鉴可翻; 神灯可按 L
