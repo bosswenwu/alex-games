@@ -378,10 +378,10 @@
   #bazaar-panel .bz-ware:hover { background:#ffd23f22; border-color:#ffd23f66; }
   #bazaar-panel .bz-poor { opacity:.45; cursor:not-allowed; }
   #bazaar-panel .bz-cost { color:#ffd23f; font-weight:700; white-space:nowrap; }
-  #pottery-panel, #sphinx-panel, #mythic-panel, #lamp-panel { position:fixed; inset:0; z-index:62; display:none; align-items:center; justify-content:center; padding:20px; background:rgba(8,6,3,.82); cursor:pointer; }
-  #pottery-panel.on, #sphinx-panel.on, #mythic-panel.on, #lamp-panel.on { display:flex; }
-  #pottery-panel .pt-card, #sphinx-panel .sx-card, #mythic-panel .pt-card, #lamp-panel .sx-card { max-width:520px; width:100%; max-height:86vh; overflow:auto; background:linear-gradient(#1a140c,#120d07); border:2px solid #c9a24b; border-radius:12px; padding:20px 24px; color:#f0e6d0; box-shadow:0 10px 40px #000a; cursor:default; }
-  #pottery-panel h2, #sphinx-panel h2, #mythic-panel h2, #lamp-panel h2 { color:#ffd23f; margin:0 0 8px; font-size:19px; }
+  #pottery-panel, #sphinx-panel, #mythic-panel, #lamp-panel, #ruin-glyph-panel { position:fixed; inset:0; z-index:62; display:none; align-items:center; justify-content:center; padding:20px; background:rgba(8,6,3,.82); cursor:pointer; }
+  #pottery-panel.on, #sphinx-panel.on, #mythic-panel.on, #lamp-panel.on, #ruin-glyph-panel.on { display:flex; }
+  #pottery-panel .pt-card, #sphinx-panel .sx-card, #mythic-panel .pt-card, #lamp-panel .sx-card, #ruin-glyph-panel .sx-card { max-width:520px; width:100%; max-height:86vh; overflow:auto; background:linear-gradient(#1a140c,#120d07); border:2px solid #c9a24b; border-radius:12px; padding:20px 24px; color:#f0e6d0; box-shadow:0 10px 40px #000a; cursor:default; }
+  #pottery-panel h2, #sphinx-panel h2, #mythic-panel h2, #lamp-panel h2, #ruin-glyph-panel h2 { color:#ffd23f; margin:0 0 8px; font-size:19px; }
   #pottery-panel .pt-row { display:flex; justify-content:space-between; gap:12px; padding:8px 10px; margin:5px 0; border:1px solid #ffffff14; border-radius:8px; background:#ffffff08; }
   #pottery-panel .pt-row.locked { opacity:.42; }
   #pottery-panel .pt-n { font-weight:700; color:#ffe9c4; }
@@ -389,6 +389,16 @@
   #sphinx-panel .sx-q, #lamp-panel .sx-q { color:#ffe9c4; font-size:16px; line-height:1.7; margin:8px 0 14px; }
   #sphinx-panel .sx-ans, #lamp-panel .sx-ans { padding:11px 13px; margin:7px 0; border:1px solid #ffffff1e; border-radius:9px; background:#ffffff08; cursor:pointer; transition:.15s; }
   #sphinx-panel .sx-ans:hover, #lamp-panel .sx-ans:hover { background:#ffd23f22; border-color:#ffd23f66; }
+  #ruin-glyph-panel .rg-clue { color:#ffe9c4; font-size:15px; line-height:1.65; margin:8px 0 14px; }
+  #ruin-glyph-panel .rg-slots, #ruin-glyph-panel .rg-choices { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:9px; }
+  #ruin-glyph-panel .rg-slots { margin:12px 0; }
+  #ruin-glyph-panel .rg-slot { min-height:48px; display:grid; place-items:center; border:1px solid #c9a24b66; border-radius:9px; color:#ffd23f; background:#0003; font-size:17px; }
+  #ruin-glyph-panel .rg-choices button { min-height:72px; border:1px solid #ffffff28; border-radius:10px; background:#ffffff08; color:#f0e6d0; font:inherit; cursor:pointer; touch-action:manipulation; }
+  #ruin-glyph-panel .rg-choices button:hover, #ruin-glyph-panel .rg-choices button:focus-visible { background:#ffd23f22; border-color:#ffd23f; outline:2px solid #ffd23f55; }
+  #ruin-glyph-panel .rg-choices button:disabled { opacity:.4; cursor:not-allowed; }
+  #ruin-glyph-panel .rg-mark { display:block; color:#ffd23f; font-size:23px; line-height:1.2; }
+  #ruin-glyph-panel .rg-status { min-height:1.5em; margin:10px 0; color:#c9b98a; font-size:13px; text-align:center; }
+  #ruin-glyph-panel .rg-cancel { display:block; margin:8px auto 0; padding:8px 14px; border:1px solid #ffffff28; border-radius:8px; background:transparent; color:#c9b98a; cursor:pointer; }
   #sphinxPrompt { position:absolute; left:50%; bottom:162px; transform:translateX(-50%); display:none;
     background:rgba(20,14,26,.82); border:1px solid #c9a24b; border-radius:20px; padding:6px 16px;
     color:#f0e6d2; font-size:13px; z-index:30; pointer-events:none; white-space:nowrap; }
@@ -592,7 +602,7 @@
 <div id="mythic-panel" onclick="closeMythicPanel()"><div class="pt-card" onclick="event.stopPropagation()"></div></div>
 <div id="lamp-panel" onclick="closeLampPanel()"><div class="sx-card" onclick="event.stopPropagation()"></div></div>
 <div id="sphinx-panel" onclick="closeSphinxPanel()"><div class="sx-card" onclick="event.stopPropagation()"></div></div>
-
+<div id="ruin-glyph-panel" role="dialog" aria-modal="true" aria-hidden="true" aria-label="遗迹三符号机关" onclick="closeRuinGlyphPanel('backdrop')"><div class="sx-card" onclick="event.stopPropagation()"></div></div>
 <div id="overlay" class="main-menu">
   <canvas id="brandmark" width="120" height="120"></canvas>
   <div id="title">沙海奇境</div>
@@ -6992,6 +7002,21 @@ function enterSoft(){ // 指针锁定不可用时的降级模式(用鼠标指针
   showName("拖动模式：移动鼠标瞄准，左键点击攻击/破坏，按住拖动转视角，右键放置");
 }
 document.addEventListener("keydown",e=>{
+  if(ruinGlyphSession){
+    if(e.code==="Escape"){ e.preventDefault(); closeRuinGlyphPanel("escape"); return; }
+    if(e.code==="Tab"){
+      const panel=document.getElementById("ruin-glyph-panel"), focusable=panel?[...panel.querySelectorAll("button:not(:disabled)")]:[];
+      if(focusable.length){
+        const first=focusable[0], last=focusable[focusable.length-1], active=document.activeElement;
+        if(e.shiftKey && (active===first || !panel.contains(active))){ e.preventDefault(); last.focus(); }
+        else if(!e.shiftKey && (active===last || !panel.contains(active))){ e.preventDefault(); first.focus(); }
+      }
+      return;
+    }
+    if(e.code==="Enter" || e.code==="Space") return; // 保留原生 button 键盘激活
+    e.preventDefault();
+    return;
+  }
   if(settingsPanel.classList.contains("on")){
     if(e.code==="Escape"){ e.preventDefault(); closeSettings(); }
     return;
@@ -13234,6 +13259,80 @@ function answerSphinx(i){
   return false;
 }
 
+/* ---- 遗迹远征: 三符号机关 UI / 输入状态机(调用方提供线索解; 会话不写存档) ---- */
+const RUIN_GLYPHS=Object.freeze([
+  Object.freeze({id:0, mark:"☼", name:"日轮"}),
+  Object.freeze({id:1, mark:"◉", name:"圣甲虫"}),
+  Object.freeze({id:2, mark:"⌁", name:"羽毛"}),
+]);
+let ruinGlyphSession=null;
+function validRuinGlyphSolution(solution){
+  return Array.isArray(solution) && solution.length===RUIN_GLYPHS.length &&
+    solution.every((v,i)=>Number.isInteger(v) && v>=0 && v<RUIN_GLYPHS.length && solution.indexOf(v)===i);
+}
+function renderRuinGlyphPanel(){
+  const card=document.querySelector("#ruin-glyph-panel .sx-card"), s=ruinGlyphSession;
+  if(!card || !s) return false;
+  const restoreChoiceFocus=card.contains(document.activeElement) && !!document.activeElement.closest(".rg-choices");
+  card.innerHTML='<h2>🗿 遗迹机关 · 三符号</h2><div class="rg-clue"></div><div class="rg-slots" aria-label="当前输入序列"></div><div class="rg-choices" aria-label="选择符号"></div><div class="rg-status" role="status" aria-live="polite"></div><button class="rg-cancel" type="button">暂时离开</button>';
+  card.querySelector(".rg-clue").textContent=s.clueText;
+  const slots=card.querySelector(".rg-slots");
+  for(let i=0;i<RUIN_GLYPHS.length;i++){
+    const cell=document.createElement("div"), glyph=RUIN_GLYPHS[s.input[i]];
+    cell.className="rg-slot"; cell.setAttribute("aria-label","第"+(i+1)+"个符号");
+    cell.textContent=glyph?glyph.mark:"·"; slots.appendChild(cell);
+  }
+  const choices=card.querySelector(".rg-choices"), used=new Set(s.input);
+  for(const glyph of RUIN_GLYPHS){
+    const button=document.createElement("button"); button.type="button"; button.dataset.glyph=String(glyph.id);
+    button.disabled=used.has(glyph.id); button.setAttribute("aria-label",glyph.name);
+    button.innerHTML='<span class="rg-mark" aria-hidden="true"></span><span class="rg-name"></span>';
+    button.querySelector(".rg-mark").textContent=glyph.mark; button.querySelector(".rg-name").textContent=glyph.name;
+    button.onclick=()=>selectRuinGlyph(glyph.id); choices.appendChild(button);
+  }
+  card.querySelector(".rg-status").textContent=s.message;
+  card.querySelector(".rg-cancel").onclick=()=>closeRuinGlyphPanel("cancel");
+  if(restoreChoiceFocus){ const next=card.querySelector(".rg-choices button:not(:disabled)"); if(next) next.focus({preventScroll:true}); }
+  return true;
+}
+function openRuinGlyphPanel(options={}){
+  if(!options || typeof options!=="object" || ruinGlyphSession || !validRuinGlyphSolution(options.solution)) return false;
+  const panel=document.getElementById("ruin-glyph-panel"); if(!panel) return false;
+  const {solution,clueText="依照遗迹刻痕的提示，按顺序各选择一次符号。",onSolved=null,onCancel=null}=options;
+  ruinGlyphSession={solution:solution.slice(),input:[],clueText:String(clueText).slice(0,240),previousFocus:document.activeElement,
+    message:"选择顺序中的第一个符号。",onSolved:typeof onSolved==="function"?onSolved:null,onCancel:typeof onCancel==="function"?onCancel:null};
+  if(!renderRuinGlyphPanel()){ ruinGlyphSession=null; return false; }
+  panel.classList.add("on"); panel.setAttribute("aria-hidden","false");
+  if(document.pointerLockElement) document.exitPointerLock();
+  const first=panel.querySelector(".rg-choices button"); if(first) first.focus({preventScroll:true});
+  return true;
+}
+function closeRuinGlyphPanel(reason="cancel"){
+  const s=ruinGlyphSession; if(!s) return false;
+  ruinGlyphSession=null;
+  const panel=document.getElementById("ruin-glyph-panel");
+  if(panel){ panel.classList.remove("on"); panel.setAttribute("aria-hidden","true"); }
+  if(s.previousFocus && s.previousFocus!==document.body && s.previousFocus.isConnected && typeof s.previousFocus.focus==="function"){
+    try{s.previousFocus.focus({preventScroll:true});}catch{}
+  }
+  if(reason!=="solved" && s.onCancel){ try{s.onCancel(reason);}catch(e){console.error("ruin glyph cancel callback",e);} }
+  return true;
+}
+function selectRuinGlyph(id){
+  const s=ruinGlyphSession;
+  if(!s || !Number.isInteger(id) || id<0 || id>=RUIN_GLYPHS.length || s.input.includes(id)) return false;
+  const pos=s.input.length; s.input.push(id);
+  if(id!==s.solution[pos]){
+    s.input.length=0; s.message="顺序不符，符号已归位；可以重新尝试。"; renderRuinGlyphPanel(); return false;
+  }
+  if(s.input.length<RUIN_GLYPHS.length){ s.message="符号吻合，继续。"; renderRuinGlyphPanel(); return true; }
+  const onSolved=s.onSolved;
+  closeRuinGlyphPanel("solved");
+  showName("🗿 三符号机关开启！");
+  if(onSolved){ try{onSolved();}catch(e){console.error("ruin glyph solved callback",e);} }
+  return true;
+}
+
 /* ---- 阵营声望: 罗马军团 🦅 vs 埃及祭司 ☥ — 战斗亲罗马 / 敬重古物亲埃及, 盗墓触怒祭司 ---- */
 const FAC_MAX=100;
 const faction={ rome:0, egypt:0 };
@@ -14643,6 +14742,47 @@ function selftest(){
       bag.clear(); for(const [k,v] of bagSnapS) bag.set(k,v); xp=xpS; lvl=lvlS; dmgMul=dmgS; maxHp=maxS; hp=hpS; armor=armorS;
       mobs.length=0; for(const m of mobsSnapS) mobs.push(m);
       updateHearts(); updateXPHUD(); updateSphinxPrompt();
+    }
+
+    // 8q2. 遗迹远征三符号机关: 触控/键鼠共用、错误仅重置输入、正确回调一次、Esc/遮罩可无惩罚退出
+    {
+      closeRuinGlyphPanel("selftest-reset");
+      let solved=0, cancelled=0;
+      const panel=document.getElementById("ruin-glyph-panel");
+      const focusProbe=document.createElement("button"); focusProbe.type="button"; focusProbe.textContent="selftest focus probe";
+      focusProbe.style.cssText="position:fixed;left:-10000px;top:0"; document.body.appendChild(focusProbe);
+      try{
+        const valid=openRuinGlyphPanel({solution:[2,0,1],clueText:"线索：先羽、再日、最后圣甲虫。",onSolved:()=>solved++,onCancel:()=>cancelled++});
+        const dialogOK=!!panel && panel.getAttribute("role")==="dialog" && panel.getAttribute("aria-modal")==="true" && panel.getAttribute("aria-hidden")==="false";
+        const buttonsOK=panel && panel.querySelectorAll(".rg-choices button[type=button]").length===3 && panel.querySelector(".rg-clue").textContent.includes("先羽");
+        ok("三符号机关面板可打开并提供 3 个触控按钮/安全文本线索", valid && dialogOK && buttonsOK, "open="+valid+" buttons="+(panel&&panel.querySelectorAll(".rg-choices button").length));
+        ok("机关拒绝非法解、重复打开及越界输入", !validRuinGlyphSolution([0,0,1]) && !validRuinGlyphSolution([0,1]) && !validRuinGlyphSolution(["0",1,2]) &&
+          openRuinGlyphPanel({solution:[0,1,2]})===false && selectRuinGlyph(9)===false && selectRuinGlyph(-1)===false, "strict permutation + single session");
+        const wrong=selectRuinGlyph(0)===false && ruinGlyphSession && ruinGlyphSession.input.length===0 && /重新尝试/.test(ruinGlyphSession.message);
+        ok("按错任一位置只清空当前输入、显示可重试提示", wrong && solved===0 && cancelled===0, "reset="+wrong+" solved="+solved);
+        selectRuinGlyph(2);
+        const inOrder=panel.querySelector('[data-glyph="0"]'); if(inOrder) inOrder.click();
+        const last=panel.querySelector('[data-glyph="1"]'); if(last) last.click();
+        ok("正确排列可由按钮依序解锁，回调恰好一次且面板关闭", !ruinGlyphSession && panel.getAttribute("aria-hidden")==="true" && solved===1 && selectRuinGlyph(1)===false && solved===1,
+          "solved="+solved+" closed="+panel.classList.contains("on"));
+        focusProbe.focus();
+        openRuinGlyphPanel({solution:[0,1,2],onSolved:()=>solved++,onCancel:()=>cancelled++});
+        const keyEvt=new KeyboardEvent("keydown",{code:"KeyP",bubbles:true,cancelable:true}); document.dispatchEvent(keyEvt);
+        const blocked=keyEvt.defaultPrevented && !document.getElementById("pottery-panel").classList.contains("on") && !!ruinGlyphSession;
+        const firstChoice=panel.querySelector(".rg-choices button:not(:disabled)"); if(firstChoice) firstChoice.focus();
+        const tabEvt=new KeyboardEvent("keydown",{code:"Tab",shiftKey:true,bubbles:true,cancelable:true}); document.dispatchEvent(tabEvt);
+        const enterEvt=new KeyboardEvent("keydown",{code:"Enter",bubbles:true,cancelable:true}); document.dispatchEvent(enterEvt);
+        const spaceEvt=new KeyboardEvent("keydown",{code:"Space",bubbles:true,cancelable:true}); document.dispatchEvent(spaceEvt);
+        const keyboardNavOK=tabEvt.defaultPrevented && panel.contains(document.activeElement) && !enterEvt.defaultPrevented && !spaceEvt.defaultPrevented;
+        const escEvt=new KeyboardEvent("keydown",{code:"Escape",bubbles:true,cancelable:true}); document.dispatchEvent(escEvt);
+        const focusReturned=document.activeElement===focusProbe;
+        ok("机关屏蔽游戏快捷键但保留键盘导航/按钮激活，Escape 安全取消并返还焦点", blocked && keyboardNavOK && focusReturned && escEvt.defaultPrevented && !ruinGlyphSession && cancelled===1 && solved===1,
+          "blocked="+blocked+" keyboard="+keyboardNavOK+" focus="+focusReturned+" cancelled="+cancelled);
+        openRuinGlyphPanel({solution:[0,1,2],onCancel:()=>cancelled++}); panel.click();
+        ok("点击遮罩能关闭面板且不记错题", !ruinGlyphSession && panel.getAttribute("aria-hidden")==="true" && cancelled===2 && solved===1, "cancelled="+cancelled);
+        const save=collectSave();
+        ok("机关会话不新增任何存档字段", !Object.prototype.hasOwnProperty.call(save,"ruinGlyph") && !Object.prototype.hasOwnProperty.call(save,"expeditionPuzzle"), "save fields unchanged");
+      } finally { closeRuinGlyphPanel("selftest-cleanup"); if(focusProbe.isConnected) focusProbe.remove(); }
     }
 
     // 8r. 神话遗物被动: 灯/羊毛/法尔不再只是一次性掉落; 图鉴可翻; 神灯可按 L
