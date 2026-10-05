@@ -559,7 +559,8 @@
     <b>群系</b>：沙海·红土台地·干草原为主，另有盐湖·峡谷·火山·<b>晶洞高地·古代遗迹带</b><br>
     　💎 晶洞高地：地表紫晶标出入口，地下方解石洞可采　⛵ 遗迹带：沉船/商队残骸藏金<br>
     <b>地标</b>：金字塔(墓室石棺唤醒法老王Boss)·斗兽场·宫殿·绿洲·彩虹桥·机场·赛车场·陨石坑·游乐场<br>
-    　<b>🌍 世界地标</b>（草原群系随机生成）：🏯故宫 · 🏛希腊神庙 · 🖼世界美术馆(五幅名画马赛克) · 🗼埃菲尔铁塔 · ⛪科隆大教堂 · ♨罗马浴场 · 🏛白宫 · 🏯日本皇居 · 🏕蒙古包营地(旁有可驯服马群)<br>
+    　<b>🌍 世界地标</b>（草原群系随机生成）：🏯故宫 · 🏛希腊神庙 · 🖼世界美术馆(五幅名画马赛克) · 🗼埃菲尔铁塔 · ⛪科隆大教堂 · ♨罗马浴场 · 🏛白宫 · 🏯日本皇居 · 🏕蒙古包营地(旁有可驯服马群)<br>    　<b>🗺 文明区域</b>（世界按大区划定文明主题 —— 🏮华夏之地(故宫·长城·雷峰塔) / 🗽新大陆(白宫·自由女神) / 🗼欧罗巴(铁塔·科隆大教堂) / 🏛爱琴海畔(帕特农) / ⛩东瀛之岛(皇居) / 🐴草原之国(营地) / 🏛罗马故地(浴场) —— 同区地标同主题, 成片出现；各地标有<b>🗣讲解员</b> NPC）<br>
+    　<b>🛥 游艇</b>（B 合成后召至面前水面，按 E 驾驶，离水减速）· <b>🪂 翼装背包</b>（B 合成；右键或埃菲尔塔顶自动展开，滑翔 50 格有奖）<br>
     <b>尼罗河</b>穿过沙漠(有鱼与鳄鱼)；天上有<b>浮空岛</b>藏钻石；地底 y&lt;10 是岩浆海，越深越凶险<br>
     <b>第3晚起 Boss 轮换</b>：僵尸王 / 飞龙 / 钢铁泰坦 / 烈焰凤凰　拖动模式下移动鼠标瞄准
   </div>
@@ -1358,6 +1359,21 @@ function drawSkyIsland(s,put){
    以 CELL 为格子确定性地放置; 每个区块把与自己相交的建筑整体"画"一遍,
    put() 会自动裁掉不属于本区块的部分, 因此跨区块建筑也能正确拼接。 */
 const CELL=96;                               // 格子放大: 城市(半径24)/金字塔不再互相重叠
+/* ---- 🌍 区域文明主题(第三十三轮·本地): 每 4×4 大格(≈384 格)为一个"文明区", 区内世界地标带从主题池产出 ----
+   华夏(故宫/长城/雷峰塔) · 美国(白宫/自由女神) · 欧洲(铁塔/科隆大教堂) · 希腊(帕特农) · 日本(皇居) · 蒙古(营地) · 罗马(浴场)
+   世界美术馆作为每个区域的压轴地标。区域由确定性哈希决定, 同种子完全一致。 */
+const REGION_THEMES=["china","usa","europe","greece","japan","mongolia","rome"];
+const THEME_POOL={
+  china:["forbidden","greatwall","leifeng","museum"],
+  usa:["whitehouse","liberty","museum"],
+  europe:["eiffel","cathedral","museum"],
+  greece:["parthenon","museum"],
+  japan:["impalace","museum"],
+  mongolia:["yurt","museum"],
+  rome:["baths","museum"],
+};
+const REGION_NAMES={ china:"🏮 华夏之地", usa:"🗽 新大陆", europe:"🗼 欧罗巴", greece:"🏛 爱琴海畔", japan:"⛩ 东瀛之岛", mongolia:"🐴 草原之国", rome:"🏛 罗马故地" };
+const SLOPE_CHECK={parthenon:1,forbidden:1,whitehouse:1,eiffel:1,cathedral:1,baths:1,impalace:1,museum:1,liberty:1,greatwall:1,leifeng:1};
 function structureAt(sx,sz){                 // 返回 {type,x,z,h} 或 null
   const r=hash2(sx*7919+31, sz*104729-17);
   if(r>0.62) return null;                    // 约 62% 的格子有建筑
@@ -1373,8 +1389,9 @@ function structureAt(sx,sz){                 // 返回 {type,x,z,h} 或 null
   if(bio===BIO_DESERT||bio===BIO_MESA){
     // 沙漠 = 埃及本土 + 罗马远征军的前线: 金字塔与军团要塞/渡槽同框
     // 绿洲升级为绿洲村落(village): 占用原绿洲的份额, 其余地标的格子不变; 选址不合适时退回普通绿洲
-    const T=[["pyramid",0.20],["castrum",0.26],["aqueduct",0.31],["village",0.37],["bazaar",0.42],
-             ["crater",0.47],["airport",0.52],["rainbow",0.57],["wreck",0.60],["caravan",0.62],["ruin",0.66]];
+    // 第三十三轮·本地: 金字塔降频(0.20→0.10, 用户反馈"金字塔过多"), 份额让给其余地标
+    const T=[["pyramid",0.10],["castrum",0.16],["aqueduct",0.21],["village",0.27],["bazaar",0.32],
+             ["crater",0.37],["airport",0.42],["rainbow",0.47],["wreck",0.50],["caravan",0.52],["ruin",0.56]];
     type="hut";
     for(const [t,thr] of T) if(r<thr){ type=t; break; }
     if(type==="village" && !villageSiteOK(x,z,h)) type="oasis";   // 河道穿村/地势太陡 → 退回普通绿洲
@@ -1386,12 +1403,24 @@ function structureAt(sx,sz){                 // 返回 {type,x,z,h} 或 null
   else {
     const TABLE=[["city",0.02],["colosseum",0.04],["palace",0.052],["forum",0.066],["park",0.11],
                  ["bazaar",0.16],["rainbow",0.22],["racetrack",0.28],["airport",0.33],["tower",0.38],
-                 ["factory",0.45],["ruin",0.50],
-                 // 第三十二轮·本地: 世界地标九连 —— 希腊神庙/故宫/白宫/埃菲尔铁塔/科隆大教堂/罗马浴场/日本皇居/蒙古包营地/世界美术馆
-                 ["parthenon",0.52],["forbidden",0.54],["whitehouse",0.56],["eiffel",0.58],["cathedral",0.60],
-                 ["baths",0.62],["impalace",0.64],["yurt",0.66],["museum",0.68],["farm",0.72]];
+                 ["factory",0.45],["ruin",0.50]];
     type="house";
     for(const [t,thr] of TABLE) if(r<thr){ type=t; break; }
+    // 第三十三轮·本地: 区域文明主题 —— 大格区(4×4 cell≈384 格)按种子选定文明, 区内"世界地标带"(r 0.50~0.70)从该文明池产出
+    // 同区域地标同主题 → 走几步就能看到成片主题建筑(解决"新地标难找/分散"), 且各区域风格分明
+    if(type==="house"){
+      if(r>=0.50 && r<0.70){
+        const rx=Math.floor(sx/4), rz=Math.floor(sz/4);   // 区域 = 4×4 大格
+        const theme=REGION_THEMES[Math.floor(hash2(rx*31+rz*17, rz*7-rx*3)*REGION_THEMES.length)%REGION_THEMES.length];
+        const pool=THEME_POOL[theme];
+        type=pool[Math.min(pool.length-1, Math.floor((r-0.50)/0.20*pool.length))];
+      } else if(r<0.74){ type="farm"; }
+    }
+  }
+  // 第三十三轮·本地: 坡度拒绝 —— 大型地标四角与中心高差过大时放弃该格(防建筑嵌入山体/悬空)
+  if(SLOPE_CHECK[type]){
+    const m1=heightAt(x+8,z+8), m2=heightAt(x-8,z-8), m3=heightAt(x+8,z-8), m4=heightAt(x-8,z+8);
+    if(Math.abs(h-m1)>6||Math.abs(h-m2)>6||Math.abs(h-m3)>6||Math.abs(h-m4)>6) return null;
   }
   return {type,x,z,h,bio};
 }
@@ -1447,6 +1476,9 @@ function drawStructure(s,put){
     }
   };
   const clearAbove=(x0,z0,x1,z1,y0,y1)=>{ for(let X=x0;X<=x1;X++) for(let Z=z0;Z<=z1;Z++) for(let Y=y0;Y<=y1;Y++) put(X,Y,Z,AIR,true); };
+  const foundations=(id,rx,rz,depth)=>{ for(let X=x-rx;X<=x+rx;X++) for(let Z=z-rz;Z<=z+rz;Z++){     // 第三十三轮·本地: 沿外墙一圈向下打地基裙边 —— 坡地/悬空修复
+    if(Math.abs(X-x)<rx-1 && Math.abs(Z-z)<rz-1) continue;
+    for(let d2=1;d2<=depth;d2++) put(X,h-d2,Z,id,true); } };
 
   if(type==="house" || type==="cabin" || type==="hut"){
     const w = type==="hut" ? 2 : 3;                       // 半宽
@@ -2195,6 +2227,7 @@ function drawStructure(s,put){
   else if(type==="parthenon"){
     /* ===== 希腊神庙(帕特农): 三层大理石基座 + 8×15 多立克列柱 + 残缺山花 ===== */
     const W=11, D=15;
+    foundations(MARBLE,W,D,5);
     clearAbove(x-W-2,z-D-2,x+W+2,z+D+2,h+1,h+11);
     for(let t=0;t<3;t++){ const w=W-t, d=D-t;                 // 三层基座向内收
       for(let X=x-w;X<=x+w;X++) for(let Z=z-d;Z<=z+d;Z++) put(X,h+t,Z,MARBLE,true); }
@@ -2213,6 +2246,7 @@ function drawStructure(s,put){
   else if(type==="forbidden"){
     /* ===== 故宫: 朱红宫墙 + 四角楼 + 金銮殿三层檐 + 内园 ===== */
     const W=16, D=12;
+    foundations(BRICK,W,D,5);
     clearAbove(x-W-2,z-D-2,x+W+2,z+D+2,h+1,h+16);
     for(let X=x-W;X<=x+W;X++) for(let Z=z-D;Z<=z+D;Z++) put(X,h,Z,SANDSTONE,true);   // 汉白玉台基
     for(let X=x-W;X<=x+W;X++) for(let Z=z-D;Z<=z+D;Z++){                     // 朱红宫墙一圈
@@ -2243,6 +2277,7 @@ function drawStructure(s,put){
   else if(type==="whitehouse"){
     /* ===== 白宫: 白灰泥主楼 + 三角楣列柱门廊 + 草坪喷泉 ===== */
     const W=10, D=7;
+    foundations(PLASTER_WHITE,W,D,5);
     clearAbove(x-W-3,z-D-3,x+W+3,z+D+3,h+1,h+10);
     for(let X=x-W-2;X<=x+W+2;X++) for(let Z=z-D-2;Z<=z+D+2;Z++) put(X,h,Z,GRASS,true);   // 草坪
     box(x-W,h+1,z-D,x+W,h+4,z+D,PLASTER_WHITE,false);                        // 主楼
@@ -2261,6 +2296,7 @@ function drawStructure(s,put){
   else if(type==="eiffel"){
     /* ===== 埃菲尔铁塔: 四腿收分铁格构 + 两层平台 + 顶层天线 ===== */
     clearAbove(x-11,z-11,x+11,z+11,h+1,h+34);
+    for(const [sx3,sz3] of [[1,1],[-1,1],[1,-1],[-1,-1]]) for(let d2=1;d2<=8;d2++) put(x+sx3*9,h-d2,z+sz3*9,METAL,true);   // 四腿基墩(坡地防悬空)
     const H0=30;
     for(let y=0;y<H0;y++){
       const k=y/H0, half=Math.round(9*(1-k)+1.5);                            // 腿距随高度收分
@@ -2285,6 +2321,7 @@ function drawStructure(s,put){
   else if(type==="cathedral"){
     /* ===== 科隆大教堂: 双塔尖顶 + 玫瑰窗 + 飞扶壁 ===== */
     const W=8, D=14;
+    foundations(BASALT,W,D,6);
     clearAbove(x-W-2,z-D-2,x+W+2,z+D+2,h+1,h+32);
     for(let X=x-W;X<=x+W;X++) for(let Z=z-D;Z<=z+D;Z++){                      // 中厅与侧廊
       put(X,h,Z,COBBLE,true);
@@ -2308,6 +2345,7 @@ function drawStructure(s,put){
   else if(type==="baths"){
     /* ===== 罗马浴场·温泉: 大理石浴厅 + 三温池(一池地热) + 列柱回廊 ===== */
     const W=11, D=8;
+    foundations(MARBLE,W,D,4);
     clearAbove(x-W-2,z-D-2,x+W+2,z+D+2,h+1,h+9);
     for(let X=x-W;X<=x+W;X++) for(let Z=z-D;Z<=z+D;Z++) put(X,h,Z,MARBLE,true);   // 大理石地面
     for(const [px,pz,pw,pd,hot] of [[x-6,z-3,3,3,false],[x+6,z-3,3,3,true],[x,z+4,4,2,false]]){
@@ -2322,6 +2360,7 @@ function drawStructure(s,put){
   else if(type==="impalace"){
     /* ===== 日本皇居·天守阁: 石垣基座 + 白壁木骨三层 + 铜瓦大檐 + 庭院水池 ===== */
     const W=12, D=10;
+    foundations(COBBLE,W,D,5);
     clearAbove(x-W-2,z-D-2,x+W+2,z+D+2,h+1,h+18);
     for(let X=x-W;X<=x+W;X++) for(let Z=z-D;Z<=z+D;Z++) put(X,h,Z,COBBLE,true);   // 石垣
     for(let t=0;t<3;t++){                                                         // 三层天守
@@ -2356,7 +2395,7 @@ function drawStructure(s,put){
     for(const [px,pz] of [[x-8,z+3],[x-8,z+5]]){ put(px,h+1,pz,DARKPLANK,true); put(px,h+2,pz,DARKPLANK,true); }
   }
   else if(type==="museum"){
-    /* ===== 世界美术馆: 大理石展馆 + 五幅世界名画方块马赛克 =====
+    /* ===== 世界美术馆: 大理石展馆 + 六幅世界名画方块马赛克 =====
        星空(梵高) / 向日葵(梵高) / 神奈川冲浪里(北斋) / 呐喊(蒙克) / 蒙娜丽莎(达·芬奇) —— 全部复用既有方块配色。 */
     const W=12, D=8;
     clearAbove(x-W-2,z-D-2,x+W+2,z+D+2,h+1,h+9);
@@ -2375,6 +2414,64 @@ function drawStructure(s,put){
     putMosaic(put,x,h+2,z-1,true, P.mona.rows, P.mona.pal);                       // 展板北面: 蒙娜丽莎
     putMosaic(put,x,h+2,z+1,true, P.pearl.rows, P.pearl.pal);                     // 展板南面: 戴珍珠耳环的少女
     put(x,h+8,z,GILDED,true);                                                     // 馆徽
+  }
+  else if(type==="greatwall"){
+    /* ===== 长城: 随地形起伏的砖石城墙(44 格) + 垛口 + 三座烽火台(第三十三轮·本地) ===== */
+    clearAbove(x-22,z-4,x+22,z+4,h+1,h+14);
+    for(let X=x-22;X<=x+22;X++){
+      const hh=heightAt(X,z);                                   // 墙体随地形起伏
+      for(let Z=z-1;Z<=z+1;Z++) for(let y=hh;y<=hh+4;y++) put(X,y,Z,BRICK,true);
+      for(let Z=z-1;Z<=z+1;Z++) if((X&1)===0) put(X,hh+5,Z,BRICK,true);   // 垛口
+      put(X,hh+1,z,BRICK,true);                                 // 走道
+    }
+    for(const tx of [x-14,x,x+14]){                             // 烽火台
+      const th=heightAt(tx,z);
+      for(let y=th+1;y<=th+8;y++) box(tx-2,y,z-2,tx+2,y,z+2,BRICK,false);
+      box(tx-2,th+9,z-2,tx+2,th+9,z+2,GILDED,false);
+      box(tx-1,th+1,z-1,tx+1,th+7,z+1,AIR,false);
+      put(tx,th+5,z,GLOWVEIN,true);                             // 烽火
+    }
+  }
+  else if(type==="leifeng"){
+    /* ===== 雷峰塔: 八角七层收分砖塔 + 塔刹(第三十三轮·本地) ===== */
+    const R=7;
+    clearAbove(x-R-2,z-R-2,x+R+2,z+R+2,h+1,h+30);
+    for(let t=0;t<3;t++){ const r=R-t;                          // 三层石基
+      for(let X=x-r;X<=x+r;X++) for(let Z=z-r;Z<=z+r;Z++) if(Math.hypot(X-x,Z-z)<=r) put(X,h+t,Z,COBBLE,true);
+    }
+    for(let lv=0;lv<7;lv++){
+      const r=5-Math.floor(lv*0.6), y0=h+3+lv*3;
+      for(let a=0;a<16;a++){ const ang=a/16*6.283;
+        for(let rr=0;rr<=r;rr++){ const X=x+Math.round(Math.cos(ang)*rr), Z=z+Math.round(Math.sin(ang)*rr);
+          put(X,y0,Z,BRICK,true); put(X,y0+1,Z,BRICK,true); put(X,y0+2,Z,BRICK,true); }
+      }
+      for(const [dx,dz] of [[r,0],[-r,0],[0,r],[0,-r]]) put(x+dx,y0+1,z+dz,GLOWVEIN,true);   // 塔窗
+      for(let a=0;a<16;a++){ const ang=a/16*6.283;              // 出檐
+        put(x+Math.round(Math.cos(ang)*(r+1)),y0+3,z+Math.round(Math.sin(ang)*(r+1)),DARKPLANK,true); }
+    }
+    for(let y=h+24;y<=h+27;y++) put(x,y,z,GILDED,true);          // 塔刹
+    put(x,h+28,z,NEON,true);
+  }
+  else if(type==="liberty"){
+    /* ===== 自由女神像: 石基座 + 铜绿身躯 + 皇冠火炬(第三十三轮·本地) ===== */
+    const R=8;
+    clearAbove(x-R,z-R,x+R,z+R,h+1,h+26);
+    foundations(COBBLE,6,6,5);
+    for(let X=x-7;X<=x+7;X++) for(let Z=z-7;Z<=z+7;Z++) put(X,h,Z,COBBLE,true);
+    for(let X=x-3;X<=x+3;X++) for(let Z=z-3;Z<=z+3;Z++) for(let y=h+1;y<=h+3;y++) put(X,y,Z,COBBLE,true);
+    for(let X=x-2;X<=x+2;X++) for(let Z=z-2;Z<=z+2;Z++) for(let y=h+4;y<=h+6;y++) put(X,y,Z,MARBLE,true);   // 基座
+    for(let y=h+7;y<=h+18;y++){ const rr=y<h+13?2:1;          // 铜绿身躯收分
+      for(let a=0;a<8;a++){ const ang=a/8*6.283;
+        put(x+Math.round(Math.cos(ang)*rr),y,z+Math.round(Math.sin(ang)*rr),MOSSY,true); }
+    }
+    for(let y=h+8;y<=h+17;y++) if(y%3!==0){ put(x+2,y,z,MOSSY,true); }   // 右臂(持火炬)
+    for(let X=x+2;X<=x+4;X++) put(X,h+17,z,MARBLE,true);                 // 手掌与法典
+    put(x+4,h+18,z,MARBLE,true);
+    box(x-1,h+19,z-1,x+1,h+20,z+1,MOSSY,false);                          // 头部
+    for(const [dx,dz] of [[2,0],[-2,0],[0,2],[0,-2],[1,1],[-1,1],[1,-1]]) put(x+dx,h+21,z+dz,METAL,true);  // 皇冠七刺
+    put(x,h+22,z,GLOWVEIN,true);                                         // 火炬
+    put(x,h+23,z,NEON,true);
+    put(x,h+18,z,GLOWVEIN,true);                                         // 神辉
   }
   else if(type==="farm"){
     const R=4;
@@ -2405,7 +2502,7 @@ const VIL_N=VIL_RP+VIL_FADE;
 // 定义在 VIL_N 之后, 供 buildStructures 与 structureCovers 共用(避免与地热喷口选址各写一份 → 走样)。
 const STRUCT_RAD={city:34,pyramid:30,airport:32,racetrack:30,park:22,rainbow:22,crater:18,bazaar:17,factory:16,oasis:15,
                   colosseum:20,forum:16,castrum:19,aqueduct:38,palace:20,wreck:16,caravan:12,grotto:14,village:VIL_N+1,
-                  parthenon:16,forbidden:20,whitehouse:16,eiffel:14,cathedral:16,baths:14,impalace:18,yurt:13,museum:16};
+                  parthenon:16,forbidden:20,whitehouse:16,eiffel:14,cathedral:16,baths:14,impalace:18,yurt:13,museum:16,greatwall:30,leifeng:12,liberty:12};
 // 世界坐标(x,z)是否落在附近某座建筑的清场包围盒内。用于地热喷口选址: 会被建筑铺盖的点不算喷口位, 保持 geyserSites 与真实方块一致。
 function structureCovers(x,z){
   const sx=Math.floor(x/CELL), sz=Math.floor(z/CELL);
@@ -5457,7 +5554,10 @@ const LAND_TROPHY={
   baths:    {n:"温泉浴票",   d:"回满生命",                    f:()=>{ hp=maxHp; updateHearts(); }},
   impalace: {n:"樱纹屏风",   d:"+30 经验 · 深色木板×8",       f:()=>{ addXP(30); giveBlock(DARKPLANK,8); }},
   yurt:     {n:"草原马鞭",   d:"+25 经验 · 干草×8",           f:()=>{ addXP(25); giveBlock(HAY,8); }},
-  museum:   {n:"世界名画册页", d:"+50 经验 · 紫晶×2 · 文物+1", f:()=>{ addXP(50); giveBlock(AMETHYST,2); npcState.relics++; }}
+  museum:   {n:"世界名画册页", d:"+50 经验 · 紫晶×2 · 文物+1", f:()=>{ addXP(50); giveBlock(AMETHYST,2); npcState.relics++; }},
+  greatwall:{n:"烽火狼烟",   d:"+40 经验 · 铁矿石×6",         f:()=>{ addXP(40); giveBlock(IRON_ORE,6); }},
+  leifeng:  {n:"雷峰塔藏经", d:"+35 经验 · 文物+1",            f:()=>{ addXP(35); npcState.relics++; }},
+  liberty:  {n:"自由火炬",   d:"回满生命 · 罗马声望+5",        f:()=>{ hp=maxHp; updateHearts(); faction.rome=Math.min(100,faction.rome+5); }}
 };
 const TROPHY_TOTAL=Object.keys(LAND_TROPHY).length;
 function grantTrophy(type){
@@ -5815,6 +5915,12 @@ const RECIPES=[
    run(){ giveBlock("time_shards",1); return "⏳ 时之沙已入物品栏"; }},
   {name:"🧴 绿洲水袋", desc:"解蝎毒并回复 6 生命（消耗品，一次缝 2 袋）", cost:[[CACTUS,2],[GLASS,1]],
    run(){ giveBlock("waterskin",2); return "🧴 绿洲水袋 x2 已入物品栏"; }},
+  {name:"🪂 翼装背包", desc:"18 秒滑翔：下落减缓、俯冲加速；从高处跃下体验翼装飞行（埃菲尔塔顶会自动展开）", cost:[[WOOL,4],[IRON_ORE,2]],
+   run(){ giveBlock("wingsuit",1); return "🪂 翼装背包已入物品栏（右键展开）"; }},
+  {name:"🛥 游艇", desc:"召唤一艘可驾驶的游艇到面前水域（按 E 登船，离水减速）", cost:[[IRON_ORE,6],[PLASTER_WHITE,4],[GLASS,3]],
+   run(){ const d=lookDir(); for(let t=6;t<=28;t+=2){ const wx=Math.floor(player.x+d[0]*t), wz=Math.floor(player.z+d[2]*t);
+     if(getBlock(wx,WATER_Y,wz)===WATER){ spawnYachtAt(wx,wz); return "🛥 游艇已下水（前方水面上，按 E 登船）"; } }
+     return "需要一片开阔水域——到海边或湖边再试"; }},
 ];
 // 第七轮③·本地: 其余材质的半砖/楼梯配方由材质表生成(砂岩的两条在上面手写)
 for(const M of SHAPE_MATS.slice(1)){
@@ -6467,6 +6573,7 @@ function updateBuffHUD(){
 const NPC_ROLES={
   trader:{ name:"商队商人", tag:"🐫", greet:"沙海无垠，旅人。可有货物交换？" },
   oracle:{ name:"神谕祭司", tag:"𓂀", greet:"神明垂听。献上供品，换取庇佑与预言。" },
+  guide:{ name:"地标讲解员", tag:"🗣", greet:"欢迎莅临此间胜迹——每一块砖石都藏着故事。各地标首访另有珍藏相赠；试试从塔顶展开翼装，或驾游艇沿河巡游。" },
 };
 /* 交易/祝福清单: cost 为 [{b:blockId,n}|{r:relicN}], run() 执行并返回提示 */
 /* 🏘 村落集市: 摊主按村独立记账——每天补货(回头客的理由), 买满 5 次成老主顾(方块价八折), 12 次解锁「绿洲之约」 */
@@ -6670,6 +6777,10 @@ function maintainNPCs(dt){
   if(countNPC("oracle")===0 && nearStructure(["pyramid","palace","forum","colosseum"],46)){
     spawnNPC("oracle", 12, 24);
   }
+  // 第三十三轮·本地: 地标讲解员 —— 世界地标附近出现, 对话介绍
+  if(countNPC("guide")===0 && nearStructure(["forbidden","parthenon","eiffel","cathedral","whitehouse","baths","impalace","yurt","museum","greatwall","leifeng","liberty"],40)){
+    spawnNPC("guide", 6, 10);
+  }
 }
 function findTalkTarget(){
   let best=null, bd=3.6;
@@ -6743,6 +6854,7 @@ function closeNPCPanel(){
 const LANDMARKS={ pyramid:"🔺金字塔", colosseum:"🏛斗兽场", palace:"🏰宫殿", city:"🌆城市",
   forbidden:"🏯故宫", parthenon:"🏛希腊神庙", eiffel:"🗼埃菲尔铁塔", cathedral:"⛪科隆大教堂",
   whitehouse:"🏛白宫", baths:"♨罗马浴场", impalace:"🏯日本皇居", yurt:"🏕蒙古包营地", museum:"🖼世界美术馆",
+  greatwall:"🧱长城", leifeng:"🗼雷峰塔", liberty:"🗽自由女神",
   oasis:"🌴绿洲", rainbow:"🌈彩虹桥", airport:"✈机场", racetrack:"🏁赛车场", crater:"☄陨石坑",
   park:"🎡游乐场", forum:"🏟广场", castrum:"🛡军团要塞", bazaar:"🏮集市",
   wreck:"⛵沉船", caravan:"🐫商队残骸", grotto:"💎晶洞", village:"🏘绿洲村落" };
@@ -6924,7 +7036,7 @@ function updateRidden(dt){
   if(!riding) return;
   if(mobs.indexOf(riding)<0){ riding=null; player.flying=false; return; }  // 载具被摧毁
   const isGround=riding.def.car||riding.def.groundMount;
-  riding.x=player.x; riding.y=isGround?player.y:player.y-1.0; riding.z=player.z;
+  riding.x=player.x; riding.y=isGround?player.y:(riding.def.boat?player.y-0.35:player.y-1.0); riding.z=player.z;
   riding.yaw=player.yaw;                        // 开车/骑马时 player.yaw 已由转向逻辑驱动, 车身/马身跟随朝向
   riding.pitch=isGround?0:clamp(-player.pitch*0.5,-0.5,0.5);
   riding.animT=(riding.animT||0)+dt*(isGround&&riding.def.groundMount?9:6); // 马跑动腿摆更快
@@ -7660,6 +7772,7 @@ function doPlace(){
     else if(it==="echo_horn") useEchoHorn();
     else if(it==="time_shards") useTimeShards();
     else if(it==="waterskin") useWaterskin();
+    else if(it==="wingsuit") startWingsuit();
     return;
   }
   const hit=raycast(5.5, currentAim());
@@ -8234,6 +8347,14 @@ const carParts=(body)=>{ const P=P16, W=153, T=154;
     wheel(-5.3*P,-8.5*P), wheel(5.3*P,-8.5*P), wheel(-5.3*P,8.5*P), wheel(5.3*P,8.5*P),
   ];};
 const carRedParts=carParts(151), carBlueParts=carParts(152);
+const yachtParts=(()=>{ const P=P16;
+  return [
+    {p:[0,0,0],        o:[0,0,0], s:[2.6*P,1.2*P,9*P],   tF:65,tS:65,tT:65,tB:65, sw:0,fix:0},   // 船体(白)
+    {p:[0,0.85*P,0],   o:[0,0,0], s:[2.0*P,0.45*P,7.2*P],tF:9, tS:9, tT:9, tB:9,  sw:0,fix:0},   // 甲板(木)
+    {p:[0,1.45*P,-1*P],o:[0,0,0], s:[1.6*P,1.2*P,3*P],   tF:46,tS:46,tT:46,tB:46, sw:0,fix:0},   // 舱室(玻璃)
+    {p:[0,2.3*P,-2.6*P],o:[0,0,0],s:[0.3*P,1.8*P,0.3*P], tF:60,tS:60,tT:60,tB:60, sw:0,fix:0},   // 桅杆
+    {p:[0,3.05*P,-2.6*P],o:[0,0,0],s:[1.0*P,0.45*P,0.15*P],tF:60,tS:60,tT:60,tB:60, sw:0,fix:0}    // 旗横杆
+  ]; })();
 const planeParts=(()=>{ const P=P16, B=155, W=156, G=157;
   return [
     {p:[0,0,0],       o:[0,0,0],      s:[2.2*P,2.2*P,14*P], tF:B,tS:B,tT:B,tB:B, sw:0,fix:0},   // 机身
@@ -8379,6 +8500,7 @@ const MOB_DEFS={
   carBlue: {name:"汽车(按E驾驶)", hp:40, speed:6.2, w:0.68, h:0.5, scale:2.82, hostile:false, car:true, mount:true, poof:152, drop:"core", parts:carBlueParts},
   plane:   {name:"客机(按E驾驶)", hp:60, speed:11.0,w:1.4, h:0.7, hostile:false, fly:true, plane:true, mount:true, mountFly:1, hover:26, scale:1.6, poof:155, drop:"core", parts:planeParts},
   bike:    {name:"悬浮摩托(按E骑乘)", hp:40, speed:9.0, w:0.5, h:0.7, hostile:false, fly:true, mount:true, mountFly:1, hover:3, poof:158, drop:"", parts:bikeParts},
+  yacht:   {name:"游艇(水面按E驾驶)", hp:80, speed:8.0, w:0.9, h:0.8, hostile:false, mount:true, boat:true, poof:160, drop:"", parts:yachtParts},
 };
 const playerEnt={def:{parts:humanoid(TILES_S,false)}, x:0,y:0,z:0, yaw:0, vx:0,vz:0,
                  animT:0, hurtT:0, swingT:0, burning:false, held:null};
@@ -8419,6 +8541,9 @@ function heldParts(key, anchor){
     case "waterskin":                                            // 🧴 绿洲水袋
       return [ at([0,-12.4*P,-1.1*P],[0.9*P,1.3*P,0.55*P], 6),   // 皮囊(木色)
                at([0,-13.4*P,-1.1*P],[0.4*P,0.5*P,0.4*P], 60) ]; // 木塞
+    case "wingsuit": return [ at([0,-12.2*P,-0.8*P],[1.3*P,1.5*P,0.6*P], 19),   // 🪂 翼装包(羊毛)
+                              at([0,-10.8*P,-0.8*P],[0.3*P,0.6*P,0.5*P], 60),   // 肩带
+                              at([0,-13.4*P,-0.8*P],[0.3*P,0.5*P,0.5*P], 60) ];// 腰带
     default:      return null;
   }
 }
@@ -9844,6 +9969,24 @@ const ICON_MACE=pixIcon([
 ".gg.............",
 "................"],
 {k:[52,52,60], H:[150,156,168], h:[198,204,214], T:[58,172,160], g:[228,180,60], w:[120,78,40]});
+const ICON_WING=pixIcon([
+"................",
+"................",
+"................",
+"....kkkkkkk.....",
+"...krrrrrrrk....",
+"..krryyyyrrk....",
+".krryyyyyyrrk...",
+".krrryyryyrrk...",
+"..krryyyyrrk....",
+"...krrrrrrrk....",
+"....kkrrrkk.....",
+"......krk.......",
+"......krk.......",
+".....krrk.......",
+"................",
+"................"],
+{k:[60,45,20], r:[226,90,40], y:[255,210,90]});
 const ICON_HORN=pixIcon([
 "................",
 "................",
@@ -9910,6 +10053,7 @@ const ITEMS={
   grapple:{name:"钩爪 (右键甩出勾拉)", icon:ICON_GRAPPLE},
   firework:{name:"烟花 (右键发射)", icon:ICON_FIREWORK},
   echo_horn:{name:"回响号角 (右键震退周围敌人)", icon:ICON_HORN},
+  wingsuit:{name:"翼装背包 (右键展开滑翔)", icon:ICON_WING},
   time_shards:{name:"时之沙 (右键获得疾行与轻身)", icon:ICON_HOURGLASS},
   waterskin:{name:"绿洲水袋 (右键饮用: 解毒回血)", icon:ICON_SKIN},
 };
@@ -12698,7 +12842,7 @@ function frame(now){
 
   if(playing()){
     // 移动
-    const driving = riding && (riding.def.car||riding.def.groundMount); // 开车/骑马: 贴地转向, 不能飞
+    const driving = riding && (riding.def.car||riding.def.groundMount||riding.def.boat); // 开车/骑马/游艇: 贴地(面)转向, 不能飞
     const grappling = !!grappleTarget;             // 钩爪拉拽中: 完全接管这一帧的速度/位置
     player.sneak = !player.flying && !driving && !grappling && (keys.ShiftLeft||keys.ShiftRight);
     let f=0,s=0;
@@ -12714,7 +12858,7 @@ function frame(now){
       player.z+=player.vz*dt; collideAxis(2);
     } else if(driving){
       /* 汽车驾驶: W/S 油门(前进/倒车), A/D 转向(左右打方向盘), 车身贴地行驶, 不能飞 */
-      const carSpd=riding.def.speed*(keys.KeyS&&!keys.KeyW?-0.5:1)*(riding.def.camelMount?camelDashMul():1);   // 骆驼冲刺(第五轮·云端)
+      const carSpd=riding.def.speed*(keys.KeyS&&!keys.KeyW?-0.5:1)*(riding.def.camelMount?camelDashMul():1)*(riding.def.boat&&getBlock(Math.floor(player.x),WATER_Y,Math.floor(player.z))!==WATER?0.3:1);   // 骆驼冲刺(第五轮·云端); 游艇离水减速(第三十三轮·本地)
       const steer=2.0*dt*(keys.KeyD?1:0)*(keys.KeyW||keys.KeyS?1:0.6)
                 - 2.0*dt*(keys.KeyA?1:0)*(keys.KeyW||keys.KeyS?1:0.6);
       if(keys.KeyW||keys.KeyS) player.yaw += (keys.KeyS&&!keys.KeyW?-1:1)*steer;
@@ -12725,8 +12869,9 @@ function frame(now){
       player.x+=player.vx*dt; player.z+=player.vz*dt;
       // 贴地: 车轮始终吸附地面高度, 而不是走跳跃/重力物理
       const gy2=groundY(Math.floor(player.x),Math.floor(player.z));
+      const gyT=riding.def.boat?(WATER_Y+0.55):(gy2>0?gy2:0);      // 游艇: 贴水面航行(第三十三轮·本地)
       const hop=riding.def.camelMount?camelDashHop():0;   // 骆驼冲刺跳跃: 贴地高度上叠一段弧线
-      if(gy2>0){ player.y += (gy2+hop-player.y)*Math.min(1,dt*(hop>0?16:10)); player.vy=0; player.onGround=hop<=0; }
+      if(gyT>0){ player.y += (gyT+hop-player.y)*Math.min(1,dt*(hop>0?16:10)); player.vy=0; player.onGround=hop<=0&&!riding.def.boat; }
       else { player.vy-=28*dt; player.y+=player.vy*dt; }
       collideAxis(0); collideAxis(2);
       fallStart=null;
@@ -12767,6 +12912,7 @@ function frame(now){
     player.z+=player.vz*dt; collideAxis(2);
     stepOK=false;
     }
+    applyWingsuit(dt);                                // 第三十三轮·本地: 翼装滑翔(限下落+俯冲加速)
     // 摔落伤害
     if(player.onGround && player.vy<=0) jumpPadGrace=false;   // 稳稳落地后解除
     if(player.flying || water || driving || grappling || jumpPadGrace) fallStart=null;
@@ -12777,6 +12923,7 @@ function frame(now){
       if(fd>0) damagePlayer(fd,0,0);
       fallStart=null; steamLift=false;
     }
+    if(wingT>0 && (player.onGround||driving||water||player.flying)) finishWingsuit();   // 第三十三轮·本地: 翼装着陆结算
     if(player.flying && player.onGround) player.flying=false;
     if(player.y<-10){ player.y=H; player.vy=0; }
     // NaN 保护: 一旦坐标变成 NaN, 矩阵会全部变 NaN → 整屏空白, 这里兜底复位
@@ -12907,6 +13054,12 @@ function frame(now){
     grappleCd=Math.max(0,grappleCd-dt);
     fwCd=Math.max(0,fwCd-dt);
     quakeCd=Math.max(0,quakeCd-dt);                              // 第三十轮·本地: 新战技/道具冷却与增益
+    wingT=Math.max(0,wingT-dt); wingCd=Math.max(0,wingCd-dt);      // 第三十三轮·本地: 翼装
+    if(wingT===0 && wingStart) finishWingsuit();
+    if(wingCd<=0 && wingT<=0 && player.onGround && !riding && !dead){
+      const es=nearStructure(["eiffel"],26);
+      if(es && player.y-es.h>=20) startWingsuit("eiffel");
+    }
     recallCd=Math.max(0,recallCd-dt);
     hornCd=Math.max(0,hornCd-dt);
     timeCd=Math.max(0,timeCd-dt);
@@ -14761,6 +14914,7 @@ window.__game = {
   get combatMastery(){ return {step:combatMastery.step, riposte:combatMastery.riposte, quake:combatMastery.quake, recall:combatMastery.recall,
     sandStepCd:sandStepCd(), riposteRate:riposteRate(), riposteCap:riposteCap(), quakeCd:+quakeCd.toFixed(2), recallCd:+recallCd.toFixed(2)}; },
   useQuake:(f)=>useQuake(f), useRecall:(f)=>useRecall(f), useEchoHorn, useTimeShards, useWaterskin,
+  startWingsuit:(s)=>startWingsuit(s), spawnYachtAt:(x,z)=>spawnYachtAt(x,z), regionTheme:(rx,rz)=>REGION_THEMES[Math.floor(hash2(rx*31+rz*17, rz*7-rx*3)*REGION_THEMES.length)%REGION_THEMES.length],
   bagCount:(id)=>bagCount(id),
   get ruinExpedition(){ return { active:ruinExpeditionState.active, phase:ruinExpeditionState.phase, wave:ruinExpeditionState.wave, runId:ruinExpeditionState.runId, route:ruinExpeditionState.route, completed:ruinExpeditionSave.completed, runs:ruinExpeditionSave.runs.slice() }; },
   startRuinExpedition:()=>startRuinExpedition(), abortRuinExpedition:()=>abortRuinExpedition(), pickExpeditionRoute:(r)=>pickExpeditionRoute(r),
@@ -14859,6 +15013,32 @@ function useWaterskin(){                                 // 🧴 绿洲水袋: �
   hp=Math.min(maxHp,hp+6); updateHearts();
   showName("🧴 清冽的绿洲水：解毒 +6 生命（剩 "+bagCount("waterskin")+" 袋）");
   return true;
+}
+function spawnYachtAt(wx,wz){                            // 🛥 游艇下水(第三十三轮·本地)
+  mobs.push({type:"yacht",def:MOB_DEFS.yacht,x:wx+0.5,y:WATER_Y+0.35,z:wz+0.5,vx:0,vy:0,vz:0,kbx:0,kbz:0,
+    yaw:player.yaw,tgtYaw:0,hp:80,maxHp:80,hurtT:0,animT:0,t:0,atkCd:0,burnT:0,swingT:0,groanT:0,fleeT:0,onGround:false,pause:false,burning:false,held:null});
+  return true;
+}
+/* ---- 🪂 翼装滑翔(第三十三轮·本地): 限制下落速率的滑翔态; 埃菲尔塔顶自动展开; 着陆结算滑翔距离挑战 ---- */
+let wingT=0, wingCd=0, wingStart=null;
+function startWingsuit(src){
+  if(wingCd>0){ showName("🪂 翼装冷却 "+Math.ceil(wingCd)+"s"); return false; }
+  wingT=18; wingCd=30; wingStart={x:player.x,z:player.z};
+  showName(src==="eiffel"?"🪂 塔顶翼装已展开——跳下去滑翔，飞得越远奖励越丰！":"🪂 翼装展开！滑翔 18 秒（落地结算距离）");
+  return true;
+}
+function finishWingsuit(){
+  const d=wingStart?Math.hypot(player.x-wingStart.x,player.z-wingStart.z)|0:0;
+  wingT=0; wingStart=null;
+  if(d>=50){ addXP(80); giveBlock(GOLD_ORE,4); showName("🪂 翼装挑战达成！滑翔 "+d+" 格（+80 经验 金x4）"); }
+  else if(d>5) showName("🪂 翼装着陆（滑翔 "+d+" 格，50 格有奖）");
+}
+function applyWingsuit(dt){
+  if(wingT<=0 || player.onGround || player.flying || riding) return;
+  if(inWater()||inLava()) return;
+  if(player.vy<-3.2) player.vy=-3.2;                    // 限制下落速率 → 滑翔
+  const ld=lookDir();
+  if(ld[1]<-0.2){ player.vx+=ld[0]*80*dt; player.vz+=ld[2]*80*dt; }   // 俯冲加速
 }
 
 /* ---------- 自测: 每项都做真断言, 失败会给出实际值 ---------- */
@@ -16067,7 +16247,8 @@ function selftest(){
         ok("大地震颤: 冷却期内再按被拒", useQuake()===false);
         combatMastery.quake=2; quakeCd=0;
         ok("大地震颤: 2 级伤害 12、冷却 19 秒", quakeCooldown()===19 && (()=>{ mq.hp=mq.maxHp=500; useQuake(); return mq.maxHp-mq.hp; })()===12, "cd="+quakeCooldown());
-        // 回沙卷盘: 重置沙步冷却连招
+        // 回沙卷盘: 重置沙步冷却连招(前提固化: softLock=游戏中, 与种子无关)
+        const slR30=softLock; softLock=true;
         combatMastery.recall=0;
         ok("回沙卷盘: 未解锁时按 Q 被拒", useRecall()===false);
         combatMastery.recall=1;
@@ -16078,6 +16259,7 @@ function selftest(){
         combatMastery.recall=3; hp=10; recallCd=0;
         sandStepState.cd=4; useRecall();
         ok("回沙卷盘: 3 级额外回 2 血、冷却 25 秒", hp===12 && recallCooldown()===25, "hp="+hp);
+        softLock=slR30;
         // 回响号角: 击退道具
         bagTake("echo_horn",bagCount("echo_horn")); hornCd=0;
         mobs.length=0; spawnTrialMob("mummy", Math.floor(player.x)+3, Math.floor(player.y), Math.floor(player.z)+3, false);   // +3/+3 → 距离~4.2, 稳在 6 格射程内(不随出生小数浮动)
@@ -16207,6 +16389,87 @@ function selftest(){
         mobs.length=0; __game.teleport(sx0*CELL+8, groundY(sx0*CELL+8,sz0*CELL+8)+2, sz0*CELL+8);
       } else {
         ok("蒙古包营地: 附近无营地种子, 跳过马群检查(注册断言已过)", true, "no yurt within ±30 cells");
+      }
+    }
+
+    // 8q11. 世界体系扩展(第三十三轮): 金字塔降频/主题分区/游艇/翼装/讲解员
+    {
+      const sx0=Math.floor(player.x/CELL), sz0=Math.floor(player.z/CELL);
+      const snap11={ wingT, wingCd, wingStart, xp, bag:new Map(bag), mobs:mobs.slice(), poisonT, themeOK:true };
+      wingT=0; wingStart=null;
+      try{
+        // 1) 金字塔降频: 沙漠系格子中金字塔占比应显著低于旧值 0.20
+        let des=0, pyr=0;
+        for(let dx=-14;dx<=14;dx++) for(let dz=-14;dz<=14;dz++){
+          const s=structureAt(sx0+dx,sz0+dz);
+          if(s && (s.type==="pyramid"||s.type==="castrum"||s.type==="aqueduct"||s.type==="village"||s.type==="bazaar"||s.type==="crater"||s.type==="airport"||s.type==="rainbow"||s.type==="wreck"||s.type==="caravan"||s.type==="ruin"||s.type==="hut"||s.type==="oasis")){ des++; if(s.type==="pyramid") pyr++; }
+        }
+        ok("金字塔降频: 沙漠地标中金字塔占比 < 0.19(旧值 0.32)", des>80 && pyr/des<0.19, "des="+des+" pyr="+pyr+" ratio="+(pyr/des).toFixed(3));
+        // 2) 主题分区: 世界地标带格子(NEW12)的类型必属于其区域主题池
+        const NEW12=["forbidden","parthenon","eiffel","cathedral","whitehouse","baths","impalace","yurt","museum","greatwall","leifeng","liberty"];
+        let themed=0, themeOK2=true;
+        for(let dx=-16;dx<=16;dx++) for(let dz=-16;dz<=16;dz++){
+          const sx=sx0+dx, sz=sz0+dz, s=structureAt(sx,sz);
+          if(s && NEW12.indexOf(s.type)>=0){
+            themed++;
+            const theme=__game.regionTheme(Math.floor(sx/4), Math.floor(sz/4));
+            if(THEME_POOL[theme].indexOf(s.type)<0) themeOK2=false;
+          }
+        }
+        ok("区域主题化: 地标带格子的类型属于其区域文明池(确定性)", themed>0 && themeOK2, "themed="+themed);
+        // 3) 新建筑 draw 冒烟: 长城/雷峰塔/自由女神
+        const SIGN11={greatwall:[0,2,0,BRICK], leifeng:[5,5,0,BRICK], liberty:[2,10,0,MOSSY]};
+        const baseY11=Math.min(58, Math.max(30, Math.floor(groundY(Math.floor(player.x),Math.floor(player.z)))+22));
+        const undo11=new Map();
+        const wput11=(x,y,z,id,force)=>{ if(y<0||y>=H) return; const c=world.get(key(x>>4,z>>4)); if(!c) return;
+          const i=((x&15)*CS+(z&15))*H+y, old=c.blocks[i], k2=x+","+y+","+z;
+          if(!undo11.has(k2) && old!==AIR) undo11.set(k2,[x,y,z,old]);
+          if(force || old===AIR) c.blocks[i]=id; _gcx=1e9; };
+        const built11={};
+        for(const t of ["greatwall","leifeng","liberty"]){
+          const bx0=Math.floor(player.x), bz0=Math.floor(player.z);
+          drawStructure({type:t, x:bx0, z:bz0, h:baseY11, bio:0}, wput11);
+          const g=SIGN11[t];
+          const cy0=t==="greatwall"?(heightAt(bx0,bz0)+2):(baseY11+g[1]);   // 长城墙体随地形起伏: 以真实地形高搜索
+          let near=false;
+          for(let dx2=-4;dx2<=4;dx2++) for(let dy2=-5;dy2<=5;dy2++) for(let dz2=-4;dz2<=4;dz2++) if(getBlock(bx0+g[0]+dx2, cy0+dy2, bz0+g[2]+dz2)===g[3]) near=true;
+          built11[t]=near;
+          for(const [k2,v] of undo11){ const p=k2.split(","); wput11(+p[0],+p[1],+p[2],v[3],true); }
+          undo11.clear();
+        }
+        ok("新建筑: 长城/雷峰塔/自由女神逐一搭建且特征方块就位", built11.greatwall && built11.leifeng && built11.liberty, JSON.stringify(built11));
+        // 4) 游艇: 人工水域召唤 + def.boat
+        mobs.length=0;
+        const wy=WATER_Y;
+        for(let X=Math.floor(player.x)+4;X<=Math.floor(player.x)+8;X++) for(let Z=Math.floor(player.z)-2;Z<=Math.floor(player.z)+2;Z++){
+          for(let y=wy-3;y<=wy;y++) setBlock(X,y,Z,WATER);
+          setBlock(X,wy-4,Z,STONE);
+        }
+        spawnYachtAt(Math.floor(player.x)+6, Math.floor(player.z));
+        const ym=mobs.find(m=>m.type==="yacht");
+        ok("游艇: 水面召唤成功且为可驾驶船只", !!ym && ym.def.boat===true && Math.abs(ym.y-(WATER_Y+0.35))<0.1, "y="+(ym&&ym.y.toFixed(2)));
+        mobs.length=0;
+        for(let X=Math.floor(player.x)+4;X<=Math.floor(player.x)+8;X++) for(let Z=Math.floor(player.z)-2;Z<=Math.floor(player.z)+2;Z++){
+          for(let y=wy-3;y<=wy;y++) setBlock(X,y,Z,AIR);
+          setBlock(X,wy-4,Z,STONE);
+        }
+        // 5) 翼装: 展开→限下落→着陆结算
+        hp=999; maxHp=999; armor=0; blessT=0; blessKind="";
+        const xpA11=xp, lvlA11=lvl, xm11=Math.max(1,omenXpMul()*mythicXpMul());
+        startWingsuit();
+        player.onGround=false; player.vy=-40; applyWingsuit(0.016);
+        const glideOK=player.vy>=-3.3 && wingT>0;
+        player.x+=80; finishWingsuit();
+        let gain11=xp-xpA11; for(let l=lvlA11;l<lvl;l++) gain11+=xpNeed(l);
+        ok("翼装滑翔: 下落限速 -3.2 且滑翔 80 格达成挑战", glideOK && gain11===Math.round(80*xm11) && wingT===0, "vy="+player.vy.toFixed(2)+" gain="+gain11);
+        // 6) 讲解员: NPC 角色注册
+        ok("讲解员 NPC: 角色已注册", !!NPC_ROLES.guide && NPC_ROLES.guide.tag==="🗣");
+      } finally {
+        wingT=snap11.wingT; wingStart=snap11.wingStart; wingCd=0;
+        xp=snap11.xp; bag.clear(); for(const [k,v] of snap11.bag) bag.set(k,v);
+        mobs.length=0; for(const m of snap11.mobs) mobs.push(m);
+        poisonT=snap11.poisonT;
+        updateXPHUD(); updateHearts();
       }
     }
 

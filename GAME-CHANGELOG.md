@@ -2,6 +2,26 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-10-05 — 沙海奇境 第三十三轮·本地：区域文明主题化 + 金字塔降频 + 悬空修复 + 游艇/翼装/讲解员 NPC
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only。响应用户反馈："金字塔过多、新建筑难找、建筑悬空；希望区域主题化（华夏/美国等）、游艇、骑马、翼装飞行、更多 NPC"。零新方块/图集。
+
+| Change | Player-visible behavior |
+| --- | --- |
+| ⚖ 金字塔降频 | 沙漠地标中金字塔占比 0.32→0.16，份额让给要塞/渡槽/集市等其余地标。 |
+| 🌍 区域文明主题化 | 世界按 4×4 大格（≈384 格）划定七大文明区：🏮华夏之地 / 🗽新大陆 / 🗼欧罗巴 / 🏛爱琴海畔 / ⛩东瀛之岛 / 🐴草原之国 / 🏛罗马故地。区内"世界地标带"从该文明池产出（密度翻倍且同主题成片）：华夏=故宫·长城·雷峰塔；美国=白宫·自由女神；欧洲=铁塔·科隆大教堂；希腊=帕特农；日本=皇居；蒙古=营地；罗马=浴场；美术馆为各区压轴。 |
+| 🧱 新建筑 ×3 | **长城**（44 格随地形起伏的砖石城墙+垛口+三座烽火台）、**雷峰塔**（八角七层收分砖塔+塔刹）、**自由女神像**（石基座+铜绿身躯+皇冠七刺+火炬）。均入指南针/珍藏（烽火狼烟/雷峰塔藏经/自由火炬）。 |
+| 🛠 悬空修复 | ① `structureAt` 坡度拒绝：大型地标四角与中心高差 >6 时放弃该格；② `foundations()` 沿外墙一圈向下打 4~6 格地基裙边（神庙/故宫/白宫/教堂/浴场/皇居/美术馆/自由女神）；③ 埃菲尔四腿加 8 格基墩。 |
+| 🛥 游艇 | 新可驾驶载具：B 合成（铁×6+白灰泥×4+玻璃×3）召至面前水面，按 E 驾驶（贴水面航行，离水减速 70%），速度 8.0。 |
+| 🪂 翼装滑翔 | 新道具（羊毛×4+铁×2）：18 秒滑翔（下落限速 -3.2、俯冲加速）；**埃菲尔塔顶自动展开**；着陆结算滑翔距离，≥50 格奖励 +80 经验 金×4。 |
+| 🗣 讲解员 NPC | 新 NPC 角色：各地标附近自动出现，按 F 对话听介绍。 |
+
+**修复（本轮开发中自测抓到）:** `MOB_DEFS.yacht` 引用的 `yachtParts` 定义缺失 → 模块求值在 8493 行 ReferenceError 中断 → **开局黑屏、世界不生成、selftest 全挂**（表现为 menuLoadPct 0% 卡死）。补上定义后恢复。另修复：测试 SIGN11 数组漏写 dz 分量（同 8q10 的老毛病）、卷盘断言缺 `playing()` 前提固化、翼装经验未按乘数/升级折算。
+
+**How:** `REGION_THEMES/THEME_POOL/REGION_NAMES/SLOPE_CHECK` + `structureAt` 主题带与坡度拒绝；`foundations()` 裙边助手（drawStructure 内）；`greatwall/leifeng/liberty` 建造分支；`MOB_DEFS.yacht/yachtParts` + driving 门控扩 `def.boat` + 贴水面物理；`wingT/wingCd/wingStart` + `startWingsuit/finishWingsuit/applyWingsuit` + frame 接线（限速/俯冲/着陆/塔顶触发）；`NPC_ROLES.guide` + `maintainNPCs` 自动生成；RECIPES ×5；`window.__game` 暴露 `regionTheme/startWingsuit/spawnYachtAt`。
+
+**Verification:** `node tools/headless.mjs selftest` **468/468** 于默认种子、`?seed=424242`、`?seed=2718281`、`?seed=314159`（新增 6 条：金字塔占比、主题分区归属、新建筑×3 搭建、游艇召唤、翼装滑翔/挑战、讲解员注册）。自测触发器的 try/catch 本次再次立功：直接报出 8q11 的 spot 跨块引用与卷盘前提缺失，而非静默挂死。
+
 ## 2026-10-04 — 沙海奇境 第三十二轮·本地：世界地标九连（故宫/白宫/埃菲尔铁塔/科隆大教堂/罗马浴场/希腊神庙/日本皇居/蒙古包营地/世界美术馆）
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) only。全部复用既有方块与图集（零新方块、零图集占用），走既有 `structureAt → buildStructures` 确定性生成管线；草原群系随机生成，每个格子约 2% 概率。
