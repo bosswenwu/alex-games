@@ -13710,8 +13710,10 @@ function claimRuinExpeditionReward(){
       showName("🎒 装备包已满（"+GEAR_CAP+" 件）："+gearItemName(item)+" 自动拆解 → 刻印砂 +"+GEAR_DUST[item.q]);
     } else {
       metaProgress.gear.push(item);
+      let autoEq="";
+      if(!metaProgress.equipped[item.slot]){ metaProgress.equipped[item.slot]=item.id; autoEq="，已自动装备"; }   // 设计稿: 槽位为空时首件自动装备
       const D0=AFFIX_DEFS.find(d=>d.id===item.affixes[0].id);
-      showName("🎁 远征遗物掉落："+gearItemName(item)+"（"+D0.n+("ⅠⅡⅢ"[item.affixes[0].tier])+"）· 按 I 装备");
+      showName("🎁 远征遗物掉落："+gearItemName(item)+"（"+D0.n+("ⅠⅡⅢ"[item.affixes[0].tier])+"）"+autoEq+"· 按 I 管理");
     }
     saveMeta();
   }
@@ -13804,7 +13806,8 @@ function normalizeMeta(raw){
 function saveMeta(){ try{ localStorage.setItem(META_SAVE_KEY, JSON.stringify({version:1, echoes:metaProgress.echoes, mastery:Object.assign({},metaProgress.mastery), streak:metaProgress.streak,
   gear:JSON.parse(JSON.stringify(metaProgress.gear)), equipped:Object.assign({},metaProgress.equipped), dust:metaProgress.dust, pity:metaProgress.pity})); }catch(e){} }
 function loadMeta(){ try{ normalizeMeta(JSON.parse(localStorage.getItem(META_SAVE_KEY)||"null")); }catch(e){ normalizeMeta(null); } }
-loadMeta();
+// 注意: loadMeta 不能在模块求值期调用——normalizeMeta→validGearItem 依赖文件更后面的 AFFIX_DEFS(TDZ),
+// 曾导致"拥有词缀装备后每次刷新全存档清零"的严重 bug; 调用点移到 AFFIX_DEFS 定义之后(见 getExpeditionModifiers 前)。
 function masteryLevel(k){ return metaProgress.mastery[k]|0; }
 function ruinCombatActive(){ return ruinExpeditionState.active && ruinExpeditionState.phase==="combat"; }
 function buyMastery(k){
@@ -13906,6 +13909,7 @@ function validGearItem(it){
   }
   return true;
 }
+loadMeta();                                              // 局外进度载入: 必须在 AFFIX_DEFS/validGearItem 就绪之后一次性执行(见上方 TDZ 注释)
 function getExpeditionModifiers(){
   const mods={melee:0,elite:0,firstHit:0,sandstepCdr:0,burn:0,clue:0,extraLoot:0,healComplete:0,afterimage:0};
   if(!ruinExpeditionState.active) return mods;          // 词缀只在远征内生效(隔离舱)
@@ -15563,6 +15567,12 @@ function selftest(){
         rerollGearItem("test:w1");
         const g1New=metaProgress.gear[0].affixes;
         ok("重铸: 3 砂换第一条词缀(不同组、阶位不变)", metaProgress.dust===dustBefore6-GEAR_REROLL_COST && g1New.length===3 && g1New[0].id!=="sand_edge" && g1New[0].tier===2 && JSON.stringify(g1New)!==g1Old, "new0="+g1New[0].id);
+        // 持久化回归: gear→saveMeta→loadMeta 全链路(守住 loadMeta 调用点 TDZ 回归)
+        metaProgress.gear=[{id:"S:1", slot:"charm", q:2, affixes:[{id:"tomb_echo",tier:1},{id:"dune_step",tier:0}]}];
+        metaProgress.equipped={weapon:null,charm:"S:1"}; metaProgress.dust=6; metaProgress.pity=2; saveMeta();
+        loadMeta();
+        ok("meta 持久化: loadMeta 后装备/刻印砂/保底完整保留", metaProgress.gear.length===1 && metaProgress.equipped.charm==="S:1" && metaProgress.dust===6 && metaProgress.pity===2 &&
+           metaProgress.gear[0].affixes.length===2, "gear="+metaProgress.gear.length+" dust="+metaProgress.dust);
         normalizeMeta(null);
       } finally {
         metaProgress.echoes=snapM6.echoes; metaProgress.streak=snapM6.streak; metaProgress.mastery=snapM6.mastery;
@@ -17820,7 +17830,12 @@ function mmUpdate(now){
 if(/[?&]selftest=1/.test(location.search||"")){
   (function waitSelftest(){
     if(typeof worldGenReady!=="undefined" && worldGenReady && typeof selftest==="function"){
-      const r=selftest();
+      let r;
+      try{ r=selftest(); }                                                       // 第二十九轮·本地: 测试代码自身异常也要落地成 FAIL, 不再让就绪等待静默挂死
+      catch(err){
+        r={pass:0,fail:1,total:1,results:[{ok:false,name:"selftest 异常: "+(err&&err.message||err),
+          detail:(err&&err.stack||"").split("\n").slice(0,4).join(" | ")}]};
+      }
       saveDisabled=true;                      // 自测世界不得在关页/切后台时写回; 点「继续上次」会重新打开存档
       try{ refreshMenu(); }catch(e){}
       const pre=document.createElement("pre");

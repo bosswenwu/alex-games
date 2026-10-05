@@ -2,6 +2,21 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-10-04 — 沙海奇境 第二十九轮·本地：bug 排查修复（局外进度数据丢失）+ 掉落自动装备 + 自测触发器加固
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only。系统排查第二十四～二十八轮新增系统的边界与交互，修复 1 个严重数据丢失 bug + 2 个稳健性问题，新增 1 项设计稿对齐 QoL。不改既有数值。
+
+| 问题 | 严重性 | 修复 |
+| --- | --- | --- |
+| **局外进度刷新即清零**：`loadMeta()` 原先在模块求值期立即执行，而它依赖的 `AFFIX_DEFS`/`validGearItem` 在文件更后面定义（TDZ）。一旦玩家拥有词缀装备，下次加载页面时 `validGearItem` 触发 `ReferenceError` → catch 走 `normalizeMeta(null)` → **回响/专精/装备/刻印砂全部静默清零** | 🔴 严重（数据丢失） | `loadMeta()` 调用点移到 `AFFIX_DEFS/validGearItem` 定义之后（一次性模块级调用，不在每帧路径）；附调用点 TDZ 注释防止回归 |
+| selftest 触发器无异常保护：`selftest()` 抛异常（如本次排查中的测试夹具错序）会炸掉 250ms 重试链，`__selftest` 永不就绪，headless 等待静默挂死 180s | 🟡 稳健性 | `waitSelftest` 内 try/catch：测试代码自身异常落地成 `FAIL selftest 异常: …`（含堆栈），不再挂死 |
+| 8q6 持久化子测试插在装备夹具中间，末尾 `normalizeMeta(null)` 清空夹具 → 后续拆解/重铸段 `gear[0]` undefined 抛异常 | 🟡 测试代码 | 持久化子测试移到重铸断言之后 |
+| 远征掉落不自动装备 | 🟢 QoL（设计稿："槽位为空时首件自动装备"） | 掉落时若对应槽位为空则自动穿戴并在提示中标明 |
+
+**排查方法（可复用）：**① 代码审查 TDZ/调用点顺序；② 无头 eval 真实流程（完整远征：解谜→选路→清三波→结算→掉落→自动装备）；③ 页面内启动序列模拟（带装备存档→清空内存→真实 `loadMeta()`→断言还原）；④ 死亡残留（解谜中 `doDie()` → 机关面板必须关闭）；⑤ 装备包 24 件满自动拆解；⑥ I 键真实 keydown 开合；⑦ 隔离舱二次确认。以上 7 项全部通过（`bootRestore/deathClosesPuzzle/fullPack/metaKeyToggle/isolation` 全 true）。
+
+**Verification:** `node tools/headless.mjs selftest` **434/434** 于默认种子、`?seed=424242`、`?seed=2718281`（新增 1 条：`meta 持久化` 全链路回归）。真实流程 e2e：远征全流程无异常、首通 +2 回响、掉落自动装备、pity 计数正确。
+
 ## 2026-10-04 — 沙海奇境 第二十八轮·本地：远征遗物与装备词缀（PR B + 轻量接线）
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) only. 按《SANDSEA-META-GROWTH-AFFIX-DESIGN-2026-10-04.md》PR B 落地，并接上 PR C 的最小战斗接线。词缀数据进 `sandsea_meta_v1`（不新增方块/快捷键/热栏位）。
