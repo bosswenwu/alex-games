@@ -546,7 +546,7 @@
     　<b>宝库钥匙</b>：通关斗兽场或斩杀法老获得，站在金字塔/宫殿/斗兽场按 <b>U</b> 开启封印宝库（钥匙会真正被花掉）<br>
     　<b>神话遗物</b>：六文明碎片拼合后有被动神力（按 <b>K</b> 翻看）。拼合不灭神灯后按 <b>L</b> 自选一项愿望<br>
     　<b>🏛 遗迹远征</b>：在 <b>B</b> 合成台用砂岩×8+金×2+钻×1 合成「遗迹远征石板」，立即开启一局：先解三符号机关（照石碑线索点选，错了可重来），再<b>选路线</b>（🛡稳扎稳打 / ⚠险中求胜——守卫全精英但回响+1），然后击退 3 波遗迹守卫。通关得金/钻/文物/核心与经验，并获得<b>遗迹回响</b>（首通+2、重复+1、精英路线+1）。同一存档每局首通奖励只发一次；死亡、关面板或开新世界会中断远征<br>
-    　<b>🏛 遗迹专精</b>：按 <b>I</b> 用回响研习三条专精树（测绘者/守墓者/沙步者，各 4 阶，成本 2/3/5/7）——<b>只在远征内生效</b>，开新世界不清零<br>
+    　<b>🏛 遗迹专精</b>：按 <b>I</b> 用回响研习三条专精树（测绘者/守墓者/沙步者，各 4 阶，成本 2/3/5/7）——<b>只在远征内生效</b>，开新世界不清零。远征<b>首通掉落远征遗物</b>（武器刻印/护符，旧制·精制·古代·神话四档词缀，连开 4 箱必出古代以上）；在 I 面板穿戴/拆解成刻印砂/用 3 砂重铸词缀。旧制=1条Ⅰ阶 · 精制=1条Ⅱ阶 · 古代=2条 · 神话=3条<br>
     <b>群系</b>：沙海·红土台地·干草原为主，另有盐湖·峡谷·火山·<b>晶洞高地·古代遗迹带</b><br>
     　💎 晶洞高地：地表紫晶标出入口，地下方解石洞可采　⛵ 遗迹带：沉船/商队残骸藏金<br>
     <b>地标</b>：金字塔(墓室石棺唤醒法老王Boss)·斗兽场·宫殿·绿洲·彩虹桥·机场·赛车场·陨石坑·游乐场<br>
@@ -4984,7 +4984,10 @@ const SAND_RIPOSTE_WINDOW=2.0, SAND_RIPOSTE_RATE=0.35, SAND_RIPOSTE_CAP=3;
 // 第十九轮·云端 P3: 能量核心战技(有上限)。沙步熟练: 每级冷却 -0.4s(4.5→3.3); 回砂反击: 每级反击加成 +10%、封顶 +1(35%/+3 → 65%/+6)。
 const MASTERY_MAX=3;
 const combatMastery={step:0, riposte:0};
-function sandStepCd(){ return SANDSTEP_CD-0.4*combatMastery.step-(ruinCombatActive()&&masteryLevel("duneStrider")>=1?0.2:0); }   // 沙步者「稳足」: 远征中再 -0.2
+function sandStepCd(){                                   // 总冷却缩减封顶为基础值的 35%(含熟练/稳足/词缀「沙步回声」)
+  let cd=SANDSTEP_CD-0.4*combatMastery.step-(ruinCombatActive()&&masteryLevel("duneStrider")>=1?0.2:0)-(ruinCombatActive()?getExpeditionModifiers().sandstepCdr:0);
+  return Math.max(SANDSTEP_CD*0.65,cd);
+}
 function riposteRate(){ return SAND_RIPOSTE_RATE+0.1*combatMastery.riposte+(ruinCombatActive()&&masteryLevel("duneStrider")>=2?0.05:0); }   // 沙步者「回砂」: 远征中 +5%
 function riposteCap(){ return SAND_RIPOSTE_CAP+combatMastery.riposte; }
 function restoreCombatMastery(d){                 // 老存档无字段/坏值 → 0, 越界限幅到 0..3
@@ -5006,15 +5009,20 @@ function clearSandRiposte(){ sandStepState.counterT=0; sandStepState.counterTarg
 function sandRiposteDamage(target,baseDamage){
   if(sandStepState.counterT<=0 || sandStepState.counterTarget!==target) return {damage:baseDamage,bonus:0};
   const bonus=Math.min(riposteCap(),Math.max(0,Math.round(baseDamage*riposteRate())));
-  sandStepState.counterT=0; sandStepState.counterTarget=null; sandStepState.counterHitT=bonus>0?0.9:0;
-  if(bonus>0){
+  let extra=0;
+  if(ruinCombatActive()){                    // 词缀「回砂余势」: 远征内精准反击追加伤害(独立于反击上限)
+    const md=getExpeditionModifiers();
+    if(md.afterimage>0) extra=Math.round(baseDamage*md.afterimage);
+  }
+  sandStepState.counterT=0; sandStepState.counterTarget=null; sandStepState.counterHitT=(bonus+extra)>0?0.9:0;
+  if(bonus+extra>0){
     for(let i=0;i<7;i++){ const a=i/7*6.283;
       particles.push({x:target.x+Math.cos(a)*0.48,y:target.y+0.45,z:target.z+Math.sin(a)*0.48,
         vx:Math.cos(a)*1.2,vy:1.1+Math.random()*0.6,vz:Math.sin(a)*1.2,life:0.26,size:0.085,u:15*TS,v:0,l:1.7});
     }
   }
   refreshSandStepButton();
-  return {damage:baseDamage+bonus,bonus};
+  return {damage:baseDamage+bonus+extra,bonus:bonus+extra};
 }
 function sandStepPanelOpen(){
   const ids=["craftPanel","enchPanel","potionPanel","chestPanel","furnacePanel","npcPanel","fullhelp","settingsPanel",
@@ -8257,6 +8265,10 @@ function hurtMob(m,dmg,kx,kz,silent){
     return;
   }
   if(m.burrowed) dmg*=0.4;                    // 沙虫埋沙时只受 4 成伤害(出土露头才是反击窗口), 但仍可击杀, 避免"隐身无敌"
+  if(ruinCombatActive()){                     // 远征词缀(第二十八轮·本地): 砂刃近战 + 破甲印对精英/首领, 仅远征内生效
+    const md=getExpeditionModifiers();
+    dmg=Math.max(1,Math.round(dmg*(1+md.melee+((m.elite||m.def.boss)?md.elite:0))));
+  }
   m.hp-=dmg; m.hurtT=0.4;
   m.kbx+=kx; m.kbz+=kz;
   if(kx||kz) m.vy=Math.max(m.vy,4.2);
@@ -9101,7 +9113,11 @@ function foeStrike(dmg,kx,kz,m,attackTag){
   }
   const em=(m&&m.elite)?1.5:1;
   let fdmg=foeDmgMul()*em;
-  if(ruinCombatActive() && masteryLevel("tombGuard")>=2) fdmg*=0.95;   // 守墓者「盐甲」: 远征战斗中敌击 -5%
+  if(ruinCombatActive()){
+    const md=getExpeditionModifiers();
+    if(masteryLevel("tombGuard")>=2) fdmg*=0.95;         // 守墓者「盐甲」: 远征战斗中敌击 -5%
+    if(md.firstHit>0 && !ruinExpeditionState.firstHitUsed){ ruinExpeditionState.firstHitUsed=true; fdmg*=(1-md.firstHit); }   // 词缀「守墓回响」: 每波首次受击减伤
+  }
   damagePlayer(Math.max(1,Math.round(dmg*fdmg)), kx, kz);
   return true;
 }
@@ -9556,7 +9572,7 @@ function setSunblade(on){
   sunCombo.n=0;
   if(document.getElementById("hotbar").childElementCount){ rebuildHotbar(); drawViewmodel(); }
 }
-function sunbladeIgnite(m){ m.sunBurn=SUN_BURN; if(!(m.sunTick>0)) m.sunTick=0.5; }
+function sunbladeIgnite(m){ m.sunBurn=SUN_BURN+(ruinCombatActive()?getExpeditionModifiers().burn:0); if(!(m.sunTick>0)) m.sunTick=0.5; }   // 词缀「烈阳余烬」: 远征内灼烧延长
 function sunbladeHit(m,dir,mul){                       // 烈阳剑命中一个生物后调用(伤害已由 doBreak 结算)
   sunbladeIgnite(m);
   const now=performance.now()/1000;
@@ -13590,7 +13606,7 @@ function tickExpedition(dt){
 /* ---- 🏛 遗迹远征: 把三符号机关接入一局可玩的短循环 ---- */
 const RUIN_EXPEDITION_WAVES=[["scarab","scarab","serqet"],["mummy","skeleton","serqet"],["anubis","mummy","scarab"]];
 const RUIN_EXPEDITION_WAVES_ELITE=[["serqet","scarab"],["anubis","serqet"],["anubis","mummy"]];   // 险中求胜: 全精英路线(血×1.5+精英掉核心), 通关回响+1
-const ruinExpeditionState={ active:false, phase:"idle", runId:0, wave:0, alive:[], nextT:0, rewardClaimed:false, solution:[0,1,2], clueText:"", route:"safe", waves:null, bandaged:false };
+const ruinExpeditionState={ active:false, phase:"idle", runId:0, wave:0, alive:[], nextT:0, rewardClaimed:false, solution:[0,1,2], clueText:"", route:"safe", waves:null, bandaged:false, firstHitUsed:false };
 const ruinExpeditionSave={ runs:[], completed:0 };
 function hashRuin(seed,runId,n){ return Math.abs(Math.sin(seed*0.317+runId*0.719+n*1.337)); }
 function generateRuinExpedition(seed,runId){
@@ -13599,8 +13615,13 @@ function generateRuinExpedition(seed,runId){
   const names={0:"日轮",1:"圣甲虫",2:"羽毛"};
   const clueOrder=solution.map(id=>names[id]);
   let clueText="石碑上刻着三行小字：先"+clueOrder[0]+"，再"+clueOrder[1]+"，最后"+clueOrder[2]+"。";
-  if(masteryLevel("surveyor")>=1){                       // 测绘者 I「壁画释读」: 追加一条排除式提示(不直接给答案)
-    const y=(hashRuin(seed,runId,7)*3)|0, wrong=(solution[y]+1+((hashRuin(seed,runId,9)*2)|0))%3;
+  let hints=masteryLevel("surveyor")>=1?1:0;             // 测绘者 I「壁画释读」
+  hints+=getExpeditionModifiers().clue;                  // 护符「壁画慧眼」: 每阶 +1/+1/+2 条
+  const usedPos={};
+  for(let h=0;h<hints;h++){                              // 排除式提示: 第 Y 位不是「名」(不直接给答案), 位次不重复
+    const y=(hashRuin(seed,runId,7+h)*3)|0;
+    if(usedPos[y]) continue; usedPos[y]=1;
+    const wrong=(solution[y]+1+((hashRuin(seed,runId,9+h)*2)|0))%3;
     clueText+=" 刻痕特写：第"+(y+1)+"位不是「"+names[wrong]+"」。";
   }
   return {solution, clueText};
@@ -13611,10 +13632,7 @@ function canStartRuinExpedition(){
 function startRuinExpedition(){
   if(!canStartRuinExpedition()){ showName("🏛 现在无法开启遗迹远征"); return false; }
   ruinExpeditionState.runId++;
-  const g=generateRuinExpedition(SEED, ruinExpeditionState.runId);
-  ruinExpeditionState.solution=g.solution.slice();
-  ruinExpeditionState.clueText=g.clueText;
-  ruinExpeditionState.active=true;
+  ruinExpeditionState.active=true;                       // 先激活再生成: 词缀线索(clue)需要 getExpeditionModifiers 看到远征态
   ruinExpeditionState.phase="puzzle";
   ruinExpeditionState.wave=0;
   ruinExpeditionState.alive=[];
@@ -13623,6 +13641,10 @@ function startRuinExpedition(){
   ruinExpeditionState.route="safe";
   ruinExpeditionState.waves=null;
   ruinExpeditionState.bandaged=false;
+  ruinExpeditionState.firstHitUsed=false;
+  const g=generateRuinExpedition(SEED, ruinExpeditionState.runId);
+  ruinExpeditionState.solution=g.solution.slice();
+  ruinExpeditionState.clueText=g.clueText;
   if(masteryLevel("tombGuard")>=1 && hp<maxHp){ hp=Math.min(maxHp,hp+2); updateHearts(); }   // 守墓者 I「干粮」: 启程回 2 血
   if(document.pointerLockElement) document.exitPointerLock();
   const opened=openRuinGlyphPanel({
@@ -13644,7 +13666,7 @@ function abortRuinExpedition(msg){
     const gp=document.getElementById("ruin-glyph-panel");
     if(gp){ gp.classList.remove("on"); gp.setAttribute("aria-hidden","true"); }
   }
-  Object.assign(ruinExpeditionState,{active:false,phase:"idle",wave:0,alive:[],nextT:0,rewardClaimed:false,waves:null,bandaged:false});
+  Object.assign(ruinExpeditionState,{active:false,phase:"idle",wave:0,alive:[],nextT:0,rewardClaimed:false,waves:null,bandaged:false,firstHitUsed:false});
   if(msg) showName(msg);
 }
 function pickExpeditionRoute(r){
@@ -13678,6 +13700,21 @@ function claimRuinExpeditionReward(){
   if(masteryLevel("surveyor")>=3){ npcState.relics+=1; addXP(40); got.push("🏺侧室文物+1 +40经验"); }   // 测绘者 III「隐匿侧室」
   if(masteryLevel("tombGuard")>=4){ cores+=1; got.push("⚡安魂核心+1"); }                              // 守墓者 IV「安魂」
   if(masteryLevel("duneStrider")>=4){ addXP(60); got.push("⭐终结赏金+60经验"); }                      // 沙步者 IV「终结赏金」
+  { const md=getExpeditionModifiers();
+    if(md.healComplete>0 && hp<maxHp){ hp=Math.min(maxHp,hp+md.healComplete); updateHearts(); got.push("💗撤离恩典+"+md.healComplete); }   // 护符「撤离者恩典」
+    if(md.extraLoot>0 && hashRuin(SEED,ruinExpeditionState.runId,11)<md.extraLoot){ giveBlock(GOLD_ORE,20); npcState.relics+=1; got.push("🏺收藏者印记"); } }   // 护符「收藏者印记」: 每局至多一次
+  if(!already){                                          // 首通掉落一件远征遗物(确定性, 幂等由 runs 记录保证)
+    const item=rollExpeditionGear(ruinExpeditionState.runId);
+    if(metaProgress.gear.length>=GEAR_CAP){              // 装备包满: 自动拆解成刻印砂
+      metaProgress.dust+=GEAR_DUST[item.q];
+      showName("🎒 装备包已满（"+GEAR_CAP+" 件）："+gearItemName(item)+" 自动拆解 → 刻印砂 +"+GEAR_DUST[item.q]);
+    } else {
+      metaProgress.gear.push(item);
+      const D0=AFFIX_DEFS.find(d=>d.id===item.affixes[0].id);
+      showName("🎁 远征遗物掉落："+gearItemName(item)+"（"+D0.n+("ⅠⅡⅢ"[item.affixes[0].tier])+"）· 按 I 装备");
+    }
+    saveMeta();
+  }
   // 遗迹回响(局外): 首通 +2, 重复 +1, 精英路线 +1; 测绘者 IV「文书封存」每连满 3 局再 +1
   metaProgress.streak++;
   let echoGain=(already?1:2)+(elite?1:0);
@@ -13713,6 +13750,7 @@ function tickRuinExpedition(dt){
     const list=WAVES[ruinExpeditionState.wave++];
     const elite=ruinExpeditionState.route==="elite";
     for(const type of list) spawnRuinMob(type, elite);
+    ruinExpeditionState.firstHitUsed=false;              // 「守墓回响」每波首次受击减伤: 开新波重置
     if(masteryLevel("duneStrider")>=3 && ruinExpeditionState.wave>1){ hp=Math.min(maxHp,hp+1); updateHearts(); }   // 沙步者 III「战后包扎」
     ruinExpeditionState.nextT=2.5;
     showName("🏛 遗迹守卫 第 "+ruinExpeditionState.wave+"/"+WAVES.length+" 波"+(elite?"（精英）":""));
@@ -13745,15 +13783,26 @@ const MASTERY_TREES=[
 ];
 const MASTERY_TIER_COST=[2,3,5,7], MASTERY_TIER_MAX=4;
 const META_SAVE_KEY="sandsea_meta_v1";
-const metaProgress={ echoes:0, mastery:{surveyor:0,tombGuard:0,duneStrider:0}, streak:0 };
+const metaProgress={ echoes:0, mastery:{surveyor:0,tombGuard:0,duneStrider:0}, streak:0, gear:[], equipped:{weapon:null,charm:null}, dust:0, pity:0 };
 function normalizeMeta(raw){
   const src=(raw&&typeof raw==="object"&&!Array.isArray(raw))?raw:{};
   metaProgress.echoes=Math.max(0,src.echoes|0);
   const m=(src.mastery&&typeof src.mastery==="object")?src.mastery:{};
   for(const t of MASTERY_TREES) metaProgress.mastery[t.k]=Math.max(0,Math.min(MASTERY_TIER_MAX,(m[t.k]|0)));
   metaProgress.streak=Math.max(0,src.streak|0);
+  // 装备词缀(PR B): 白名单校验、组去重、上限 24 件; equipped 必须指向背包内的同槽位物品
+  metaProgress.gear=Array.isArray(src.gear)?src.gear.filter(validGearItem).slice(0,GEAR_CAP):[];
+  metaProgress.equipped={weapon:null,charm:null};
+  const eq=(src.equipped&&typeof src.equipped==="object")?src.equipped:{};
+  for(const s of ["weapon","charm"]){
+    const id=typeof eq[s]==="string"?eq[s]:null;
+    if(id && metaProgress.gear.some(g=>g.id===id && g.slot===s)) metaProgress.equipped[s]=id;
+  }
+  metaProgress.dust=Math.max(0,src.dust|0);
+  metaProgress.pity=Math.max(0,src.pity|0);
 }
-function saveMeta(){ try{ localStorage.setItem(META_SAVE_KEY, JSON.stringify({version:1, echoes:metaProgress.echoes, mastery:Object.assign({},metaProgress.mastery), streak:metaProgress.streak})); }catch(e){} }
+function saveMeta(){ try{ localStorage.setItem(META_SAVE_KEY, JSON.stringify({version:1, echoes:metaProgress.echoes, mastery:Object.assign({},metaProgress.mastery), streak:metaProgress.streak,
+  gear:JSON.parse(JSON.stringify(metaProgress.gear)), equipped:Object.assign({},metaProgress.equipped), dust:metaProgress.dust, pity:metaProgress.pity})); }catch(e){} }
 function loadMeta(){ try{ normalizeMeta(JSON.parse(localStorage.getItem(META_SAVE_KEY)||"null")); }catch(e){ normalizeMeta(null); } }
 loadMeta();
 function masteryLevel(k){ return metaProgress.mastery[k]|0; }
@@ -13773,7 +13822,7 @@ function buyMastery(k){
 function renderMeta(){
   const card=document.querySelector("#meta-panel .pt-card"); if(!card) return;
   let h='<h2>🏛 遗迹专精 · 回响 '+metaProgress.echoes+'</h2>'
-    +'<div style="color:#c9b98a;font-size:12px;margin:0 0 10px;line-height:1.6">完成遗迹远征获得「遗迹回响」；专精<b style="color:#ffd23f">只在远征内生效</b>，开新世界不清零。每阶成本 2/3/5/7。</div>';
+    +'<div style="color:#c9b98a;font-size:12px;margin:0 0 10px;line-height:1.6">完成遗迹远征获得「遗迹回响」与<b style="color:#ffd23f">远征遗物</b>；专精与词缀<b style="color:#ffd23f">只在远征内生效</b>，开新世界不清零。专精每阶成本 2/3/5/7。刻印砂：⚒ '+metaProgress.dust+'</div>';
   for(const tree of MASTERY_TREES){
     const lv=masteryLevel(tree.k);
     h+='<div style="margin:10px 0 4px;color:#e8bb6a;font-weight:bold">'+tree.n+' <span style="font-weight:normal;color:#c9b98a;font-size:12px">'+tree.d+' · '+lv+'/4</span></div>';
@@ -13785,17 +13834,151 @@ function renderMeta(){
         +(next?'background:#ffd23f14;':'')+'"><b>'+("ⅠⅡⅢⅣ"[i])+' '+tier.n+'</b> — '+tier.d+'<span style="float:right">'+tag+'</span></div>';
     });
   }
+  // ---- 🗡 远征遗物装备区 ----
+  const slotRow=(slot,label)=>{
+    const it=metaProgress.gear.find(g=>g.id===metaProgress.equipped[slot]);
+    if(!it) return '<div style="padding:7px 10px;margin:4px 0;border:1px dashed #ffffff26;border-radius:8px;font-size:12.5px;color:#7d7264">'+label+' · 空（远征首通掉落）</div>';
+    const Q=GEAR_QUALITIES[it.q];
+    const lines=it.affixes.map(ax=>{ const D=AFFIX_DEFS.find(d=>d.id===ax.id); return D?('<span style="color:'+Q.c+'">'+D.n+("ⅠⅡⅢ"[ax.tier])+'</span> '+D.fmt(D.tiers[ax.tier])):""; }).join('<br>');
+    return '<div style="padding:7px 10px;margin:4px 0;border:1px solid '+Q.c+'55;border-radius:8px;font-size:12.5px;line-height:1.6">'
+      +'<b style="color:'+Q.c+'">'+gearItemName(it)+'</b>（'+label+'）<br>'+lines
+      +' <button class="mx-reroll" data-id="'+it.id+'" type="button" style="float:right;font:inherit;font-size:11px;padding:2px 8px;cursor:pointer;border:1px solid #c9a24b66;border-radius:6px;background:transparent;color:#ffd23f">⚒ 重铸 '+GEAR_REROLL_COST+'砂</button></div>';
+  };
+  h+='<div style="margin:12px 0 4px;color:#e8bb6a;font-weight:bold">🗡 远征遗物（装备包 '+metaProgress.gear.length+'/'+GEAR_CAP+'）</div>'
+    + slotRow("weapon","武器刻印") + slotRow("charm","护符");
+  if(metaProgress.gear.length){
+    h+='<div style="max-height:180px;overflow:auto;margin-top:4px">';
+    for(const it of metaProgress.gear){
+      const Q=GEAR_QUALITIES[it.q], eq=metaProgress.equipped[it.slot]===it.id;
+      const lines=it.affixes.map(ax=>{ const D=AFFIX_DEFS.find(d=>d.id===ax.id); return D?D.n+("ⅠⅡⅢ"[ax.tier]):"?"; }).join("·");
+      h+='<div style="padding:5px 8px;margin:3px 0;border:1px solid #ffffff12;border-radius:7px;font-size:12px;color:'+Q.c+'">'+gearItemName(it)
+        +(eq?' <span style="color:#8ce6a0">·已装备</span>':'')
+        +'<span style="float:right">'
+        +(eq?'':'<button class="mx-equip" data-id="'+it.id+'" type="button" style="font:inherit;font-size:11px;padding:1px 7px;margin-right:4px;cursor:pointer;border:1px solid #ffffff2e;border-radius:6px;background:transparent;color:#f0e6d0">装备</button>')
+        +'<button class="mx-dis" data-id="'+it.id+'" type="button" style="font:inherit;font-size:11px;padding:1px 7px;cursor:pointer;border:1px solid #ffffff2e;border-radius:6px;background:transparent;color:#c9b98a">拆解+'+GEAR_DUST[it.q]+'</button></span></div>';
+    }
+    h+='</div>';
+  } else h+='<div style="padding:6px 10px;font-size:12px;color:#7d7264">装备包空空——完成远征首通即掉落一件远征遗物</div>';
   h+='<div style="margin-top:12px;color:#c9b98a;font-size:12px">按 <b style="color:#ffd23f">I</b> 或 Esc 关闭</div>';
   card.innerHTML=h;
   card.querySelectorAll(".mx-tier").forEach(el=>{
     el.onclick=()=>{ const t=MASTERY_TREES.find(t=>t.k===el.dataset.k); if(t && masteryLevel(t.k)===+el.dataset.i) buyMastery(t.k); };
   });
+  card.querySelectorAll(".mx-equip").forEach(el=>el.onclick=()=>equipGearItem(el.dataset.id));
+  card.querySelectorAll(".mx-dis").forEach(el=>el.onclick=()=>disassembleGearItem(el.dataset.id));
+  card.querySelectorAll(".mx-reroll").forEach(el=>el.onclick=()=>rerollGearItem(el.dataset.id));
 }
 function openMetaPanel(){ const el=document.getElementById("meta-panel"); if(!el) return false;
   renderMeta(); el.classList.add("on"); el.setAttribute("aria-hidden","false");
   if(document.pointerLockElement) document.exitPointerLock(); return true; }
 function closeMetaPanel(){ const el=document.getElementById("meta-panel"); if(!el) return false;
   const was=el.classList.contains("on"); el.classList.remove("on"); el.setAttribute("aria-hidden","true"); return was; }
+
+/* ---- 🗡 远征遗物与装备词缀 (第二十八轮·本地, PR B): 掉落/穿戴/拆解/重铸, 效果只在与 getExpeditionModifiers 中聚合且仅在远征内生效 ---- */
+const AFFIX_DEFS=[
+  {id:"sand_edge",   slot:"weapon", group:"melee_damage",  n:"砂刃",     tiers:[0.03,0.05,0.07], fmt:v=>"远征近战伤害 +"+Math.round(v*100)+"%"},
+  {id:"afterimage",  slot:"weapon", group:"dodge_proc",    n:"回砂余势", tiers:[0.05,0.08,0.11], fmt:v=>"精准反击追加 +"+Math.round(v*100)+"% 伤害"},
+  {id:"breach_seal", slot:"weapon", group:"elite_damage",  n:"破甲印",   tiers:[0.04,0.06,0.08], fmt:v=>"远征对精英/首领伤害 +"+Math.round(v*100)+"%"},
+  {id:"ember_sun",   slot:"weapon", group:"burn",          n:"烈阳余烬", tiers:[0.4,0.7,1.0],   fmt:v=>"烈阳灼烧 +"+v.toFixed(1)+" 秒"},
+  {id:"tomb_echo",   slot:"charm",  group:"damage_reduction", n:"守墓回响", tiers:[0.06,0.09,0.12], fmt:v=>"远征内每波首次受击 -"+Math.round(v*100)+"%"},
+  {id:"dune_step",   slot:"charm",  group:"sandstep_cdr",  n:"沙步回声", tiers:[0.10,0.15,0.20], fmt:v=>"远征内沙步冷却 -"+v.toFixed(2)+" 秒（总缩减封顶 35%）"},
+  {id:"wall_eye",    slot:"charm",  group:"clue",          n:"壁画慧眼", tiers:[1,1,2],          fmt:v=>"机关线索额外 +"+v+" 条排除式提示"},
+  {id:"collector",   slot:"charm",  group:"loot_bonus",    n:"收藏者印记", tiers:[0.03,0.05,0.07], fmt:v=>v+" 概率额外搜刮（每局至多一次）"},
+  {id:"depart_grace",slot:"charm",  group:"heal_complete", n:"撤离者恩典", tiers:[2,3,4],          fmt:v=>"通关时回复 "+v+" 点生命"},
+];
+const GEAR_QUALITIES=[
+  {k:"old",    n:"旧制", c:"#c9b98a", cnt:1, tiers:[0]},
+  {k:"fine",   n:"精制", c:"#9fd8ff", cnt:1, tiers:[1]},
+  {k:"ancient",n:"古代", c:"#e8bb6a", cnt:2, tiers:[0,1]},
+  {k:"mythic", n:"神话", c:"#e050e0", cnt:3, tiers:[1,1,2]},
+];
+const GEAR_DUST=[1,2,4,8], GEAR_CAP=24, GEAR_REROLL_COST=3;
+function validGearItem(it){
+  if(!it || typeof it!=="object" || typeof it.id!=="string" || it.id.length>40) return false;
+  if(it.slot!=="weapon" && it.slot!=="charm") return false;
+  if(!Number.isInteger(it.q) || it.q<0 || it.q>=GEAR_QUALITIES.length) return false;
+  if(!Array.isArray(it.affixes) || it.affixes.length<1 || it.affixes.length>3) return false;
+  const groups=[]; 
+  for(const ax of it.affixes){
+    const D=AFFIX_DEFS.find(d=>d.id===(ax&&ax.id));
+    if(!D || D.slot!==it.slot || !Number.isInteger(ax.tier) || ax.tier<0 || ax.tier>2) return false;
+    if(groups.indexOf(D.group)>=0) return false; groups.push(D.group);
+  }
+  return true;
+}
+function getExpeditionModifiers(){
+  const mods={melee:0,elite:0,firstHit:0,sandstepCdr:0,burn:0,clue:0,extraLoot:0,healComplete:0,afterimage:0};
+  if(!ruinExpeditionState.active) return mods;          // 词缀只在远征内生效(隔离舱)
+  for(const slot of ["weapon","charm"]){
+    const it=metaProgress.gear.find(g=>g.id===metaProgress.equipped[slot]); if(!it) continue;
+    for(const ax of it.affixes){
+      const D=AFFIX_DEFS.find(d=>d.id===ax.id); if(!D) continue;
+      const v=D.tiers[ax.tier]||0;
+      if(D.group==="melee_damage") mods.melee+=v;
+      else if(D.group==="dodge_proc") mods.afterimage+=v;
+      else if(D.group==="elite_damage") mods.elite+=v;
+      else if(D.group==="burn") mods.burn+=v;
+      else if(D.group==="damage_reduction") mods.firstHit+=v;
+      else if(D.group==="sandstep_cdr") mods.sandstepCdr+=v;
+      else if(D.group==="clue") mods.clue+=v;
+      else if(D.group==="loot_bonus") mods.extraLoot+=v;
+      else if(D.group==="heal_complete") mods.healComplete+=v;
+    }
+  }
+  mods.firstHit=Math.min(0.15,mods.firstHit);           // 减伤合计封顶 15%
+  mods.elite=Math.min(0.15,mods.elite);
+  return mods;
+}
+function rollExpeditionGear(runId){                      // 确定性掉落: 种子+局号 → 重载不换装备
+  const r=n=>hashRuin(SEED,runId,n);
+  let q; const roll=r(1);
+  if(roll<0.05) q=3; else if(roll<0.25) q=2; else if(roll<0.60) q=1; else q=0;
+  if(q<2){ metaProgress.pity++; if(metaProgress.pity>=4){ q=2; metaProgress.pity=0; } } else metaProgress.pity=0;   // 连续 4 次未出古代 → 保底古代
+  const Q=GEAR_QUALITIES[q], slot=r(2)<0.5?"weapon":"charm";
+  const pool=AFFIX_DEFS.filter(d=>d.slot===slot), picked=[], groups=[];
+  let guard=0;
+  while(picked.length<Q.cnt && guard++<40){
+    const D=pool[(r(10+guard)*pool.length)|0];
+    if(groups.indexOf(D.group)>=0) continue;
+    let tier=Q.tiers[picked.length%Q.tiers.length];
+    if(q===2 && picked.length===0) tier=1;               // 古代: 至少一条 II 阶
+    picked.push({id:D.id, tier}); groups.push(D.group);
+  }
+  return {id:SEED+":"+runId, slot, q, affixes:picked};
+}
+function gearItemName(it){ const Q=GEAR_QUALITIES[it.q]; const parts=it.affixes.map(ax=>{ const D=AFFIX_DEFS.find(d=>d.id===ax.id); return D?D.n+("ⅠⅡⅢ"[ax.tier]):"?"; });
+  return (it.slot==="weapon"?"🗡":"📿")+Q.n+"·"+parts.join("+"); }
+function equipGearItem(id){
+  const it=metaProgress.gear.find(g=>g.id===id); if(!it) return false;
+  metaProgress.equipped[it.slot]=id; saveMeta(); renderMeta();
+  showName("✒ 已装备 "+gearItemName(it)+"（"+it.affixes.map(ax=>{ const D=AFFIX_DEFS.find(d=>d.id===ax.id); return D?D.n:"?"; }).join("·")+"）");
+  return true;
+}
+function disassembleGearItem(id){
+  const i=metaProgress.gear.findIndex(g=>g.id===id); if(i<0) return false;
+  const it=metaProgress.gear[i], dust=GEAR_DUST[it.q];
+  metaProgress.gear.splice(i,1);
+  if(metaProgress.equipped.weapon===id) metaProgress.equipped.weapon=null;
+  if(metaProgress.equipped.charm===id) metaProgress.equipped.charm=null;
+  metaProgress.dust+=dust; saveMeta(); renderMeta();
+  showName("⚒ 拆解 "+gearItemName(it)+" → 刻印砂 +"+dust+"（共 "+metaProgress.dust+"）");
+  return true;
+}
+function rerollGearItem(id){                             // 重铸第一条词缀: 3 刻印砂, 不与剩余词缀同组, 阶位不变
+  const it=metaProgress.gear.find(g=>g.id===id); if(!it || it.affixes.length<1) return false;
+  if(metaProgress.dust<GEAR_REROLL_COST){ showName("⚒ 刻印砂不足：重铸需要 "+GEAR_REROLL_COST); return false; }
+  const old=it.affixes[0], D0=AFFIX_DEFS.find(d=>d.id===old.id);
+  const keep=it.affixes.slice(1).map(ax=>AFFIX_DEFS.find(d=>d.id===ax.id).group);
+  const pool=AFFIX_DEFS.filter(d=>d.slot===it.slot && d.group!==D0.group && keep.indexOf(d.group)<0);
+  if(!pool.length) return false;
+  const seedNum=parseInt(id.split(":")[1],10)||0;
+  const D=pool[(hashRuin(SEED,seedNum,metaProgress.dust)*pool.length)|0];
+  metaProgress.dust-=GEAR_REROLL_COST;
+  it.affixes=[{id:D.id, tier:old.tier}].concat(it.affixes.slice(1));
+  saveMeta(); renderMeta();
+  showName("⚒ 重铸完成："+D.n+("ⅠⅡⅢ"[old.tier])+"（刻印砂剩 "+metaProgress.dust+"）");
+  return true;
+}
 /* 段间路线选择面板: 解谜后弹出, 稳扎(常规三波) vs 险中求胜(精英三波, 回响+1); Esc 默认稳扎不惩罚 */
 function renderExpeditionRoute(){
   const card=document.querySelector("#expedition-route .sx-card"); if(!card) return;
@@ -14200,8 +14383,11 @@ window.__game = {
   get ruinExpedition(){ return { active:ruinExpeditionState.active, phase:ruinExpeditionState.phase, wave:ruinExpeditionState.wave, runId:ruinExpeditionState.runId, route:ruinExpeditionState.route, completed:ruinExpeditionSave.completed, runs:ruinExpeditionSave.runs.slice() }; },
   startRuinExpedition:()=>startRuinExpedition(), abortRuinExpedition:()=>abortRuinExpedition(), pickExpeditionRoute:(r)=>pickExpeditionRoute(r),
   get meta(){ return { echoes:metaProgress.echoes, streak:metaProgress.streak, mastery:Object.assign({},metaProgress.mastery),
-    total:MASTERY_TREES.reduce((a,t)=>a+masteryLevel(t.k),0), costs:MASTERY_TIER_COST.slice() }; },
+    total:MASTERY_TREES.reduce((a,t)=>a+masteryLevel(t.k),0), costs:MASTERY_TIER_COST.slice(),
+    gear:metaProgress.gear.map(g=>({id:g.id, slot:g.slot, q:g.q, affixes:g.affixes.map(a=>({id:a.id, tier:a.tier}))})),
+    equipped:Object.assign({},metaProgress.equipped), dust:metaProgress.dust, pity:metaProgress.pity, mods:getExpeditionModifiers() }; },
   buyMastery:(k)=>buyMastery(k),
+  rollGear:(runId)=>rollExpeditionGear(runId|0), equipGear:(id)=>equipGearItem(id), disGear:(id)=>disassembleGearItem(id), rerollGear:(id)=>rerollGearItem(id),
   setEchoes:(n)=>{ metaProgress.echoes=Math.max(0,n|0); saveMeta(); return metaProgress.echoes; },
   setMastery:(k,n)=>{ normalizeMeta({echoes:metaProgress.echoes, mastery:Object.assign({},metaProgress.mastery,{[k]:n}), streak:metaProgress.streak}); saveMeta(); return masteryLevel(k); },
   get ferris(){ const s=nearStructure(["park"],FERRIS_RANGE); return { phase:ferrisPhase, near:!!s, wheel:s?ferrisWheelAt(s):null, queue:ferrisRebuildQ.length }; },
@@ -15304,6 +15490,88 @@ function selftest(){
         mobs.length=0; for(const m of snapMob5) mobs.push(m);
         sandStepState.evadeT=snapSt5.evadeT; sandStepState.cd=snapSt5.cd; sandStepState.feedbackT=snapSt5.feedbackT;
         updateHearts(); updateXPHUD(); updateBuffHUD();
+      }
+    }
+
+    // 8q6. 远征遗物与词缀(PR B): 确定性掉落/保底/穿戴拆解重铸/聚合封顶/战斗接线/幂等
+    {
+      closeRuinGlyphPanel("selftest-reset"); closeExpeditionRoutePanel(true); abortRuinExpedition(); closeMetaPanel();
+      const snapM6={ echoes:metaProgress.echoes, streak:metaProgress.streak, mastery:Object.assign({},metaProgress.mastery),
+        gear:JSON.parse(JSON.stringify(metaProgress.gear)), equipped:Object.assign({},metaProgress.equipped), dust:metaProgress.dust, pity:metaProgress.pity };
+      const snapH6={hp,maxHp,armor,xp}, snapSt6={evadeT:sandStepState.evadeT,cd:sandStepState.cd};
+      const snapMob6=mobs.slice(), sunblade6=sunblade;
+      blessT=0; blessKind=""; mythicState.done=mythicState.done.filter(c=>c!=="greece"); armor=0;
+      try{
+        normalizeMeta(null);
+        const g1=rollExpeditionGear(777), g2=rollExpeditionGear(777);
+        ok("遗物掉落: 种子+局号确定性且 id 幂等", JSON.stringify(g1)===JSON.stringify(g2) && g1.id===SEED+":777" && validGearItem(g1), "id="+g1.id);
+        ok("遗物掉落: 品质决定词缀数与阶位范围", [1,1,2,3].indexOf(g1.affixes.length)>=0 && g1.affixes.every(ax=>ax.tier<=GEAR_QUALITIES[g1.q].tiers[GEAR_QUALITIES[g1.q].tiers.length-1]) &&
+           new Set(g1.affixes.map(ax=>AFFIX_DEFS.find(d=>d.id===ax.id).group)).size===g1.affixes.length, "q="+g1.q+" n="+g1.affixes.length);
+        // 保底: 连续 4 次未出古代 → 第 4 次强制古代以上
+        normalizeMeta(null); metaProgress.pity=3;
+        let forced=null; for(let i=0;i<8 && !forced;i++){ const it=rollExpeditionGear(9000+i); if(it.q>=2) forced=it; }
+        ok("遗物保底: 连开 4 箱必出古代以上且重置计数", forced && forced.q>=2 && metaProgress.pity===0, "q="+(forced&&forced.q));
+        normalizeMeta(null);
+        // 穿戴/拆解/重铸
+        const wpn={id:"test:w1", slot:"weapon", q:3, affixes:[{id:"sand_edge",tier:2},{id:"afterimage",tier:1},{id:"breach_seal",tier:1}]};
+        const chm={id:"test:c1", slot:"charm", q:2, affixes:[{id:"tomb_echo",tier:1},{id:"dune_step",tier:2}]};
+        const w2={id:"test:w2", slot:"weapon", q:1, affixes:[{id:"ember_sun",tier:1}]};
+        metaProgress.gear=[wpn,chm,w2]; metaProgress.dust=5;
+        ok("穿戴: 武器/护符分槽位, 跨槽拒绝归一", equipGearItem("test:w1") && equipGearItem("test:c1") && metaProgress.equipped.weapon==="test:w1" && metaProgress.equipped.charm==="test:c1");
+        normalizeMeta(JSON.parse(localStorage.getItem(META_SAVE_KEY)));
+        ok("穿戴持久化且归一校验通过", metaProgress.equipped.weapon==="test:w1" && metaProgress.gear.length===3);
+        // 聚合: 仅远征内生效 + 封顶
+        ruinExpeditionState.active=true; ruinExpeditionState.phase="combat"; ruinExpeditionState.waves=RUIN_EXPEDITION_WAVES; ruinExpeditionState.wave=1; ruinExpeditionState.alive=[]; ruinExpeditionState.nextT=99; ruinExpeditionState.firstHitUsed=false;
+        let md=getExpeditionModifiers();
+        ok("词缀聚合: 近战+7% 反击+8% 首击-9% 沙步CDR-0.20", Math.abs(md.melee-0.07)<1e-9 && Math.abs(md.afterimage-0.08)<1e-9 && Math.abs(md.firstHit-0.09)<1e-9 && Math.abs(md.sandstepCdr-0.20)<1e-9, JSON.stringify(md));
+        // 战斗接线: hurtMob 伤害放大(近战+精英)
+        mobs.length=0;
+        spawnTrialMob("scarab", Math.floor(player.x)+3, Math.floor(player.y), Math.floor(player.z)+3, true);   // 精英
+        const em6=mobs[mobs.length-1]; em6.hp=em6.maxHp=99999;
+        hurtMob(em6, 100, 0, 0, true);
+        const dmgElite=em6.maxHp-em6.hp;
+        em6.hp=em6.maxHp=99999; hurtMob(em6, 100, 0, 0, true);
+        const dmgElite2=em6.maxHp-em6.hp;
+        ok("词缀接线: hurtMob 近战+7% 且精英再+6%（100→113）", dmgElite===113 && dmgElite2===113, "d1="+dmgElite+" d2="+dmgElite2);
+        // 首击减伤: 每波一次
+        sandStepState.evadeT=0; hp=maxHp=999;
+        let h61=hp; foeStrike(100,0,0,null); const fh1=h61-hp;
+        let h62=hp; foeStrike(100,0,0,null); const fh2=h62-hp;
+        ok("词缀接线: 每波首次受击 -9%（100→91），第二次全额", fh1===91 && fh2===100, "fh1="+fh1+" fh2="+fh2);
+        ruinExpeditionState.firstHitUsed=false;
+        // 沙步 CDR 封顶: 熟练3(1.2)+稳足(0.2)+词缀Ⅲ(0.2)=1.6 > 35%×4.5=1.575 → 钳到 2.925
+        const cmSnap6=Object.assign({},combatMastery), dsSnap6=metaProgress.mastery.duneStrider;
+        combatMastery.step=3; metaProgress.mastery.duneStrider=1;
+        const cdCapped=sandStepCd();
+        combatMastery.step=cmSnap6.step; metaProgress.mastery.duneStrider=dsSnap6;
+        ok("沙步回声: 冷却总缩减封顶 35%（4.5→2.925）", Math.abs(cdCapped-SANDSTEP_CD*0.65)<1e-9, "cd="+cdCapped.toFixed(3));
+        // 灼烧延长: 换装 ember_sun 武器
+        const eqOld6=metaProgress.equipped.weapon;
+        equipGearItem("test:w2");
+        sunblade=true; em6.hp=em6.maxHp=99999; sunbladeIgnite(em6);
+        ok("烈阳余烬: 远征内灼烧 4→4.7 秒", Math.abs(em6.sunBurn-(SUN_BURN+0.7))<1e-9, "burn="+em6.sunBurn.toFixed(2));
+        sunblade=sunblade6; metaProgress.equipped.weapon=eqOld6;
+        // 反击追加
+        ruinExpeditionState.active=false;   // 关远征: 聚合归零(隔离舱验证)
+        md=getExpeditionModifiers();
+        ok("隔离舱: 远征未激活时词缀聚合全零", md.melee===0 && md.afterimage===0 && md.firstHit===0 && md.sandstepCdr===0, JSON.stringify(md));
+        ruinExpeditionState.active=true;
+        // 拆解/重铸
+        disassembleGearItem("test:c1");
+        ok("拆解: 古代→刻印砂+4 且卸下引用", metaProgress.dust===9 && metaProgress.gear.length===2 && metaProgress.equipped.charm===null);
+        const dustBefore6=metaProgress.dust, g1Old=JSON.stringify(metaProgress.gear[0].affixes);
+        rerollGearItem("test:w1");
+        const g1New=metaProgress.gear[0].affixes;
+        ok("重铸: 3 砂换第一条词缀(不同组、阶位不变)", metaProgress.dust===dustBefore6-GEAR_REROLL_COST && g1New.length===3 && g1New[0].id!=="sand_edge" && g1New[0].tier===2 && JSON.stringify(g1New)!==g1Old, "new0="+g1New[0].id);
+        normalizeMeta(null);
+      } finally {
+        metaProgress.echoes=snapM6.echoes; metaProgress.streak=snapM6.streak; metaProgress.mastery=snapM6.mastery;
+        metaProgress.gear=snapM6.gear; metaProgress.equipped=snapM6.equipped; metaProgress.dust=snapM6.dust; metaProgress.pity=snapM6.pity; saveMeta();
+        hp=snapH6.hp; maxHp=snapH6.maxHp; armor=snapH6.armor; xp=snapH6.xp;
+        sandStepState.evadeT=snapSt6.evadeT; sandStepState.cd=snapSt6.cd;
+        abortRuinExpedition(); closeRuinGlyphPanel("8q6-cleanup"); closeMetaPanel(); closeExpeditionRoutePanel(true);
+        mobs.length=0; for(const m of snapMob6) mobs.push(m);
+        sunblade=sunblade6; updateHearts(); updateBuffHUD();
       }
     }
 

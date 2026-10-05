@@ -2,6 +2,23 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-10-04 — 沙海奇境 第二十八轮·本地：远征遗物与装备词缀（PR B + 轻量接线）
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only. 按《SANDSEA-META-GROWTH-AFFIX-DESIGN-2026-10-04.md》PR B 落地，并接上 PR C 的最小战斗接线。词缀数据进 `sandsea_meta_v1`（不新增方块/快捷键/热栏位）。
+
+| Change | Player-visible behavior |
+| --- | --- |
+| 🎁 远征遗物掉落 | 远征**首通**掉落一件遗物（武器刻印/护符二选一槽位），品质roll：神话5% / 古代20% / 精制35% / 旧制40%；**连开 4 箱未出古代则第 4 箱保底古代以上**。掉落由 种子+局号 确定性生成——重载/重复结算不会换装备（幂等）。 |
+| 🗡 四档品质 | 旧制=1条Ⅰ阶 · 精制=1条Ⅱ阶 · 古代=2条(含1条Ⅱ阶) · 神话=3条。词缀组不重复。 |
+| ✒ 词缀池（9条） | 武器：砂刃(近战+3/5/7%)、回砂余势(精准反击追加+5/8/11%)、破甲印(对精英+4/6/8%)、烈阳余烬(灼烧+0.4/0.7/1.0s)；护符：守墓回响(每波首击-6/9/12%)、沙步回声(沙步CDR-0.10/0.15/0.20s)、壁画慧眼(线索+1/1/2条)、收藏者印记(+3/5/7%概率额外搜刮)、撤离者恩典(通关回2/3/4血)。 |
+| ⚙ 封顶 | 减伤合计 ≤15%；精英伤害 ≤15%；沙步冷却**总缩减**(熟练+稳足+词缀) ≤基础35%（4.5s → 最低 2.925s）。聚合只在 `getExpeditionModifiers()` 一处计算。 |
+| ⚔ 战斗接线 | 仅远征内生效：`hurtMob`（近战/精英伤害）、`sunbladeIgnite`（灼烧时长）、`sandRiposteDamage`（反击追加）、`sandStepCd`（冷却）、`foeStrike`（每波首击减伤，开新波重置）、结算（撤离恩典回血/收藏者印记搜刮）。 |
+| 🎒 装备管理（按 I） | I 面板新增装备区：穿戴/卸下、拆解成刻印砂（旧1/精2/古4/神8）、3砂重铸第一条词缀（不与剩余组冲突、阶位不变）；装备包上限 24 件，满了自动拆解。 |
+
+**How:** `AFFIX_DEFS/GEAR_QUALITIES/GEAR_DUST/GEAR_CAP/GEAR_REROLL_COST`；`validGearItem`（白名单+组去重+槽位校验）与 `normalizeMeta` 扩展（gear/equipped/dust/pity，equipped 必须指向同槽位背包物品）；`rollExpeditionGear(runId)`（hashRuin 确定性 + pity）；`getExpeditionModifiers()`（单一聚合口，远征未激活全零）；钩子——`hurtMob`（局部放大，`m.elite||m.def.boss`）、`sunbladeIgnite`、`sandRiposteDamage`（extra 独立于 riposteCap）、`sandStepCd`（末端 65% 钳制）、`foeStrike`（`firstHitUsed` 每波重置）、`claimRuinExpeditionReward`（首通掉落+恩典+搜刮）；`equipGearItem/disassembleGearItem/rerollGearItem` + `renderMeta` 装备区；`window.__game.meta` 扩展 + `rollGear/equipGear/disGear/rerollGear`。
+
+**Verification:** `node tools/headless.mjs selftest` **433/433** 于默认种子、`?seed=424242`、`?seed=2718281`（新增 13 条：掉落确定性+幂等 id、品质→词缀数/组去重、保底触发与重置、穿戴分槽+持久化归一、聚合数值、hurtMob 113 精确伤害、每波首击 91→100、CDR 35% 钳制、灼烧 4.7、隔离舱全零、拆解+4、重铸换组保阶）。数值平衡与真人手感待点测；词缀只在远征内生效（隔离舱断言锁定）。
+
 ## 2026-10-04 — 沙海奇境 第二十七轮·本地：遗迹回响 + 局外专精树（PR A）+ 远征段间路线选择
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) only. 按《SANDSEA-META-GROWTH-AFFIX-DESIGN-2026-10-04.md》PR A 落地：只做专精与经济，**不做随机装备词缀**。新增独立存档键 `sandsea_meta_v1`（不在 `sandsea_save_v1` 内）。
