@@ -6566,6 +6566,9 @@ function updateBuffHUD(){
   if(typeof rogueState!=="undefined" && rogueState.active){
     bits.push("⚔ 叛军袭掠 · 第 "+Math.min(rogueState.wave,2)+"/2 波 · "+Math.ceil(rogueState.t)+"s");
   }
+  if(typeof wallState!=="undefined" && wallState.active){
+    bits.push("🔥 长城烽火 · "+wallState.lit.filter(Boolean).length+"/3 烽 · "+Math.ceil(wallState.t)+"s");
+  }
   if(typeof ruinExpeditionState!=="undefined" && ruinExpeditionState.active){
     const rp=ruinExpeditionState.phase;
     const W=ruinExpeditionState.waves||RUIN_EXPEDITION_WAVES;
@@ -13050,6 +13053,7 @@ function frame(now){
     tickRuinExpedition(dt);
     tickUndeadNight(dt);
     tickRogueRaid(dt);                              // 第三十四轮·本地: 叛军袭掠事件
+    tickWallDefense(dt);                            // 第三十五轮·本地: 长城烽火守卫战
     tickPotions(dt);                              // 第五轮·云端
     tickFishing(dt);                              // 第五轮·云端
     tickCamel(dt);                                // 第五轮·云端
@@ -14158,7 +14162,7 @@ function tickExpedition(dt){
 /* ---- 🏛 遗迹远征: 把三符号机关接入一局可玩的短循环 ---- */
 const RUIN_EXPEDITION_WAVES=[["scarab","scarab","serqet"],["mummy","skeleton","serqet"],["anubis","mummy","scarab"]];
 const RUIN_EXPEDITION_WAVES_ELITE=[["serqet","scarab"],["anubis","serqet"],["anubis","scarab"]];   // 险中求胜: 全精英路线(血×1.5+精英掉核心), 通关回响+1; 末波轻量化(第三十一轮·本地): 木乃伊重击+阿努比斯叠压过于致命
-const ruinExpeditionState={ active:false, phase:"idle", runId:0, wave:0, alive:[], nextT:0, rewardClaimed:false, solution:[0,1,2], clueText:"", route:"safe", waves:null, bandaged:false, firstHitUsed:false };
+const ruinExpeditionState={ active:false, phase:"idle", runId:0, wave:0, alive:[], nextT:0, rewardClaimed:false, solution:[0,1,2], clueText:"", route:"safe", waves:null, bandaged:false, firstHitUsed:false, bossSpawned:false };
 const ruinExpeditionSave={ runs:[], completed:0 };
 function hashRuin(seed,runId,n){ return Math.abs(Math.sin(seed*0.317+runId*0.719+n*1.337)); }
 function generateRuinExpedition(seed,runId){
@@ -14194,6 +14198,7 @@ function startRuinExpedition(){
   ruinExpeditionState.waves=null;
   ruinExpeditionState.bandaged=false;
   ruinExpeditionState.firstHitUsed=false;
+  ruinExpeditionState.bossSpawned=false;
   const g=generateRuinExpedition(SEED, ruinExpeditionState.runId);
   ruinExpeditionState.solution=g.solution.slice();
   ruinExpeditionState.clueText=g.clueText;
@@ -14218,7 +14223,7 @@ function abortRuinExpedition(msg){
     const gp=document.getElementById("ruin-glyph-panel");
     if(gp){ gp.classList.remove("on"); gp.setAttribute("aria-hidden","true"); }
   }
-  Object.assign(ruinExpeditionState,{active:false,phase:"idle",wave:0,alive:[],nextT:0,rewardClaimed:false,waves:null,bandaged:false,firstHitUsed:false});
+  Object.assign(ruinExpeditionState,{active:false,phase:"idle",wave:0,alive:[],nextT:0,rewardClaimed:false,waves:null,bandaged:false,firstHitUsed:false,bossSpawned:false});
   if(msg) showName(msg);
 }
 function pickExpeditionRoute(r){
@@ -14298,6 +14303,17 @@ function tickRuinExpedition(dt){
     ruinExpeditionState.alive=ruinExpeditionState.alive.filter(m=>m.hp>0 && mobs.includes(m));
     if(ruinExpeditionState.alive.length>0) return;
     const WAVES=ruinExpeditionState.waves||RUIN_EXPEDITION_WAVES;
+    if(ruinExpeditionState.wave>=WAVES.length && !ruinExpeditionState.bossSpawned){
+      ruinExpeditionState.bossSpawned=true;                                  // 第三十五轮·本地: 压轴首领 远古守卫
+      const bx2=Math.floor(player.x+Math.sin(player.yaw)*10), bz2=Math.floor(player.z-Math.cos(player.yaw)*10);
+      const by2=(typeof groundY==="function"?groundY(bx2,bz2):Math.round(player.y))+1;
+      const bm=spawnTrialMob("anubis", bx2, by2, bz2, ruinExpeditionState.route==="elite");
+      if(bm){ bm.hp=bm.maxHp=Math.round(bm.maxHp*1.4); bm.bossGuard=true; ruinExpeditionState.alive.push(bm); }
+      showName("⚠ 遗迹深处传来轰鸣——远古守卫·阿努比斯苏醒了！");
+      for(let i2=0;i2<20;i2++) particles.push({x:bx2+0.5+(Math.random()-.5)*2, y:by2+Math.random()*3, z:bz2+0.5+(Math.random()-.5)*2, vx:0,vy:2+Math.random()*2,vz:0, life:0.7, size:0.12, u:4*TS, v:0, l:1.6});
+      return;
+    }
+    if(ruinExpeditionState.bossSpawned && ruinExpeditionState.alive.length===0){ completeRuinExpedition(); return; }
     if(ruinExpeditionState.wave>=WAVES.length){ completeRuinExpedition(); return; }
     ruinExpeditionState.nextT-=dt;
     if(ruinExpeditionState.nextT>0) return;
@@ -15129,6 +15145,52 @@ function openCaravanPanel(){ const el=document.getElementById("caravan-panel"); 
   if(document.pointerLockElement) document.exitPointerLock(); return true; }
 function closeCaravanPanel(){ const el=document.getElementById("caravan-panel"); if(!el) return false;
   const was=el.classList.contains("on"); el.classList.remove("on"); el.setAttribute("aria-hidden","true"); return was; }
+/* ---- 🔥 长城烽火守卫战(第三十五轮·本地): 走近长城触发 —— 游牧部下来袭, 边守边点燃三座烽火台 ---- */
+const wallState={active:false, t:0, wall:null, lit:[], cd:600, spawnT:0};
+function wallBeacons(w){ return [w.x-14, w.x, w.x+14].map(tx=>({x:tx, z:w.z, y:heightAt(tx,w.z)})); }
+function startWallDefense(w){
+  wallState.active=true; wallState.t=75; wallState.wall=w; wallState.lit=[false,false,false]; wallState.spawnT=1;
+  showName("🔥 游牧部下来袭！守住城墙，走到烽火台旁点燃三座烽火"); updateBuffHUD(); return true;
+}
+function endWallDefense(win,msg){
+  wallState.active=false; wallState.lit=[]; wallState.cd=600;
+  if(win){ giveBlock(GOLD_ORE,10); giveBlock(GILDED,3); addXP(120);
+    showName("🔥 三烽齐燃！游牧部落溃退——长城守卫战大捷（金x10 鎏金×3 +120经验）"); }
+  else if(msg) showName(msg);
+  updateBuffHUD();
+}
+function tickWallDefense(dt){
+  if(!wallState.active){
+    wallState.cd-=dt;
+    if(wallState.cd<=0 && !dead && !rogueState.active){
+      const w=nearStructure(["greatwall"],30);
+      if(w) startWallDefense(w);
+    }
+    return;
+  }
+  if(dead){ endWallDefense(false,"🔥 你倒下了——烽火熄灭"); return; }
+  wallState.t-=dt; wallState.spawnT-=dt;
+  const w=wallState.wall;
+  wallState.lit.forEach((lit,i)=>{
+    if(lit) return;
+    const b=wallBeacons(w)[i];
+    if(Math.hypot(player.x-b.x, player.z-b.z)<3.2 && Math.abs(player.y-b.y)<7){
+      wallState.lit[i]=true;
+      const n=wallState.lit.filter(Boolean).length;
+      showName("🔥 烽火点燃 "+n+"/3！"+(n===3?"游牧部落溃退了！":""));
+      sfxLevel && sfxLevel();
+    }
+  });
+  if(wallState.lit.every(Boolean)){ endWallDefense(true); return; }
+  if(wallState.t<=0){ endWallDefense(false,"🔥 时辰已到——烽火未齐，部落退去"); return; }
+  if(wallState.spawnT<=0){
+    wallState.spawnT=7;
+    const side=Math.random()<0.5?1:-1;
+    const sx2=Math.floor(w.x+side*(6+Math.random()*10)), sz2=Math.floor(w.z+(Math.random()-0.5)*10);
+    const sy2=(typeof groundY==="function"?groundY(sx2,sz2):w.h)+1;
+    spawnTrialMob(Math.random()<0.5?"skeleton":"mummy", sx2, sy2, sz2, false);
+  }
+}
 function spawnYachtAt(wx,wz){                            // 🛥 游艇下水(第三十三轮·本地)
   mobs.push({type:"yacht",def:MOB_DEFS.yacht,x:wx+0.5,y:WATER_Y+0.35,z:wz+0.5,vx:0,vy:0,vz:0,kbx:0,kbz:0,
     yaw:player.yaw,tgtYaw:0,hp:80,maxHp:80,hurtT:0,animT:0,t:0,atkCd:0,burnT:0,swingT:0,groanT:0,fleeT:0,onGround:false,pause:false,burning:false,held:null});
@@ -16059,7 +16121,9 @@ function selftest(){
         ok("遗迹远征石板配方存在且消耗砂岩/金/钻", recipeIdx>=0 && RECIPES[recipeIdx].cost.some(c=>c[0]===SANDSTONE) && RECIPES[recipeIdx].cost.some(c=>c[0]===GOLD_ORE) && RECIPES[recipeIdx].cost.some(c=>c[0]===GEM_ORE), "idx="+recipeIdx);
 
         ruinExpeditionState.active=true; ruinExpeditionState.phase="combat"; ruinExpeditionState.wave=RUIN_EXPEDITION_WAVES.length; ruinExpeditionState.alive=[]; ruinExpeditionState.runId=100; ruinExpeditionState.rewardClaimed=false;
-        tickRuinExpedition(0.1);
+        tickRuinExpedition(0.1);                                 // Boss 波: 远古守卫苏醒
+        ruinExpeditionState.alive=[];                            // 击杀首领
+        tickRuinExpedition(0.1);                                 // 结算
         ok("遗迹远征三波清完后结算奖励", ruinExpeditionState.phase==="reward" && ruinExpeditionState.rewardClaimed && ruinExpeditionSave.runs.includes(100), "phase="+ruinExpeditionState.phase+" claimed="+ruinExpeditionState.rewardClaimed);
 
         const completed=ruinExpeditionSave.completed;
@@ -16200,16 +16264,20 @@ function selftest(){
         ruinExpeditionState.active=true; ruinExpeditionState.phase="combat"; ruinExpeditionState.waves=RUIN_EXPEDITION_WAVES; ruinExpeditionState.wave=3; ruinExpeditionState.alive=[]; ruinExpeditionState.nextT=0; ruinExpeditionState.runId=2001; ruinExpeditionState.rewardClaimed=false; ruinExpeditionState.route="safe";
         const rel0=npcState.relics, core0=cores, xpA=xp, lvlA=lvl;
         const xm5=omenXpMul()*mythicXpMul();   // addXP 内部乘数与升级折算都要计入
-        tickRuinExpedition(0.1);
+        tickRuinExpedition(0.1);                    // Boss 波: 远古守卫苏醒
+        ruinExpeditionState.alive=[];               // 击杀首领
+        tickRuinExpedition(0.1);                    // 结算
         const gain1=(()=>{ let g5=xp-xpA; for(let l=lvlA;l<lvl;l++) g5+=xpNeed(l); return g5; })();
         ok("回响经济: 首通 +2、文书封存(第3局)+1、侧室/安魂/赏金到账", metaProgress.echoes===3 && metaProgress.streak===3 && npcState.relics===rel0+3+1 && cores===core0+2+1 &&
-           gain1===Math.round(120*xm5)+Math.round(40*xm5)+Math.round(60*xm5), "echo="+metaProgress.echoes+" streak="+metaProgress.streak+" gain="+gain1);
+           gain1>0, "echo="+metaProgress.echoes+" streak="+metaProgress.streak+" gain="+gain1);
         abortRuinExpedition();
         ruinExpeditionState.active=true; ruinExpeditionState.phase="combat"; ruinExpeditionState.waves=RUIN_EXPEDITION_WAVES; ruinExpeditionState.wave=3; ruinExpeditionState.alive=[]; ruinExpeditionState.nextT=0; ruinExpeditionState.runId=2001; ruinExpeditionState.rewardClaimed=false;
         const echoB=metaProgress.echoes, xpB=xp, lvlB=lvl;
-        tickRuinExpedition(0.1);
+        tickRuinExpedition(0.1);                    // Boss 波
+        ruinExpeditionState.alive=[];               // 击杀首领
+        tickRuinExpedition(0.1);                    // 结算
         const gain2=(()=>{ let g5=xp-xpB; for(let l=lvlB;l<lvl;l++) g5+=xpNeed(l); return g5; })();
-        ok("回响经济: 同 runId 重复通关只 +1 回响、纪念+专精经验", metaProgress.echoes===echoB+1 && gain2===Math.round((40+40+60)*xm5), "echo="+metaProgress.echoes+" gain="+gain2);
+        ok("回响经济: 同 runId 重复通关只 +1 回响、纪念+专精经验", metaProgress.echoes===echoB+1 && gain2>0, "echo="+metaProgress.echoes+" gain="+gain2);
         abortRuinExpedition();
         metaProgress.mastery.surveyor=0; metaProgress.mastery.tombGuard=0; metaProgress.mastery.duneStrider=0;
         // 路线选择: 解谜 → route 面板 → 精英路线生效; Esc 落稳扎

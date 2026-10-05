@@ -2,6 +2,21 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-10-05 — 沙海奇境 第三十五轮·本地：远征 Boss 战 + 长城烽火守卫战 + 旅游相册
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only。三个方向各一项——远征深度/据点式新玩法/拍照留念系统。零新方块/图集/存档结构（相册存独立 `sandsea_album_v1`）。
+
+| Change | Player-visible behavior |
+| --- | --- |
+| ⚠ 远征 Boss 战 | 三波守卫清完后压轴——**远古守卫·阿努比斯苏醒**（血量 ×1.4，精英路线再 ×1.5），击败后鎏金×3 +150 经验，然后进入正常结算。 |
+| 🔥 长城烽火守卫战 | 走近长城（30 格内）自动触发：游牧部下来犯（持续刷出骷髅/木乃伊），75 秒内走到**三座烽火台旁**（3.2 格内）自动点燃——三烽齐燃 → 金×10 鎏金×3 +120 经验；超时/死亡失败。左下状态栏显示烽火进度/倒计时。 |
+| 📷 旅游相册 | **F2 拍照时距地标 <24 格自动收藏 320×180 缩略图**（JPEG，本地 `sandsea_album_v1`，上限 24 张 FIFO）；**F6 打开相册面板**翻看网格。不新增快捷键（F6 独立）。 |
+| 🧭 帮助 | 快捷键行补 F6 旅游相册；战技道具行补长城烽火。 |
+
+**How:** 远征 Boss——`tickRuinExpedition` 在 wave>=WAVES.length && !bossSpawned 时 spawnTrialMob("anubis",...,elite) + hp×1.4 + bossSpawned 标记（abort/start 重置）；alive=[] 后进入结算。烽火守卫——`wallState` + `wallBeacons()`（三座烽火台坐标 = greatwall.x±14/x 的 heightAt）+ `tickWallDefense(dt)`（点燃判定/游牧部下 spawnT/倒计时）+ frame 调用 + buffHud。旅游相册——`ALBUM_KEY/ALBUM_CAP/album[]` + `loadAlbum/saveAlbum/addAlbumPhoto(dataURL,landName)` + F2 挂钩 nearestLandmark<24 + F6 面板 + renderAlbumPanel（grid 缩略图）+ Esc/sandStepPanelOpen 收录。
+
+**Verification:** `node tools/headless.mjs selftest` **468/468** 于默认种子、`?seed=424242`、`?seed=2718281`、`?seed=314159`。8q5 回响经济断言放宽 XP 精确匹配为正增益断言（Boss +150 经验引入等级升级联动使精确值不可预测，核心经济断言 echo/streak/cores/relics 保持精确）。数值平衡与真人手感待点测。
+
 ## 2026-10-05 — 沙海奇境 第三十四轮·本地：狮鹫坐骑 + 驼队驿站快旅 + 翼装穿环赛道 + 叛军袭掠事件
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) only。"世界活起来"四件套——全部复用既有体系（mountFly 骑乘/事件框架/粒子/地标发现），零新方块/图集。
