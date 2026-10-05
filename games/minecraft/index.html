@@ -559,6 +559,7 @@
     <b>群系</b>：沙海·红土台地·干草原为主，另有盐湖·峡谷·火山·<b>晶洞高地·古代遗迹带</b><br>
     　💎 晶洞高地：地表紫晶标出入口，地下方解石洞可采　⛵ 遗迹带：沉船/商队残骸藏金<br>
     <b>地标</b>：金字塔(墓室石棺唤醒法老王Boss)·斗兽场·宫殿·绿洲·彩虹桥·机场·赛车场·陨石坑·游乐场<br>
+    　<b>🌍 世界地标</b>（草原群系随机生成）：🏯故宫 · 🏛希腊神庙 · 🖼世界美术馆(五幅名画马赛克) · 🗼埃菲尔铁塔 · ⛪科隆大教堂 · ♨罗马浴场 · 🏛白宫 · 🏯日本皇居 · 🏕蒙古包营地(旁有可驯服马群)<br>
     <b>尼罗河</b>穿过沙漠(有鱼与鳄鱼)；天上有<b>浮空岛</b>藏钻石；地底 y&lt;10 是岩浆海，越深越凶险<br>
     <b>第3晚起 Boss 轮换</b>：僵尸王 / 飞龙 / 钢铁泰坦 / 烈焰凤凰　拖动模式下移动鼠标瞄准
   </div>
@@ -1385,11 +1386,45 @@ function structureAt(sx,sz){                 // 返回 {type,x,z,h} 或 null
   else {
     const TABLE=[["city",0.02],["colosseum",0.04],["palace",0.052],["forum",0.066],["park",0.11],
                  ["bazaar",0.16],["rainbow",0.22],["racetrack",0.28],["airport",0.33],["tower",0.38],
-                 ["factory",0.45],["ruin",0.51],["farm",0.62]];
+                 ["factory",0.45],["ruin",0.50],
+                 // 第三十二轮·本地: 世界地标九连 —— 希腊神庙/故宫/白宫/埃菲尔铁塔/科隆大教堂/罗马浴场/日本皇居/蒙古包营地/世界美术馆
+                 ["parthenon",0.52],["forbidden",0.54],["whitehouse",0.56],["eiffel",0.58],["cathedral",0.60],
+                 ["baths",0.62],["impalace",0.64],["yurt",0.66],["museum",0.68],["farm",0.72]];
     type="house";
     for(const [t,thr] of TABLE) if(r<thr){ type=t; break; }
   }
   return {type,x,z,h,bio};
+}
+/* ---- 🖼 世界名画方块马赛克(第三十二轮·本地): 5 幅名画的行/调色板数据与铺贴助手(纯函数, 生成与自测共用) ----
+   每幅 rows[0] 为最上一行; 调色板字母 → 方块 id; '.' 跳过(保留墙面)。全部复用既有方块, 不占图集。 */
+const PAINTINGS={
+  starry:{ n:"星空 · 梵高", rows:[
+    "yAAyAAA","AyAAyAA","AASAAyA","AAASSAA","yASSSAA","yBASAAA","yBAAAyA"],
+    pal:{A:ICE, S:AMETHYST, y:GLOWVEIN, B:BLACKSAND} },
+  sunflower:{ n:"向日葵 · 梵高", rows:[
+    "yyAyy","ycyAy","yyycy","AycyA","AycyA","AAcAA","AAcAA"],
+    pal:{A:PLASTER_WHITE, y:GLOWVEIN, c:CLAY} },
+  wave:{ n:"神奈川冲浪里 · 北斋", rows:[
+    "AAFFAAb","AFFFFFb","AFFFAAb","FBFFFAA","BBBBBAA","BBBAAAA"],
+    pal:{A:ICE, F:PLASTER_WHITE, B:BLACKSAND, b:DARKPLANK} },
+  scream:{ n:"呐喊 · 蒙克", rows:[
+    "AAAAAy","AAAyAy","AAyyAA","AAyBAA","AyBbbA","AAyybA","AbbbbA"],
+    pal:{A:PLASTER_ROSE, B:BLACKSAND, y:GLOWVEIN, b:DARKPLANK} },
+  pearl:{ n:"戴珍珠耳环的少女 · 维米尔", rows:[
+    "bbAAAb","bAAAAb","bAAsAb","bAssGb","bAsssb","bbAssb"],
+    pal:{b:DARKPLANK, A:ICE, s:CLAY, G:GILDED} },
+  mona:{ n:"蒙娜丽莎 · 达·芬奇", rows:[
+    "AbbbbA","AbssbA","Assssb","AsAsAs","AbssbA","Abbssb","AbssbA"],
+    pal:{A:MOSSY, s:CLAY, b:DARKPLANK} },
+};
+function putMosaic(put,x0,y0,z0,alongX,rows,pal){   // rows[0]=最上行; alongX: 沿 +x 展开, 否则沿 +z
+  for(let ry=0;ry<rows.length;ry++){
+    const row=rows[rows.length-1-ry];
+    for(let c=0;c<row.length;c++){
+      const b=pal[row[c]]; if(!b) continue;
+      if(alongX) put(x0+c,y0+ry,z0,b,true); else put(x0,y0+ry,z0+c,b,true);
+    }
+  }
 }
 function buildStructures(bx,bz,put){
   const c0x=Math.floor((bx-CELL)/CELL), c1x=Math.floor((bx+CS+CELL)/CELL);
@@ -2157,6 +2192,190 @@ function drawStructure(s,put){
     // 外部管道
     for(let k=0;k<10;k++){ put(x-W-1-k,h+2,z+3,IRON_ORE,true); if(k%4===0) put(x-W-1-k,h+3,z+3,COBBLE,true); }
   }
+  else if(type==="parthenon"){
+    /* ===== 希腊神庙(帕特农): 三层大理石基座 + 8×15 多立克列柱 + 残缺山花 ===== */
+    const W=11, D=15;
+    clearAbove(x-W-2,z-D-2,x+W+2,z+D+2,h+1,h+11);
+    for(let t=0;t<3;t++){ const w=W-t, d=D-t;                 // 三层基座向内收
+      for(let X=x-w;X<=x+w;X++) for(let Z=z-d;Z<=z+d;Z++) put(X,h+t,Z,MARBLE,true); }
+    const fy=h+3;
+    for(let t=0;t<3;t++){ const y=fy+t*6, w=W-3-t;            // 外圈列柱(三段, 残缺轮廓)
+      for(let X=x-w;X<=x+w;X+=2) for(let Z=z-(D-3-t);Z<=z+(D-3-t);Z+=2){
+        const edge=Math.abs(X-x)===w-0||Math.abs(Z-z)===(D-3-t)||Math.abs(X-x)>=w-1;
+        if(!edge) continue;
+        for(let y2=y;y2<y+5;y2++) put(X,y2,Z,MARBLE,true);
+        put(X,y+5,Z,MOSSY,true);                              // 柱头风化
+      }
+    }
+    for(let X=x-5;X<=x+5;X++){ put(X,fy+18,z+D-5,MOSSY,true); put(X,fy+18,z+D-4,MOSSY,true); }   // 残存檐口
+    put(x,fy+6,z,GILDED,true);                                  // 雅典娜金像印记
+  }
+  else if(type==="forbidden"){
+    /* ===== 故宫: 朱红宫墙 + 四角楼 + 金銮殿三层檐 + 内园 ===== */
+    const W=16, D=12;
+    clearAbove(x-W-2,z-D-2,x+W+2,z+D+2,h+1,h+16);
+    for(let X=x-W;X<=x+W;X++) for(let Z=z-D;Z<=z+D;Z++) put(X,h,Z,SANDSTONE,true);   // 汉白玉台基
+    for(let X=x-W;X<=x+W;X++) for(let Z=z-D;Z<=z+D;Z++){                     // 朱红宫墙一圈
+      const edge=Math.abs(X-x)===W||Math.abs(Z-z)===D;
+      if(!edge) continue;
+      for(let y=h+1;y<=h+4;y++) put(X,y,Z,BRICK,true);
+      put(X,h+5,Z,GILDED,true);                                              // 墙头琉璃
+    }
+    for(const [tx,tz] of [[x-W,z-D],[x+W,z-D],[x-W,z+D],[x+W,z+D]]){          // 四角楼
+      for(let y=h+6;y<=h+8;y++) box(tx-1,y,tz-1,tx+1,y,tz+1,BRICK,false);
+      box(tx-2,h+9,tz-2,tx+2,h+9,tz+2,GILDED,false);
+    }
+    box(x-3,h+1,z-D+1,x+3,h+3,z-D+1,AIR,false);                              // 午门门洞
+    for(const X of [x-2,x,x+2]) for(let y=h+4;y<=h+6;y++) put(X,y,z-D+1,BRICK,true);  // 门楼墩台
+    box(x-4,h+7,z-D+1,x+4,h+7,z-D+1,GILDED,false);                           // 门楼金檐
+    box(x-7,h+1,z-4,x+7,h+4,z+4,BRICK,false);                                // 太和殿
+    for(let X=x-7;X<=x+7;X+=2) for(let y=h+1;y<=h+3;y++) put(X,y,z-4,DARKPLANK,true);  // 殿门
+    for(let t=0;t<3;t++){                                                    // 三层金檐
+      const w=8-t*2;
+      for(let X=x-w;X<=x+w;X++){ put(X,h+5+t*2,z-4-(3-t),GILDED,true); put(X,h+5+t*2,z+4+(3-t),GILDED,true); }
+      for(let Z=z-4-(3-t);Z<=z+4+(3-t);Z++){ put(x-w,h+5+t*2,Z,GILDED,true); put(x+w,h+5+t*2,Z,GILDED,true); }
+    }
+    put(x,h+11,z,GILDED,true);                                               // 宝顶
+    for(let X=x-6;X<=x+6;X++) for(let Z=z+6;Z<=z+7;Z++) put(X,h,Z,WATER,true);   // 内金水河
+    for(const bx2 of [x-5,x,x+5]) for(let Z=z+6;Z<=z+7;Z++) put(bx2,h,Z,MARBLE,true);  // 金水桥三座
+    for(let X=x-10;X<=x+10;X+=5) for(let Z=z-D+3;Z<=z+D-3;Z+=4) put(X,h+1,Z,LANTERN,true);  // 宫灯
+  }
+  else if(type==="whitehouse"){
+    /* ===== 白宫: 白灰泥主楼 + 三角楣列柱门廊 + 草坪喷泉 ===== */
+    const W=10, D=7;
+    clearAbove(x-W-3,z-D-3,x+W+3,z+D+3,h+1,h+10);
+    for(let X=x-W-2;X<=x+W+2;X++) for(let Z=z-D-2;Z<=z+D+2;Z++) put(X,h,Z,GRASS,true);   // 草坪
+    box(x-W,h+1,z-D,x+W,h+4,z+D,PLASTER_WHITE,false);                        // 主楼
+    box(x-W+1,h+1,z-D+1,x+W-1,h+3,z+D-1,AIR,false);                          // 掏空
+    for(let Z=z-D;Z<=z+D;Z+=3) for(let y=h+1;y<=h+3;y++) put(x-W-2,y,Z,PLASTER_WHITE,true);   // 侧翼
+    box(x-W-2,h+4,z-D,x-W-2,h+4,z+D,PLASTER_WHITE,false);
+    box(x-3,h+1,z+D+2,x+3,h+4,z+D+2,PLASTER_WHITE,false);                    // 门廊
+    for(const X of [x-3,x-1,x+1,x+3]) for(let y=h+1;y<=h+3;y++) put(X,y,z+D+3,MARBLE,true);   // 列柱
+    for(let X=x-4;X<=x+4;X++) put(X,h+5,z+D+3,MARBLE,true);                  // 三角楣基线
+    put(x,h+6,z+D+3,MARBLE,true); put(x-2,h+5,z+D+3,MARBLE,true); put(x+2,h+5,z+D+3,MARBLE,true);
+    box(x-2,h+1,z+2,x+2,h+1,z+4,COBBLE,false);                               // 喷泉池
+    box(x-1,h+1,z+3,x+1,h+1,z+3,WATER,false);
+    put(x,h+2,z+3,LANTERN,true);
+    for(let X=x-W+2;X<=x+W-2;X+=4) put(X,h+5,z-D,GLASS,true);                // 排窗
+  }
+  else if(type==="eiffel"){
+    /* ===== 埃菲尔铁塔: 四腿收分铁格构 + 两层平台 + 顶层天线 ===== */
+    clearAbove(x-11,z-11,x+11,z+11,h+1,h+34);
+    const H0=30;
+    for(let y=0;y<H0;y++){
+      const k=y/H0, half=Math.round(9*(1-k)+1.5);                            // 腿距随高度收分
+      for(const [sx,sz] of [[1,1],[-1,1],[1,-1],[-1,-1]]){
+        const lx=x+sx*half, lz=z+sz*half;
+        put(lx,h+1+y,lz,METAL,true);
+      }
+      if(y%3===0){                                                            // 每三层一圈方形横撑
+        for(let t=-half;t<=half;t++){ put(x+t,h+1+y,z+half,METAL,true); put(x+t,h+1+y,z-half,METAL,true);
+                                     put(x+half,h+1+y,z+t,METAL,true); put(x-half,h+1+y,z+t,METAL,true); }
+      }
+    }
+    for(const py of [12,20]){                                                 // 两层观景平台
+      for(let X=x-4;X<=x+4;X++) for(let Z=z-4;Z<=z+4;Z++) put(X,h+1+py,Z,METAL,true);
+      for(let X=x-4;X<=x+4;X++) { put(X,h+2+py,z-4,METAL,true); put(X,h+2+py,z+4,METAL,true); }
+      for(let Z=z-3;Z<=z+3;Z++) { put(x-4,h+2+py,Z,METAL,true); put(x+4,h+2+py,Z,METAL,true); }
+      put(x,h+2+py,z,LANTERN,true);
+    }
+    for(let y=H0;y<H0+4;y++) put(x,h+1+y,z,METAL,true);                       // 塔身延伸
+    put(x,h+1+H0+4,z,NEON,true);                                              // 顶灯
+  }
+  else if(type==="cathedral"){
+    /* ===== 科隆大教堂: 双塔尖顶 + 玫瑰窗 + 飞扶壁 ===== */
+    const W=8, D=14;
+    clearAbove(x-W-2,z-D-2,x+W+2,z+D+2,h+1,h+32);
+    for(let X=x-W;X<=x+W;X++) for(let Z=z-D;Z<=z+D;Z++){                      // 中厅与侧廊
+      put(X,h,Z,COBBLE,true);
+      if(Math.abs(X-x)>2){ for(let y=h+1;y<=h+9;y++) put(X,y,Z,BASALT,true); }
+      else { for(let y=h+1;y<=h+12;y++) put(X,y,Z,BASALT,true); }
+    }
+    box(x-1,h+1,z-D+2,x+1,h+9,z+D-2,AIR,false);                               // 中厅掏空
+    for(let Z=z-D+4;Z<=z+D-4;Z+=5){ put(x-W,h+5,Z,AMETHYST,true); put(x+W,h+5,Z,AMETHYST,true); }  // 尖拱窗
+    put(x,h+10,z-D+3,GLOWVEIN,true);                                          // 玫瑰窗
+    for(const sx of [-1,1]){                                                  // 双塔
+      const tx=x+sx*5;
+      for(let y=h+13;y<=h+22;y++){ const half=Math.max(1,3-Math.floor((y-h-13)/4));
+        for(let X=tx-half;X<=tx+half;X++) for(let Z=z-D-1;Z<=z-D+1+ (half-1);Z++) put(X,y,Z,BASALT,true); }
+      for(let y=h+23;y<=h+28;y++){ const half=Math.max(0,2-Math.floor((y-h-23)/2));
+        for(let X=tx-half;X<=tx+half;X++) for(let Z=z-D-1;Z<=z-D+1;Z++) put(X,y,Z,BASALT,true); }
+      put(tx,h+29,z-D,GLOWVEIN,true);                                         // 塔尖圣光
+    }
+    for(let Z=z-D+6;Z<=z+D-4;Z+=6) for(let y=h+6;y<h+10;y++) put(x+W+1,y,Z,BASALT,true);  // 飞扶壁
+    for(let X=x-2;X<=x+2;X++) put(X,h+13,z-D+6,DARKPLANK,true);
+  }
+  else if(type==="baths"){
+    /* ===== 罗马浴场·温泉: 大理石浴厅 + 三温池(一池地热) + 列柱回廊 ===== */
+    const W=11, D=8;
+    clearAbove(x-W-2,z-D-2,x+W+2,z+D+2,h+1,h+9);
+    for(let X=x-W;X<=x+W;X++) for(let Z=z-D;Z<=z+D;Z++) put(X,h,Z,MARBLE,true);   // 大理石地面
+    for(const [px,pz,pw,pd,hot] of [[x-6,z-3,3,3,false],[x+6,z-3,3,3,true],[x,z+4,4,2,false]]){
+      for(let X=px-pw;X<=px+pw;X++) for(let Z=pz-pd;Z<=pz+pd;Z++) put(X,h,Z,MARBLE,true);   // 池沿
+      for(let X=px-pw+1;X<=px+pw-1;X++) for(let Z=pz-pd+1;Z<=pz+pd-1;Z++){ put(X,h,Z,MARBLE,true); put(X,h+1,Z,WATER,false); }
+      if(hot) for(let X=px-pw+1;X<=px+pw-1;X++) for(let Z=pz-pd+1;Z<=pz+pd-1;Z++) put(X,h-0===h?h-1:h-1,Z,MAGMA,true);   // 地热池底
+    }
+    for(let X=x-W+2;X<=x+W-2;X+=4){ for(let y=h+1;y<=h+4;y++){ put(X,y,z-D+1,MARBLE,true); put(X,y,z+D-1,MARBLE,true); }
+      put(X,h+5,z-D+1,GILDED,true); put(X,h+5,z+D-1,GILDED,true); }
+    for(const [lx,lz] of [[x-W+2,z-D+2],[x+W-2,z-D+2],[x-W+2,z+D-2],[x+W-2,z+D-2]]) put(lx,h+2,lz,LANTERN,true);
+  }
+  else if(type==="impalace"){
+    /* ===== 日本皇居·天守阁: 石垣基座 + 白壁木骨三层 + 铜瓦大檐 + 庭院水池 ===== */
+    const W=12, D=10;
+    clearAbove(x-W-2,z-D-2,x+W+2,z+D+2,h+1,h+18);
+    for(let X=x-W;X<=x+W;X++) for(let Z=z-D;Z<=z+D;Z++) put(X,h,Z,COBBLE,true);   // 石垣
+    for(let t=0;t<3;t++){                                                         // 三层天守
+      const w=6-t*2, d=5-t*2, y0=h+1+t*5;
+      box(x-w,y0,z-d,x+w,y0+3,z+d,PLASTER_WHITE,false);
+      for(let X=x-w;X<=x+w;X+=2) for(let y=y0;y<=y0+3;y++) put(X,y,z-d,DARKPLANK,true);
+      for(let Z=z-d;Z<=z+d;Z+=2) for(let y=y0;y<=y0+3;y++) put(x-w,y,Z,DARKPLANK,true);
+      for(let X=x-w-1;X<=x+w+1;X++){ put(X,y0+4,z-d-1,ROOFTILE,true); put(X,y0+4,z+d+1,ROOFTILE,true); }
+      for(let Z=z-d-1;Z<=z+d+1;Z++){ put(x-w-1,y0+4,Z,ROOFTILE,true); put(x+w+1,y0+4,Z,ROOFTILE,true); }
+      box(x-w-1,y0+5,z-d-1,x+w+1,y0+5,z+d+1,GILDED,false);
+      box(x-w+1,y0+1,z-d+1,x+w-1,y0+3,z+d-1,AIR,false);
+    }
+    box(x-2,h+1,z+D-2,x+2,h+2,z+D-2,AIR,false);                                   // 大门
+    for(let X=x-5;X<=x+5;X++) for(let Z=z-D+4;Z<=z+D-2;Z++) if((X+Z)%2===0) put(X,h,Z,MOSSY,true);  // 庭院苔石
+    box(x+6,h+1,z+2,x+9,h+1,z+5,WATER,false);                                     // 庭院水池
+    put(x-4,h+1,z-3,SALTCRYSTAL,true);                                            // 庭院石灯
+  }
+  else if(type==="yurt"){
+    /* ===== 蒙古包营地: 三顶毡包 + 篝火 + 拴马杆(马匹由 trySpawns 在附近刷) ===== */
+    const R=11;
+    clearAbove(x-R,z-R,x+R,z+R,h+1,h+6);
+    for(let X=x-R;X<=x+R;X++) for(let Z=z-R;Z<=z+R;Z++) if(hash2(X,Z)<0.12) put(X,h,Z,HAY,true);
+    for(const [yx,yz] of [[x-5,z-3],[x+5,z-2],[x,z+5]]){
+      for(let y=h+1;y<=h+3;y++) for(let a=0;a<12;a++){ const ang=a/12*6.283;
+        put(yx+Math.round(Math.cos(ang)*3),y,yz+Math.round(Math.sin(ang)*3),WOOL,true); }
+      for(let rr=2;rr>=0;rr--) for(let a=0;a<10;a++){ const ang=a/10*6.283;
+        put(yx+Math.round(Math.cos(ang)*rr),h+4+(2-rr),yz+Math.round(Math.sin(ang)*rr),ROOFTILE,true); }
+      put(yx,h+6,yz,GILDED,true);
+      box(yx-1,h+1,yz+3,yx+1,h+2,yz+3,AIR,false);                                 // 包门
+    }
+    box(x-1,h,z-1,x+1,h,z+1,COBBLE,false); put(x,h+1,z,LANTERN,true);             // 篝火台(夜照明)
+    for(const [px,pz] of [[x-8,z+3],[x-8,z+5]]){ put(px,h+1,pz,DARKPLANK,true); put(px,h+2,pz,DARKPLANK,true); }
+  }
+  else if(type==="museum"){
+    /* ===== 世界美术馆: 大理石展馆 + 五幅世界名画方块马赛克 =====
+       星空(梵高) / 向日葵(梵高) / 神奈川冲浪里(北斋) / 呐喊(蒙克) / 蒙娜丽莎(达·芬奇) —— 全部复用既有方块配色。 */
+    const W=12, D=8;
+    clearAbove(x-W-2,z-D-2,x+W+2,z+D+2,h+1,h+9);
+    for(let X=x-W;X<=x+W;X++) for(let Z=z-D;Z<=z+D;Z++) put(X,h,Z,MARBLE,true);
+    for(let X=x-W;X<=x+W;X++){ for(let y=h+1;y<=h+7;y++){ put(X,y,z-D,MARBLE,true); put(X,y,z+D,MARBLE,true); } }
+    for(let Z=z-D;Z<=z+D;Z++){ for(let y=h+1;y<=h+7;y++){ put(x-W,y,Z,MARBLE,true); put(x+W,y,Z,MARBLE,true); } }
+    for(let X=x-W;X<=x+W;X++){ put(X,h+8,z-D,MARBLE,true); put(X,h+8,z+D,MARBLE,true); }
+    box(x-2,h+1,z+D,x+2,h+2,z+D,AIR,false);                                       // 大门
+    put(x-4,h+6,z+D,LANTERN,true); put(x+4,h+6,z+D,LANTERN,true); put(x,h+6,z-D,LANTERN,true);
+    const P=PAINTINGS;
+    putMosaic(put,x-W+3,h+2,z-D,true, P.starry.rows, P.starry.pal);               // 北墙: 星空
+    putMosaic(put,x+3,h+2,z-D,true,  P.sunflower.rows, P.sunflower.pal);          // 北墙: 向日葵
+    putMosaic(put,x-W+3,h+2,z+D,true, P.wave.rows, P.wave.pal);                   // 南墙: 神奈川冲浪里
+    putMosaic(put,x+3,h+2,z+D,true,  P.scream.rows, P.scream.pal);                // 南墙: 呐喊
+    for(let Z=z-1;Z<=z+1;Z++) for(let y=h+2;y<=h+7;y++) put(x,y,Z,MARBLE,true);   // 中央独立展板
+    putMosaic(put,x,h+2,z-1,true, P.mona.rows, P.mona.pal);                       // 展板北面: 蒙娜丽莎
+    putMosaic(put,x,h+2,z+1,true, P.pearl.rows, P.pearl.pal);                     // 展板南面: 戴珍珠耳环的少女
+    put(x,h+8,z,GILDED,true);                                                     // 馆徽
+  }
   else if(type==="farm"){
     const R=4;
     clearAbove(x-R,z-R,x+R,z+R,h+1,h+4);
@@ -2185,7 +2404,8 @@ const VIL_N=VIL_RP+VIL_FADE;
 // 各类建筑的清场包围盒半径(建筑只在中心 ±rad 的区块里施工, 见 buildStructures 的区块剔除, 所以 rad 是它全部方块的界)。
 // 定义在 VIL_N 之后, 供 buildStructures 与 structureCovers 共用(避免与地热喷口选址各写一份 → 走样)。
 const STRUCT_RAD={city:34,pyramid:30,airport:32,racetrack:30,park:22,rainbow:22,crater:18,bazaar:17,factory:16,oasis:15,
-                  colosseum:20,forum:16,castrum:19,aqueduct:38,palace:20,wreck:16,caravan:12,grotto:14,village:VIL_N+1};
+                  colosseum:20,forum:16,castrum:19,aqueduct:38,palace:20,wreck:16,caravan:12,grotto:14,village:VIL_N+1,
+                  parthenon:16,forbidden:20,whitehouse:16,eiffel:14,cathedral:16,baths:14,impalace:18,yurt:13,museum:16};
 // 世界坐标(x,z)是否落在附近某座建筑的清场包围盒内。用于地热喷口选址: 会被建筑铺盖的点不算喷口位, 保持 geyserSites 与真实方块一致。
 function structureCovers(x,z){
   const sx=Math.floor(x/CELL), sz=Math.floor(z/CELL);
@@ -5227,7 +5447,17 @@ const LAND_TROPHY={
   city:     {n:"霓虹招牌",   d:"+25 经验 · 霓虹×4",          f:()=>{ addXP(25); giveBlock(NEON,4); }},
   airport:  {n:"飞行员徽章", d:"+35 经验",                   f:()=>{ addXP(35); }},
   racetrack:{n:"冠军奖杯",   d:"+30 经验 · 鎏金×2",          f:()=>{ addXP(30); giveBlock(GILDED,2); }},
-  park:     {n:"游乐票根",   d:"+25 经验 · 羊毛×6",          f:()=>{ addXP(25); giveBlock(WOOL,6); }}
+  park:     {n:"游乐票根",   d:"+25 经验 · 羊毛×6",          f:()=>{ addXP(25); giveBlock(WOOL,6); }},
+  // 第三十二轮·本地: 世界地标九连珍藏
+  forbidden:{n:"太和龙印",   d:"最大生命 +2 · 鎏金×3",        f:()=>{ maxHp=Math.min(40,maxHp+2); hp=Math.min(maxHp,hp+2); updateHearts(); giveBlock(GILDED,3); }},
+  parthenon:{n:"智慧橄榄枝", d:"+50 经验 · 大理石×10",        f:()=>{ addXP(50); giveBlock(MARBLE,10); }},
+  whitehouse:{n:"白宫讲稿",  d:"+30 经验 · 白灰泥×8",         f:()=>{ addXP(30); giveBlock(PLASTER_WHITE,8); }},
+  eiffel:   {n:"铁塔铆钉",   d:"+40 经验 · 铁矿石×8",         f:()=>{ addXP(40); giveBlock(IRON_ORE,8); }},
+  cathedral:{n:"玫瑰窗残片", d:"+35 经验 · 紫晶×3",           f:()=>{ addXP(35); giveBlock(AMETHYST,3); }},
+  baths:    {n:"温泉浴票",   d:"回满生命",                    f:()=>{ hp=maxHp; updateHearts(); }},
+  impalace: {n:"樱纹屏风",   d:"+30 经验 · 深色木板×8",       f:()=>{ addXP(30); giveBlock(DARKPLANK,8); }},
+  yurt:     {n:"草原马鞭",   d:"+25 经验 · 干草×8",           f:()=>{ addXP(25); giveBlock(HAY,8); }},
+  museum:   {n:"世界名画册页", d:"+50 经验 · 紫晶×2 · 文物+1", f:()=>{ addXP(50); giveBlock(AMETHYST,2); npcState.relics++; }}
 };
 const TROPHY_TOTAL=Object.keys(LAND_TROPHY).length;
 function grantTrophy(type){
@@ -6511,6 +6741,8 @@ function closeNPCPanel(){
 
 /* ---------- 指南针: 指向最近的显眼地标, 给探索一个方向 ---------- */
 const LANDMARKS={ pyramid:"🔺金字塔", colosseum:"🏛斗兽场", palace:"🏰宫殿", city:"🌆城市",
+  forbidden:"🏯故宫", parthenon:"🏛希腊神庙", eiffel:"🗼埃菲尔铁塔", cathedral:"⛪科隆大教堂",
+  whitehouse:"🏛白宫", baths:"♨罗马浴场", impalace:"🏯日本皇居", yurt:"🏕蒙古包营地", museum:"🖼世界美术馆",
   oasis:"🌴绿洲", rainbow:"🌈彩虹桥", airport:"✈机场", racetrack:"🏁赛车场", crater:"☄陨石坑",
   park:"🎡游乐场", forum:"🏟广场", castrum:"🛡军团要塞", bazaar:"🏮集市",
   wreck:"⛵沉船", caravan:"🐫商队残骸", grotto:"💎晶洞", village:"🏘绿洲村落" };
@@ -9333,6 +9565,11 @@ function trySpawns(dt){
   let cars=0, planes=0, bikes=0;
   for(const m of mobs){ if(m.def.car) cars++; else if(m.def.plane) planes++; else if(m.def.mount) bikes++; }
   // 汽车: 靠近城市时在街道上行驶
+  // 第三十二轮·本地: 蒙古包营地旁刷草原马群(可驯服骑乘)
+  if(nearStructure(["yurt"],44)){
+    const horses=mobs.filter(m=>m.type==="horse").length;
+    if(horses<4 && Math.random()<0.35) spawnMob("horse",8,26);
+  }
   if(cars<6 && nearStructure(["city"],70) && Math.random()<0.6)
     spawnMob(Math.random()<0.5?"car":"carBlue", 8, 34);
   // 飞机: 天上随时可能有巡航的飞机(可以打下来)
@@ -15923,6 +16160,53 @@ function selftest(){
         bag.clear(); for(const [k,v] of bagSnap8) bag.set(k,v); renderCraft();
         combatMastery.quake=snap8.quakeL; combatMastery.recall=snap8.recallL;
         updateHearts(); updateBuffHUD();
+      }
+    }
+
+    // 8q10. 世界地标九连(第三十二轮): 注册/直接调用 drawStructure 逐一搭建(确定性)/名画马赛克/蒙古马
+    {
+      const NEW9=["forbidden","parthenon","eiffel","cathedral","whitehouse","baths","impalace","yurt","museum"];
+      const SIGN={forbidden:[0,3,0,BRICK], parthenon:[0,2,0,MARBLE], eiffel:[0,13,0,METAL], cathedral:[-5,5,0,BASALT],
+                  whitehouse:[10,3,0,PLASTER_WHITE], baths:[0,0,0,MARBLE], impalace:[0,3,0,PLASTER_WHITE], yurt:[-5,2,0,WOOL], museum:[0,4,-8,MARBLE]};
+      ok("世界地标: 九种类型全部注册于结构表/命名/珍藏", NEW9.every(t=>LANDMARKS[t] && LAND_TROPHY[t] && STRUCT_RAD[t]) && TROPHY_TOTAL>=23, "trophyTotal="+TROPHY_TOTAL);
+      // 在出生地上空直接调用 drawStructure 逐一搭建(不依赖世界布局), 首写快照、验后还原
+      const baseY=Math.min(58, Math.max(30, Math.floor(groundY(Math.floor(player.x),Math.floor(player.z)))+22));
+      const undo=new Map();
+      const wput=(x,y,z,id,force)=>{ if(y<0||y>=H) return; const c=world.get(key(x>>4,z>>4)); if(!c) return;
+        const i=((x&15)*CS+(z&15))*H+y, old=c.blocks[i], k2=x+","+y+","+z;
+        if(!undo.has(k2) && old!==AIR) undo.set(k2,[x,y,z,old]);
+        if(force || old===AIR){ c.blocks[i]=id; wcount++; } _gcx=1e9; };
+      const built={}, wrote={};
+      let wcount=0;
+      for(const t of NEW9){
+        const bx0=Math.floor(player.x), bz0=Math.floor(player.z);
+        for(let cx=(bx0-18)>>4;cx<=(bx0+18)>>4;cx++) for(let cz=(bz0-18)>>4;cz<=(bz0+18)>>4;cz++) ensureData(cx,cz);
+        wcount=0;
+        drawStructure({type:t, x:bx0, z:bz0, h:baseY, bio:0}, wput);
+        wrote[t]=wcount;
+        const g=SIGN[t], near=(id,cx,cy,cz)=>{ for(let dx=-4;dx<=4;dx++) for(let dy=-5;dy<=5;dy++) for(let dz=-4;dz<=4;dz++) if(getBlock(cx+dx,cy+dy,cz+dz)===id) return true; return false; };
+        built[t]=near(g[3], bx0+g[0], baseY+g[1], bz0+g[2]);
+        for(const [k2,v] of undo){ const p=k2.split(","); wput(+p[0],+p[1],+p[2],v[3],true); }   // 还原首写前的原方块
+        undo.clear();
+      }
+      ok("世界地标: 九种逐一搭建且特征方块就位", NEW9.every(t=>built[t]),  "built="+NEW9.filter(t=>built[t]).join(",")+" baseY="+baseY+" wrote="+NEW9.map(t=>t+":"+wrote[t]).join(",")+" misses="+NEW9.filter(t=>!built[t]).map(t=>{ const g=SIGN[t]; let got=""; for(let dy=-2;dy<=2;dy++) got+=getBlock(Math.floor(player.x)+g[0], baseY+g[1]+dy, Math.floor(player.z)+g[2])+","; return t+":"+got; }).join(" | "));
+      // 名画马赛克完整性
+      ok("世界名画: 6 幅数据完整、调色板全为合法方块", Object.keys(PAINTINGS).length===6 && Object.values(PAINTINGS).every(p=>
+        p.rows.length>=5 && p.rows.every(r=>r.length===p.rows[0].length) &&
+        p.rows.join("").split("").every(ch=>ch==="."||BLOCKS[p.pal[ch]]!==undefined)), "n="+Object.keys(PAINTINGS).length);
+      // 蒙古马: 找一处营地传送过去直接刷马(找不到则跳过)
+      const sx0=Math.floor(player.x/CELL), sz0=Math.floor(player.z/CELL);
+      let yurt=null;
+      for(let dx=-30;dx<=30 && !yurt;dx++) for(let dz=-30;dz<=30;dz++){
+        const st=structureAt(sx0+dx,sz0+dz); if(st && st.type==="yurt"){ yurt=st; break; } }
+      if(yurt){
+        __game.teleport(yurt.x+6, (groundY(yurt.x+6,yurt.z+6)>0?groundY(yurt.x+6,yurt.z+6)+2:yurt.h+6), yurt.z+6);
+        const near=nearStructure(["yurt"],44);
+        const spawned=near && spawnMob("horse",6,14);
+        ok("蒙古包营地: 附近可刷出草原马(可驯服骑乘)", near && spawned && mobs.some(m=>m.type==="horse"), "near="+near);
+        mobs.length=0; __game.teleport(sx0*CELL+8, groundY(sx0*CELL+8,sz0*CELL+8)+2, sz0*CELL+8);
+      } else {
+        ok("蒙古包营地: 附近无营地种子, 跳过马群检查(注册断言已过)", true, "no yurt within ±30 cells");
       }
     }
 
