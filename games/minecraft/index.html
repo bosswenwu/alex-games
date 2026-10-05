@@ -19,7 +19,7 @@
   #cross::before, #cross::after { content:""; position:absolute; background:#ddd; }
   #cross::before { left:50%; top:0; width:2px; height:100%; transform:translateX(-50%); }
   #cross::after  { top:50%; left:0; height:2px; width:100%; transform:translateY(-50%); }
-  #craftPanel, #enchPanel, #potionPanel, #chestPanel, #furnacePanel { position:absolute; inset:0; margin:auto; width:min(760px,92vw); max-height:82vh;
+  #craftPanel, #enchPanel, #potionPanel, #chestPanel, #furnacePanel, #bagPanel { position:absolute; inset:0; margin:auto; width:min(760px,92vw); max-height:82vh;
     display:none; flex-direction:column; gap:10px; padding:16px 18px; z-index:40;
     background:rgba(18,16,26,.95); border:2px solid #6b5a3a; border-radius:10px;
     color:#f0e6d2; font-size:13px; overflow:auto; box-shadow:0 12px 48px rgba(0,0,0,.6); }
@@ -28,6 +28,13 @@
   #craftHint { font-size:11px; color:#9b8a6a; font-weight:normal; }
   #bagTitle { color:#c9b184; margin:4px 0 6px; font-size:12px; }
   #bagGrid { display:flex; flex-wrap:wrap; gap:6px; min-height:34px; }
+  /* 第三十六轮·本地: Tab 背包面板 —— 只读总览(与 B 合成面板共用同一份渲染, 不会与实际背包不一致) */
+  #bagPanel { width:min(560px,92vw); }
+  #bagSummary { color:#c9b184; font-size:12px; line-height:1.7; }
+  #bagSummary b { color:#ffd98a; }
+  #bagHotbar { display:flex; flex-wrap:wrap; gap:6px; }
+  #bagHotbar .bagCell { cursor:pointer; }
+  #bagHotbar .bagCell.cur { outline:1px solid #e8bb6a; background:rgba(232,187,106,.14); }
   .bagCell { display:flex; align-items:center; gap:5px; padding:4px 8px; border-radius:5px;
     background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.12); }
   .bagCell b { color:#ffd98a; font-weight:bold; }
@@ -60,10 +67,23 @@
     border-bottom:1px solid #4a3f2a; padding-bottom:8px; display:flex; justify-content:space-between; align-items:baseline; }
   #npcGreet { color:#c9b184; font-size:12px; margin:2px 0 6px; }
   #npcList { display:flex; flex-direction:column; gap:6px; }
-  #npcPrompt { position:absolute; left:50%; bottom:94px; transform:translateX(-50%); display:none;
-    background:rgba(20,14,26,.82); border:1px solid #7a5a3a; border-radius:20px; padding:6px 16px;
-    color:#f0e6d2; font-size:13px; z-index:30; pointer-events:none; white-space:nowrap; }
-  #npcPrompt b { color:#ffd98a; }
+  /* 第三十六轮·本地: NPC 对白气泡 —— 纸质感气泡 + 小尾巴 + 角色名/对白/按键三层, 弹出有轻微弹入 */
+  #npcPrompt { position:absolute; left:50%; bottom:96px; transform:translateX(-50%); display:none;
+    z-index:30; pointer-events:none; width:min(340px,76vw); animation:npcPop .16s ease-out; }
+  @keyframes npcPop { from{ opacity:0; transform:translateX(-50%) translateY(7px) scale(.95); } to{ opacity:1; transform:translateX(-50%) translateY(0) scale(1); } }
+  #npcPrompt .np-bubble { position:relative; background:linear-gradient(#fbf4e4,#ecdfc4); color:#3b2b18;
+    border:2px solid #7a5a3a; border-radius:14px; padding:9px 13px 10px;
+    box-shadow:0 10px 28px rgba(0,0,0,.55), inset 0 1px 0 #fff9ea; }
+  #npcPrompt .np-bubble::after { content:""; position:absolute; left:50%; bottom:-8px; width:13px; height:13px;
+    margin-left:-7px; background:#ecdfc4; border-right:2px solid #7a5a3a; border-bottom:2px solid #7a5a3a;
+    border-bottom-right-radius:3px; transform:rotate(45deg); }
+  #npcPrompt .np-name { display:flex; align-items:center; gap:6px; font-size:12px; font-weight:bold;
+    color:#7c4a1c; letter-spacing:.6px; margin-bottom:3px; }
+  #npcPrompt .np-tag { font-size:15px; line-height:1; }
+  #npcPrompt .np-say { font-size:13px; line-height:1.55; color:#4b3821; }
+  #npcPrompt .np-key { margin-top:7px; display:flex; align-items:center; gap:6px; font-size:11px; color:#8a755a; }
+  #npcPrompt kbd { display:inline-block; min-width:18px; text-align:center; padding:2px 6px; border-radius:4px;
+    background:#3b2b18; color:#ffe6b8; font:700 11px/1.2 inherit; box-shadow:0 2px 0 #241a0f; }
   #buffHud { position:absolute; left:12px; bottom:118px; display:none; z-index:30;
     background:rgba(30,20,44,.7); border:1px solid #9a7ad0; border-radius:6px; padding:5px 10px;
     color:#e6d9ff; font-size:12px; font-weight:bold; pointer-events:none; line-height:1.55; max-width:280px; }
@@ -268,6 +288,7 @@
     #overlay.main-menu #titleEn, #overlay.main-menu #subtitle, #overlay.main-menu #menu, #overlay.main-menu #help,
     #overlay.main-menu #startbtn:not(:disabled) { animation:none !important; }
     #overlay.main-menu .btn, #overlay.main-menu #menu a, #menuLoadFill { transition:none !important; }
+    #npcPrompt { animation:none !important; }   /* 第三十六轮·本地: NPC 气泡弹入 */
   }
   /* 第十四轮·完整暂停与设置枢纽 */
   #menuActions { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin-top:2px; }
@@ -459,6 +480,13 @@
   <div id="bagTitle">背包里能烧的原料</div><div id="furnaceIn" class="chestGrid"></div>
   <div id="bagTitle">背包里的燃料</div><div id="furnaceFuel" class="chestGrid"></div>
 </div>
+<!-- 第三十六轮·本地: Tab 背包总览(只读; 搬运物品仍去储物箱 / B 合成面板) -->
+<div id="bagPanel">
+  <div id="craftHead">🎒 背包<span id="craftHint">按 Tab / Esc 关闭 · 搬运物品请开储物箱或按 B</span></div>
+  <div id="bagSummary"></div>
+  <div id="bagTitle">快捷栏</div><div id="bagHotbar"></div>
+  <div id="bagTitle">全部物品</div><div id="bagGrid2" class="chestGrid"></div>
+</div>
 <div id="npcPanel">
   <div id="npcHead"><span id="npcTitle">NPC</span><span id="craftHint">按 F / Esc 关闭</span></div>
   <div id="npcGreet"></div>
@@ -547,7 +575,7 @@
       <p><b>木乃伊</b>贴近后会站定举手、身体泛紫，脚下亮起一圈紫色诅咒光环；约 0.75 秒后砸地，圈内受重伤并被击飞。重击打不断，看到光环就走出圈外，或者用沙步躲开；砸完它会慢半拍，正好反击。</p>
       <p><b>骷髅射手</b>放箭前会站定、身体泛红，弓前拉出一条红色瞄准线；瞄准线变亮表示方向已锁定。躲到掩体后可取消它的瞄准；锁定后横移就能躲开；瞄准时打它一下会打断，并让它僵直约 1 秒。</p>
     </section>
-    <b>F1</b> 拍照模式　<b>F2</b> 截图　<b>F5</b> 第三人称(Shift+F5 看正脸)　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成(可熔铸☀拉之烈阳剑、🔨塞特之锤)　<b>0</b> 第10格　<b>J</b> 附魔祭坛(献文物)　<b>C</b> 沙步闪避　<b>Z</b> 大地震颤　<b>Q</b> 回沙卷盘　<b>I</b> 遗迹专精　<b>Esc</b> 暂停　<b>T</b> 编年史　<b>P</b> 陶片图鉴　<b>K</b> 神话遗物　<b>U</b> 开宝库　<b>R</b> 答斯芬克斯　<b>L</b> 神灯许愿　<b>N</b> 大地图(右上角为小地图)<br>
+    <b>F1</b> 拍照模式　<b>F2</b> 截图　<b>F5</b> 第三人称(Shift+F5 看正脸)　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成(可熔铸☀拉之烈阳剑、🔨塞特之锤)　<b>0</b> 第10格　<b>J</b> 附魔祭坛(献文物)　<b>C</b> 沙步闪避　<b>Z</b> 大地震颤　<b>Q</b> 回沙卷盘　<b>I</b> 遗迹专精　<b>Tab</b> 背包总览　<b>Esc</b> 暂停　<b>T</b> 编年史　<b>P</b> 陶片图鉴　<b>K</b> 神话遗物　<b>U</b> 开宝库　<b>R</b> 答斯芬克斯　<b>L</b> 神灯许愿　<b>N</b> 大地图(右上角为小地图)<br>
     <b>物品栏</b>：1烟花 2钩爪 3可乐 4铁剑 5机关枪 6火箭筒 7弓 8=TNT(右键放·左键点燃) 9弹跳板<br>
     <b>2 钩爪</b>甩向准星把你拉过去；<b>3 可乐</b>回血+加速；<b>9 弹跳板</b>踩上去高高弹飞不摔伤<br>
     击杀获得<b>经验</b>升级(提升生命与伤害)。白天长、夜晚短而亮，敌人只是点缀<br>
@@ -5355,7 +5383,7 @@ function sandRiposteDamage(target,baseDamage){
 }
 function sandStepPanelOpen(){
   const ids=["craftPanel","enchPanel","potionPanel","chestPanel","furnacePanel","npcPanel","fullhelp","settingsPanel",
-    "bazaar-panel","pottery-panel","mythic-panel","lamp-panel","sphinx-panel","ruin-glyph-panel","expedition-route","meta-panel","caravan-panel"];
+    "bazaar-panel","pottery-panel","mythic-panel","lamp-panel","sphinx-panel","ruin-glyph-panel","expedition-route","meta-panel","caravan-panel","bagPanel"];   // 第三十六轮·本地: bagPanel 也算"有面板开着"
   return ids.some(id=>{
     const el=document.getElementById(id); if(!el) return false;
     const cs=getComputedStyle(el);
@@ -5970,17 +5998,26 @@ function doCraft(i){
   renderCraft(); saveGame(true);
 }
 let craftOpen=false;
-function renderCraft(){
-  const g=document.getElementById("bagGrid"); if(!g) return;
+/* 第三十六轮·本地: 背包格子渲染抽成共用函数 —— B 合成面板与 Tab 背包面板共用同一份,
+   两边永远显示一致的真实背包(不会出现"面板和实际对不上"的漂移)。 */
+function bagSortedItems(){
   const items=[...bag.entries()].filter(([id,n])=>n>0 && (BLOCKS[id] || typeof id==="string"));   // 第三十一轮·本地: 字符串道具(水袋等)也入背包格
   items.sort((a,b)=>b[1]-a[1]);
-  const itemName=id=>BLOCKS[id]?BLOCKS[id].name:(ITEMS[id]?ITEMS[id].name:String(id));
+  return items;
+}
+const bagItemName=id=>BLOCKS[id]?BLOCKS[id].name:(ITEMS[id]?ITEMS[id].name:String(id));
+function bagItemCells(emptyText){
+  const items=bagSortedItems();
+  return items.length
+    ? items.map(([id,n])=>'<div class="bagCell">'+bagItemName(id)+' <b>x'+n+'</b></div>').join("")
+    : '<div class="bagCell bagEmpty">'+(emptyText||"方块空空——去挖点方块吧")+'</div>';
+}
+function renderCraft(){
+  const g=document.getElementById("bagGrid"); if(!g) return;
   const coreCell='<div class="bagCell" style="color:#ffd27a">⚡ 能量核心 <b>x'+cores+'</b></div>'
     +((vaultKeys.trial||vaultKeys.omen)?'<div class="bagCell" style="color:#f0d38a">🗝 试炼钥匙 <b>x'+vaultKeys.trial+'</b> · 不祥钥匙 <b>x'+vaultKeys.omen+'</b></div>':'');
   const bundleBtn=(typeof bundleState!=="undefined" && bundleState.owned)?'<div class="bagCell" id="openBundleBtn" style="cursor:pointer;color:#e8bb6a">👜 打开收纳袋 ('+storeTypes(bundleState.items)+'/'+BUNDLE_SLOTS+')</div>':'';   // 第六轮·云端
-  g.innerHTML = coreCell + bundleBtn + (items.length
-    ? items.map(([id,n])=>'<div class="bagCell">'+itemName(id)+' <b>x'+n+'</b></div>').join("")
-    : '<div class="bagCell bagEmpty">方块空空——去挖点方块吧</div>');
+  g.innerHTML = coreCell + bundleBtn + bagItemCells();
   document.getElementById("recipeList").innerHTML = RECIPES.map((r,i)=>{
     const okc=canCraft(r);
     const lockedLand=r.needLand && !landUnlocked(r.needLand);
@@ -6087,6 +6124,55 @@ function toggleCraft(){
     if(document.pointerLockElement) document.exitPointerLock();
   } else if(!softLock) enterPointerLock();
 }
+/* =========================================================
+   🎒 背包面板(第三十六轮·本地, Tab 开/关)
+   只读总览: 汇总统计 + 快捷栏 + 全部物品。与 B 合成面板共用 bagItemCells()。
+   刻意"只读" —— 物品搬运仍走储物箱/收纳袋, 避免两套交互规则互相打架;
+   快捷栏格子可点, 直接切到那一栏(点完不关面板, 方便连点)。
+   ========================================================= */
+let bagOpen=false;
+/* 快捷栏格子的名字要和底部快捷栏一致: 数字格=方块名(带背包数量), 字符串格=装备/道具名 */
+const hotbarCellName=id=>typeof id==="number" ? bagItemName(id)
+  : ((GEAR_DEFS[id]&&GEAR_DEFS[id].name) || (ITEMS[id]&&ITEMS[id].name) || String(id));
+function bagHotbarCells(){
+  return HOTBAR_ITEMS.map((it,i)=>{
+    const key=(i<9?String(i+1):"0")+" 号栏";
+    const held=typeof it==="number" ? bagCount(it) : 0;
+    return '<div class="bagCell'+(i===selSlot?" cur":"")+'" data-slot="'+i+'" title="点击切到 '+key+'">'
+      +'<b style="color:#9b8a6a">'+key+'</b> '+hotbarCellName(it)+(held?' <b>x'+held+'</b>':'')+'</div>';
+  }).join("");
+}
+function renderBagPanel(){
+  if(!bagOpen) return;
+  const items=bagSortedItems(), total=items.reduce((s,[,n])=>s+n,0);
+  const sum=document.getElementById("bagSummary");
+  if(sum) sum.innerHTML='物品种类 <b>'+items.length+'</b> · 物品总数 <b>'+total+'</b> · 能量核心 <b>'+cores+'</b>'
+    +'<br><span style="color:#9b8a6a">📦 搬运物品: 右键储物箱, 或按 <b>B</b> 进「背包 &amp; 合成台」</span>';
+  const hb=document.getElementById("bagHotbar");
+  if(hb){
+    hb.innerHTML=bagHotbarCells();
+    for(const el of hb.querySelectorAll(".bagCell[data-slot]"))
+      el.onclick=()=>{ selectSlot(+el.dataset.slot); renderBagPanel(); };
+  }
+  const g2=document.getElementById("bagGrid2");
+  if(g2) g2.innerHTML=bagItemCells("背包空空——去挖点方块吧");
+}
+function openBagPanel(){
+  if(craftOpen) toggleCraft();
+  bagOpen=true;
+  document.getElementById("bagPanel").style.display="flex";
+  renderBagPanel();
+  if(document.pointerLockElement) document.exitPointerLock();
+  return true;
+}
+function closeBagPanel(){
+  if(!bagOpen) return false;
+  bagOpen=false;
+  const el=document.getElementById("bagPanel"); if(el) el.style.display="none";
+  if(!softLock) enterPointerLock();
+  return true;
+}
+function toggleBagPanel(){ return bagOpen ? (closeBagPanel(), false) : openBagPanel(); }
 /* =========================================================
    🧪 沙漠药水(第五轮·云端): 合成台酿造 → 药水单独计数 → V 打开面板按 1–4 饮用
    耐热: 免沙暴刮伤/火山灼烤 · 迅捷: 移速 +35% · 夜视: 夜里提亮 · 治疗: 立即 +8 生命
@@ -6426,7 +6512,7 @@ function tickFurnaces(dt){
 }
 function openFurnace(x,y,z){
   const k=chestKey(x,y,z); if(!furnaces[k]) furnaces[k]=newFurnace();
-  if(craftOpen) toggleCraft(); if(enchOpen) toggleEnch(); if(potionOpen) togglePotions(); if(chestOpen) closeChest();
+  if(craftOpen) toggleCraft(); if(enchOpen) toggleEnch(); if(potionOpen) togglePotions(); if(chestOpen) closeChest(); if(bagOpen) closeBagPanel();   // 第三十六轮·本地: 开熔炉时收起 Tab 背包, 免得两个面板叠在一起
   furnaceOpen=k;
   document.getElementById("furnacePanel").style.display="flex";
   renderFurnace(true);
@@ -6816,8 +6902,14 @@ function updateNPC(dt){
     if(talkNpc && !npcPanelOpen && !craftOpen){
       const R=NPC_ROLES[talkNpc.npcRole];
       pr.style.display="block";
-      pr.innerHTML="<b>"+R.tag+" "+R.name+"</b> &nbsp;按 <b>F</b> 交谈";
-    } else pr.style.display="none";
+      /* 第三十六轮·本地: 气泡分三层 —— 头像+名字 / 当前对白 / 按键提示; 只在角色或台词变化时重写 innerHTML */
+      const html='<div class="np-bubble">'
+        +'<div class="np-name"><span class="np-tag">'+R.tag+'</span><span>'+R.name+'</span></div>'
+        +'<div class="np-say">'+R.greet+'</div>'
+        +'<div class="np-key"><kbd>F</kbd><span>与其交谈</span></div>'
+        +'</div>';
+      if(pr._sig!==R.name){ pr.innerHTML=html; pr._sig=R.name; }   // 每帧只切 display, 不重排 DOM
+    } else { pr.style.display="none"; pr._sig=null; }
   }
 }
 function renderNPC(){
@@ -7473,6 +7565,9 @@ document.addEventListener("keydown",e=>{
   if(e.code==="KeyP" && !e.repeat){ e.preventDefault(); togglePotteryPanel(); return; }
   if(e.code==="KeyK" && !e.repeat){ e.preventDefault(); toggleMythicPanel(); return; }
   if(e.code==="KeyI" && !e.repeat){ e.preventDefault(); const mp3=document.getElementById("meta-panel"); if(mp3 && mp3.classList.contains("on")) closeMetaPanel(); else openMetaPanel(); return; }   // 第二十七轮·本地: 遗迹专精
+  /* 第三十六轮·本地: Tab = 背包总览。放在 playing() 之前 —— 开面板会退指针锁, 否则关不掉。
+     注意别抢 I(遗迹专精)/B(合成面板)。Tab 在设置/符文面板里已被那两个面板的焦点循环消费, 不会走到这里。 */
+  if(e.code==="Tab" && !e.repeat && !softLock){ e.preventDefault(); toggleBagPanel(); return; }
   if(e.code==="KeyL" && !e.repeat){                                          // 须在 playing() 之前: 开面板会退指针锁并暂停, 否则再按 L 关不掉
     e.preventDefault();
     const lp=document.getElementById("lamp-panel");
@@ -7486,6 +7581,7 @@ document.addEventListener("keydown",e=>{
   if(e.code==="Escape" && enchOpen){ toggleEnch(); return; }
   if(e.code==="Escape" && potionOpen){ togglePotions(); return; }                 // 第五轮·云端
   if(e.code==="Escape" && chestOpen){ closeChest(); return; }                      // 第六轮·云端
+  if(e.code==="Escape" && bagOpen){ closeBagPanel(); return; }                    // 第三十六轮·本地: Tab 背包
   if(e.code==="Escape" && furnaceOpen){ closeFurnace(); return; }                  // 第七轮·云端
   if(potionOpen && !e.repeat && e.code>="Digit1" && e.code<="Digit4"){ e.preventDefault(); drinkPotion(POTIONS[+e.code.slice(5)-1].k); return; }
   if(potionOpen && !e.repeat && e.code==="Digit5"){ e.preventDefault(); eatFish(); return; }
@@ -7887,6 +7983,49 @@ function sfxBrush(){   // 刷子: 短促高频沙沙声
   const f=actx2.createBiquadFilter(); f.type="highpass"; f.frequency.value=2600+Math.random()*900;
   const g=actx2.createGain(); g.gain.value=0.09;
   src.connect(f).connect(g).connect(actx2.destination); src.start(t);
+}
+/* ---- 👣 脚步声(第三十六轮·本地): 按脚下方块材质选音色 ----
+   每步 = 一段带通滤过的噪声(材质的"摩擦"质感) + 一个短促低频"咚"(硬地面的体感)。
+   沙地低频闷、石头清脆、木头中频偏空、草地细碎高频、水里带气泡、金属更亮。
+   音量刻意压低(0.05~0.09): 脚步声是"底噪层", 不该盖住环境音与战斗音效。 */
+function stepMatFor(id){
+  if(id===WATER) return "water";
+  if(id===LAVA)  return "lava";
+  if(id===SAND||id===BLACKSAND||id===SALTCRUST||id===SANDSTONE) return "sand";
+  if(id===GRASS||id===DIRT||id===CLAY||id===SUSGRAVEL) return "grass";
+  if(id===LOG||id===PLANKS||id===DARKPLANK) return "wood";
+  if(id===ICE) return "ice";
+  if(id===METAL||id===CONCRETE) return "stone";
+  return "stone";
+}
+const STEP_TONE={
+  //         带通中心  滤波类型  音量   时长   低频咚(Hz, 0=无)
+  sand:  [  820,  "lowpass", 0.075, 0.11,  74],
+  grass: [ 2300, "bandpass",0.055, 0.07,   0],
+  stone: [ 1600, "bandpass",0.065, 0.06, 104],
+  wood:  [  620, "bandpass",0.070, 0.08, 126],
+  water: [  520, "lowpass", 0.070, 0.20,  62],
+  lava:  [  300, "lowpass", 0.080, 0.24,  50],
+  ice:   [ 2400, "bandpass",0.055, 0.06, 140],
+};
+let stepAcc=0;                                        // 行走距离累计(驱动步频)
+function sfxStep(id){
+  if(!actx2) return;
+  const K=STEP_TONE[stepMatFor(id)]||STEP_TONE.stone, t=actx2.currentTime, len=K[3];
+  const buf=actx2.createBuffer(1,Math.round(actx2.sampleRate*len),actx2.sampleRate), d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*(1-i/d.length);
+  const src=actx2.createBufferSource(); src.buffer=buf;
+  const f=actx2.createBiquadFilter(); f.type=K[1]; f.Q.value=1.1;
+  f.frequency.value=K[0]*(0.9+Math.random()*0.2);      // 每步轻微随机 → 不机械
+  const g=actx2.createGain(); g.gain.value=K[2];
+  src.connect(f).connect(g).connect(actx2.destination); src.start(t);
+  if(K[4]){
+    const o=actx2.createOscillator(); o.type="sine"; o.frequency.setValueAtTime(K[4],t);
+    o.frequency.exponentialRampToValueAtTime(K[4]*0.55,t+0.06);
+    const og=actx2.createGain();
+    og.gain.setValueAtTime(K[2]*1.1,t); og.gain.exponentialRampToValueAtTime(0.001,t+0.07);
+    o.connect(og).connect(actx2.destination); o.start(t); o.stop(t+0.08);
+  }
 }
 function sfxSunSweep(){   // 烈阳横扫: 下滑的风啸 + 低频轰燃
   if(!actx2) return;
@@ -12931,6 +13070,15 @@ function frame(now){
     player.z+=player.vz*dt; collideAxis(2);
     stepOK=false;
     }
+    /* 👣 脚步声(第三十六轮·本地): 只在"步行 + 脚踏实着"时按走过的距离触发, 音色取脚下方块。
+       用距离而非计时 → 疾行药水/冲刺时步频自然变快, 减速时变慢, 始终与实际步幅一致。 */
+    if(!driving && !grappling && !player.flying && !lava && player.onGround){
+      const hstep=Math.hypot(player.vx, player.vz);
+      if(hstep>0.4){
+        stepAcc+=hstep*dt;
+        if(stepAcc>1.55){ stepAcc=0; sfxStep(getBlock(Math.floor(player.x), Math.floor(player.y-0.15), Math.floor(player.z))); }
+      } else stepAcc=0;
+    } else stepAcc=0;
     applyWingsuit(dt);                                // 第三十三轮·本地: 翼装滑翔(限下落+俯冲加速)
     // 摔落伤害
     if(player.onGround && player.vy<=0) jumpPadGrace=false;   // 稳稳落地后解除
@@ -13095,6 +13243,7 @@ function frame(now){
     musicTick(dt);
     questTick(dt);
     updateNPC(dt);
+    if(bagOpen) renderBagPanel();        // 第三十六轮·本地: 背包开着时保持快捷栏高亮/数量同步
     updateArch(dt);
     updateGeysers(dt);
     updateTutorial(dt);
@@ -18504,6 +18653,84 @@ function selftest(){
         ok("N 键: 新手引导进行中按 N 跳过引导且不开地图; 引导结束后按 N 打开大地图", skipped && opened, "skipped="+skipped+" opened="+opened);
       }
     }catch(err){ ok("小地图/大地图自测未抛错", false, String(err&&err.stack||err)); }
+
+    /* ---- 第三十六轮·本地: 脚步声 / NPC 对白气泡 / Tab 背包面板 ---- */
+    try{
+      // 脚步声: 材质映射覆盖全部走法分类, 且未知方块安全回退
+      const stepCases=[[SAND,"sand"],[SALTCRUST,"sand"],[LOG,"wood"],[GRASS,"grass"],[WATER,"water"],[LAVA,"lava"],[ICE,"ice"],[STONE,"stone"],[SANDSTONE,"sand"],[999999,"stone"]];
+      const stepBad=stepCases.filter(([id,want])=>stepMatFor(id)!==want).map(([id,want])=>id+"→"+stepMatFor(id)+"(want "+want+")");
+      ok("脚步声按脚下方块分材质(沙/木/草/水/岩浆/冰/石), 未知 ID 回退 stone", stepBad.length===0, stepBad.length?stepBad.join(", "):stepCases.length+" 类全部正确");
+      const toneBad=Object.entries(STEP_TONE).filter(([k,v])=>!(Array.isArray(v)&&v.length===5&&Number.isFinite(v[0])&&typeof v[1]==="string"&&v.slice(2).every(Number.isFinite)));
+      ok("脚步声音色表结构完整(带通频率/滤波/音量/时长/低频咚)", toneBad.length===0, toneBad.length?toneBad.map(([k])=>k).join(","):Object.keys(STEP_TONE).length+" 种材质");
+      { const a0=actx2;                                   // 无 AudioContext 时必须安静返回, 不能抛错
+        let threw=false; try{ actx2=null; sfxStep(SAND); sfxStep(WATER); }catch(e){ threw=true; } actx2=a0;
+        ok("脚步声在音频未初始化时不抛错", !threw, threw?"抛错":"静默返回"); }
+      { const s0=stepAcc; stepAcc=0; const okReset=(stepAcc===0);
+        stepAcc=99; ok("脚步距离累计器可被外部重置(供自测/读档清理)", okReset && stepAcc===99, "acc="+stepAcc); stepAcc=s0; }
+
+      // NPC 对白气泡: 靠近时显示气泡三层结构, 离开时隐藏
+      /* updateNPC 内部会用 findTalkTarget() 重算 talkNpc, 所以这里临时替换它 ——
+         比往 mobs 里塞假 NPC 更干净(不会让 maintainNPCs/其他断言看到多出来的怪)。 */
+      const prEl=document.getElementById("npcPrompt");
+      const ft0=findTalkTarget, ns0=npcSpawnT;
+      npcSpawnT=999;                                        // 别让自测顺手刷出 NPC
+      const fakeNpc={npcRole:"trader", npcName:"商队商人", pause:true};
+      npcPanelOpen=false; craftOpen=false;
+      findTalkTarget=()=>fakeNpc; updateNPC(0.016);
+      const prOn=prEl.style.display!=="none", prHtml=prEl.innerHTML;
+      const bubbleOk=prOn && /np-bubble/.test(prHtml) && /np-tag/.test(prHtml) && /商队商人/.test(prHtml)
+                     && /沙海无垠/.test(prHtml) && /<kbd>F<\/kbd>/.test(prHtml);
+      ok("NPC 对白气泡: 靠近时显示 头像/名字/对白/按键 三层", bubbleOk, "display="+prEl.style.display+" len="+prHtml.length);
+      findTalkTarget=()=>null; updateNPC(0.016);
+      ok("NPC 对白气泡: 离开后隐藏", prEl.style.display==="none", "display="+prEl.style.display);
+      findTalkTarget=()=>({npcRole:"oracle", pause:true}); updateNPC(0.016);
+      const roleSwitch=/神谕祭司/.test(prEl.innerHTML) && !/商队商人/.test(prEl.innerHTML);
+      ok("NPC 对白气泡: 换一位 NPC 时内容随之切换", roleSwitch, prEl.textContent.slice(0,24));
+      findTalkTarget=()=>fakeNpc; npcPanelOpen=true; updateNPC(0.016);   // 面板开着时不显示气泡
+      const noDup=prEl.style.display==="none";
+      npcPanelOpen=false;
+      findTalkTarget=ft0; npcSpawnT=ns0; talkNpc=null; updateNPC(0.016);
+
+      // Tab 背包面板: 开/关、Esc 关、与 B 合成面板同源、空背包不炸
+      const bag0=[...bag.entries()], bagSaved=[...bag.entries()];
+      bag.clear(); bagAdd(SAND,7); bagAdd("waterskin",2);
+      const openedB=openBagPanel();
+      const bp=document.getElementById("bagPanel");
+      const shownB=getComputedStyle(bp).display, sumTxt=document.getElementById("bagSummary").textContent;
+      const gridTxt=document.getElementById("bagGrid2").textContent;
+      const hbCells=document.querySelectorAll("#bagHotbar .bagCell").length;
+      ok("Tab 背包面板: 可打开并显示物品(与 B 面板同源)", openedB===true && shownB==="flex" && /沙子|沙/.test(gridTxt) && /x7/.test(gridTxt) && /水袋|x2/.test(gridTxt), "display="+shownB+" grid="+gridTxt.slice(0,30));
+      ok("Tab 背包面板: 汇总统计含种类/总数/核心", /物品种类/.test(sumTxt) && /物品总数/.test(sumTxt) && /9/.test(sumTxt), sumTxt.slice(0,40));
+      ok("Tab 背包面板: 快捷栏逐格列出且与 HOTBAR_ITEMS 等长", hbCells===HOTBAR_ITEMS.length, "cells="+hbCells+"/"+HOTBAR_ITEMS.length);
+      const cur0=selSlot; selectSlot((selSlot+1)%HOTBAR_ITEMS.length); renderBagPanel();
+      const curOn=!!document.querySelector("#bagHotbar .bagCell.cur");
+      ok("Tab 背包面板: 高亮跟随当前快捷栏", curOn, "selSlot="+selSlot);
+      selectSlot(cur0);
+      bag.clear(); renderBagPanel();
+      ok("Tab 背包面板: 空背包显示占位文案而不报错", /空空/.test(document.getElementById("bagGrid2").textContent), "ok");
+      closeBagPanel();
+      ok("Tab 背包面板: 可关闭并复位 display", getComputedStyle(bp).display==="none" && bagOpen===false, "display="+getComputedStyle(bp).display);
+      ok("Tab 背包面板: 关闭是纯只读, 不改动真实背包", JSON.stringify([...bag.entries()])==="[]", JSON.stringify([...bag.entries()]));
+      // 与 B 合成面板互斥, 且格子内容一致
+      toggleCraft();
+      openBagPanel();
+      ok("Tab 背包面板: 打开时自动收起 B 合成面板(不叠面板)", craftOpen===false && getComputedStyle(bp).display==="flex", "craft="+craftOpen);
+      closeBagPanel(); if(craftOpen) toggleCraft();
+      // Esc 可关
+      openBagPanel();
+      document.dispatchEvent(new KeyboardEvent("keydown",{code:"Escape",key:"Escape",bubbles:true}));
+      ok("Tab 背包面板: Esc 可关闭", bagOpen===false && getComputedStyle(bp).display==="none", "bagOpen="+bagOpen);
+      // 计入"有面板开着"判定(沙步等战斗操作因此被正确屏蔽); 用打开前的基线对比, 不依赖别的面板状态
+      const basePanel=sandStepPanelOpen();
+      openBagPanel();
+      const blocksSandstep=sandStepPanelOpen();
+      closeBagPanel();
+      ok("Tab 背包面板: 打开时被视为'面板已开'(沙步被屏蔽), 关闭后回到原状态", blocksSandstep===true && sandStepPanelOpen()===basePanel, "open="+blocksSandstep+" base="+basePanel+" after="+sandStepPanelOpen());
+      // 存档零影响
+      const before=JSON.stringify(bagSaved);
+      bag.clear(); for(const [k,v] of bagSaved) bag.set(k,v);
+      ok("Tab 背包面板: 不新增任何存档字段(还原后背包逐项一致)", JSON.stringify([...bag.entries()])===before, "match="+(JSON.stringify([...bag.entries()])===before));
+    }catch(err){ ok("第三十六轮自测(脚步声/气泡/背包)未抛错", false, String(err&&err.stack||err)); }
 
     // 收尾再确认一次: 即使中途 saveGame 写过测试世界, 还原后玩家存档仍在
     sandseaStorageRestore(liveStore);

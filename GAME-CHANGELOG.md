@@ -2,6 +2,28 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-10-05 — 沙海奇境 第三十六轮·本地：按材质脚步声 + NPC 对白气泡 + Tab 背包总览
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only。三项手感/可读性增量，零新方块/图集/存档字段/新系统依赖。
+
+| Change | Player-visible behavior |
+| --- | --- |
+| 👣 脚步声 | 步行时按**脚下方块材质**发声，共 7 类：沙/盐壳/砂岩(闷)、草/泥/陶土(细碎)、石/圆石/混凝土/砖/矿(清脆)、木/木板/暗木板(中频)、水、岩浆、冰。每步叠一个短促低频"咚"给硬地面体感；每步中心频率带 ±10% 随机，避免机械重复。音量刻意压在 0.055–0.08——脚步声是底噪层，不盖住战斗与环境音。**用行走距离而非计时驱动**（每 1.55 格一步）：疾行药水/冲刺时步频自然变快，减速/潜行时变慢，始终与实际步幅一致。飞行、骑乘、钩爪牵引、岩浆中不出声。 |
+| 💬 NPC 对白气泡 | 靠近 NPC 时，屏幕下方提示条从"一行小字"改为**纸质感对白气泡**：小尾巴指向角色，头像 tag + 名字 + 该角色的实际开场白（商人/祭司/讲解员各不相同）+ `<kbd>F</kbd> 与其交谈` 三层结构。弹出有 160ms 弹入动画（`prefers-reduced-motion` 下自动关闭）。NPC 面板开着时不显示，避免与面板内容重复。 |
+| 🎒 Tab 背包总览 | **Tab 开/关**背包面板（只读）：物品种类/总数/能量核心汇总 + 快捷栏逐格（标号 + 名字 + 持有数量，当前格高亮，**点击即切换到那一栏**）+ 全部物品。与 B 合成面板**共用同一个渲染函数** `bagItemCells()`，两处显示永远一致，不会出现"面板和实际背包对不上"。刻意只读——物品搬运仍走储物箱/收纳袋，避免两套交互规则打架。 |
+
+**明确不做（并说明原因，避免下轮重复劳动）：**
+
+- **昼夜循环不加半透明夜幕叠加。** 该系统已完整存在：`dayT`/`sunH` 世界时钟、`SKY_KEYS` 天空渐变关键帧、日月绕天旋转（方位角 `dayT*2π`）、`postParams` 后处理（夜间泛蓝 + 暗角 + 泛光）、`dayCount` 天数、夜间刷怪/Boss、夜视药水、村民日落回家。再叠一层黑幕 = 双重变暗，且会削弱夜视药水的存在意义。
+- **背包不抢 `I` 键。** `I` 已被「遗迹专精」面板占用且有自测覆盖（`openMetaPanel` 断言）。`A`–`Z` 全部有主，故选正常游戏态下空闲的 `Tab`（`Tab` 仅在设置/符文面板内被那两个面板的焦点循环消费，不会漏到这里）。
+- **NPC 不改成 canvas 气泡。** NPC 交互主体是 DOM 面板（交易/祝福/神谕），canvas 世界内气泡反而更差；只美化提示条。
+
+**How:** 音效——`stepMatFor(id)` 把方块 ID 映射到 7 类材质（未知 ID 安全回退 `stone`），`STEP_TONE` 表存 `[带通中心, 滤波类型, 音量, 时长, 低频咚]`，`sfxStep(id)` 沿用既有 `sfxBreak/sfxBrush` 的 `actx2` 噪声 + biquad 写法（噪声两端 `sin` 淡入淡出不爆音）；`stepAcc` 累加器挂在 `frame()` 移动分支之后（`player.onGround` 已定、`applyWingsuit` 之前）。气泡——重写 `#npcPrompt` CSS 为 `.np-bubble` + `::after` 尾巴，`updateNPC` 改输出三层结构，并用 `pr._sig` 只在角色变化时重写 `innerHTML`（每帧只切 `display`，不重排 DOM）。背包——`renderCraft` 的物品格渲染抽成 `bagSortedItems()/bagItemName()/bagItemCells()` 共用函数，`#bagPanel` 为**新面板**（未改动 `#bagGrid`/`chestPanel`/`furnacePanel` 任何 DOM id 与搬运逻辑）；`bagOpen` + `openBagPanel/closeBagPanel/toggleBagPanel`；Tab 接线放在 `playing()` 之前（开面板会退指针锁，否则关不掉），Esc 关闭，`sandStepPanelOpen()` 收录 `bagPanel`（打开时沙步等战斗操作正确被屏蔽），`openFurnace` 打开时收起背包。帮助面板快捷键行补 `Tab`。
+
+**Verification:** `node tools/headless.mjs selftest` **486/486** 于默认世界与 `?seed=424242`（新增 18 条断言，从 468 增至 486）。新增断言覆盖：7 类材质映射 + 未知 ID 回退、`STEP_TONE` 表结构、音频未初始化时不抛错、脚步累计器可重置；气泡三层结构/离开隐藏/换 NPC 切换内容/面板开着时不重复显示；背包面板开关/Esc 关/与 B 面板互斥/与 B 面板同源/汇总统计/快捷栏等长且高亮跟随/空背包占位/关闭为纯只读不改动真实背包/`sandStepPanelOpen` 屏蔽/无新增存档字段。
+
+`tools/headless.mjs eval` 实机验证：默认种子按住 W 行走 1.8 秒位移 7.99 格 → `sfxStep` 被调用 4 次，材质分布 `{stone:3, sand:1}`（跨越沙地→圆石，材质判定正确），`window.__errs` 为空；视口体检 1280×720 面板 560×590 无溢出、390×844 背包 359×692 与气泡 296×86 均完整落在视口内且无横向溢出、气泡 `::after` 尾巴生效。**未能人工确认：**本环境模型不支持读图，两张截图（`shot-bubble.png` / `shot-bagpanel.png`）只做了 DOM 尺寸与像素尺寸断言，未肉眼审查配色/字重观感；脚步声的实际音色与音量平衡需真人试听。
+
 ## 2026-10-05 — 沙海奇境 第三十五轮·本地：远征 Boss 战 + 长城烽火守卫战 + 旅游相册
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) only。三个方向各一项——远征深度/据点式新玩法/拍照留念系统。零新方块/图集/存档结构（相册存独立 `sandsea_album_v1`）。
