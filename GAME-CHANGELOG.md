@@ -2,6 +2,22 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-10-04 — 沙海奇境 第三十轮·本地：技能包 +2、物品包 +3（核心战技与战术道具）
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only。技能包扩展进 `combatMastery`（quake/recall 两键，随既有 combatMastery 存档，老档缺字段归零）；新道具为热栏字符串道具（复用既有 giveBlock/图标/手持管线），不新增方块/图集/存档结构。
+
+| Change | Player-visible behavior |
+| --- | --- |
+| ⚡ 技能包 +2（能量核心解锁，按 B 研习） | **大地震颤（按 Z）**：8 格内敌人受 8/12/16 伤害并被震退，冷却 22/19/16 秒（解锁 6 核心，升 4/6）。**回沙卷盘（按 Q）**：立即重置沙步冷却——可与沙步打出双重闪避连招，冷却 35/30/25 秒，3 级额外回 2 血（解锁 5 核心，升 4/6）。 |
+| 📯 物品包 +1 回响号角 | 合成（铁×2+金×2）入热栏，右键/触屏放置键长鸣：震退 6 格内所有敌人并造成 2 伤害，冷却 20 秒。围攻解围技。 |
+| ⏳ 物品包 +1 时之沙 | 合成（金×3+水晶×1），右键：8 秒移速 +40% 且**免疫摔落**（时之沙轻身），冷却 45 秒。探索与走位技。 |
+| 🧴 物品包 +1 绿洲水袋 | 合成（仙人掌×2+玻璃×1 → 2 袋，消耗品），右键饮用：解蝎毒 +6 生命。Potion 体系外的轻量补给。 |
+| 🧭 接线 | Z/Q 进 keydown 主链（playing 门控内，repeat 不重复触发）；3 道具走 doPlace 右键分支（触屏用放置键）；冷却/增益随帧衰减；H 帮助快捷键行与战技段更新；`window.__game` 暴露 `useQuake/useRecall/useEchoHorn/useTimeShards/useWaterskin/bagCount` 与战斗术冷却。 |
+
+**How:** `ICON_HORN/ICON_HOURGLASS/ICON_SKIN`（pixIcon 像素画）+ `ITEMS` 三条 + `heldParts` 三 case（手持模型）；`combatMastery{quake,recall}` 扩展进 `restoreCombatMastery` 白名单（存档自动携带）；`QUAKE_CD_BASE/RECALL_CD_BASE` 与 `quakeCooldown()/recallCooldown()`；`useQuake/useRecall/useEchoHorn/useTimeShards/useWaterskin`（门控：解锁等级/冷却/playing/落地/沙步就绪/库存）；frame 内 5 个冷却衰减 + 移速 1.4× 与摔伤归零钩子；RECIPES 追加 5 条（道具带 `ok()` 防重复持有，水袋可重复合成）。
+
+**Verification:** `node tools/headless.mjs selftest` **451/451** 于默认种子、`?seed=424242`、`?seed=2718281`（新增 17 条：配方与图标/手持、大地震颤解锁门+精确 8/12 伤害+击退+冷却门+等级曲线、回沙重置+就绪不消耗+3级回血、号角击退+冷却、时之沙增益+冷却、水袋解毒回血用尽拒绝、combatMastery 存取与钳位）。另以无头 e2e 走真实路径：**右键使用三道具 + 真实 KeyZ/KeyQ 按键全部通过**。数值平衡与真人手感待点测。
+
 ## 2026-10-04 — 沙海奇境 第二十九轮·本地：bug 排查修复（局外进度数据丢失）+ 掉落自动装备 + 自测触发器加固
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) only。系统排查第二十四～二十八轮新增系统的边界与交互，修复 1 个严重数据丢失 bug + 2 个稳健性问题，新增 1 项设计稿对齐 QoL。不改既有数值。

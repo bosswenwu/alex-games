@@ -532,11 +532,12 @@
       </div>
       <p>没有方向输入时朝视线前方沙步。沙步冷却 4.5 秒；空中、骑乘、水中、岩浆和钩爪牵引中不能使用。</p>
       <p>看到「闪避成功」不一定有反击机会：只有规避圣甲虫的标记冲锋或木乃伊重击才授予反击。远程攻击、重锤范围副伤害不享受奖励；环境伤害不能用沙步规避。</p>
-      <p><b>能量核心战技</b>：在 B 合成台用能量核心学「沙步熟练」（缩短沙步冷却）和「回砂反击」（提高精准反击伤害），各最多 3 级，越往后越贵。</p>
+      <p><b>能量核心战技</b>：在 B 合成台用能量核心学「沙步熟练」（缩短沙步冷却）、「回砂反击」（提高精准反击伤害）、「大地震颤」（按 <b>Z</b> 震退 8 格内敌人）和「回沙卷盘」（按 <b>Q</b> 重置沙步冷却，可连招），各最多 3 级，越往后越贵。</p>
+      <p><b>战技道具</b>：B 合成台可制作 📯回响号角（右键震退周围敌人）、⏳时之沙（8 秒疾行+免摔）与 🧴绿洲水袋（解毒+回 6 生命，消耗品）——触屏玩家用放置键即可使用。</p>
       <p><b>木乃伊</b>贴近后会站定举手、身体泛紫，脚下亮起一圈紫色诅咒光环；约 0.75 秒后砸地，圈内受重伤并被击飞。重击打不断，看到光环就走出圈外，或者用沙步躲开；砸完它会慢半拍，正好反击。</p>
       <p><b>骷髅射手</b>放箭前会站定、身体泛红，弓前拉出一条红色瞄准线；瞄准线变亮表示方向已锁定。躲到掩体后可取消它的瞄准；锁定后横移就能躲开；瞄准时打它一下会打断，并让它僵直约 1 秒。</p>
     </section>
-    <b>F1</b> 拍照模式　<b>F2</b> 截图　<b>F5</b> 第三人称(Shift+F5 看正脸)　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成(可熔铸☀拉之烈阳剑、🔨塞特之锤)　<b>0</b> 第10格　<b>J</b> 附魔祭坛(献文物)　<b>C</b> 沙步闪避　<b>I</b> 遗迹专精　<b>Esc</b> 暂停　<b>T</b> 编年史　<b>P</b> 陶片图鉴　<b>K</b> 神话遗物　<b>U</b> 开宝库　<b>R</b> 答斯芬克斯　<b>L</b> 神灯许愿　<b>N</b> 大地图(右上角为小地图)<br>
+    <b>F1</b> 拍照模式　<b>F2</b> 截图　<b>F5</b> 第三人称(Shift+F5 看正脸)　<b>M</b> 音乐　<b>F3</b> 调试　<b>B</b> 合成(可熔铸☀拉之烈阳剑、🔨塞特之锤)　<b>0</b> 第10格　<b>J</b> 附魔祭坛(献文物)　<b>C</b> 沙步闪避　<b>Z</b> 大地震颤　<b>Q</b> 回沙卷盘　<b>I</b> 遗迹专精　<b>Esc</b> 暂停　<b>T</b> 编年史　<b>P</b> 陶片图鉴　<b>K</b> 神话遗物　<b>U</b> 开宝库　<b>R</b> 答斯芬克斯　<b>L</b> 神灯许愿　<b>N</b> 大地图(右上角为小地图)<br>
     <b>物品栏</b>：1烟花 2钩爪 3可乐 4铁剑 5机关枪 6火箭筒 7弓 8=TNT(右键放·左键点燃) 9弹跳板<br>
     <b>2 钩爪</b>甩向准星把你拉过去；<b>3 可乐</b>回血+加速；<b>9 弹跳板</b>踩上去高高弹飞不摔伤<br>
     击杀获得<b>经验</b>升级(提升生命与伤害)。白天长、夜晚短而亮，敌人只是点缀<br>
@@ -4983,7 +4984,7 @@ const SANDSTEP_DIST=3.2, SANDSTEP_WINDOW=0.35, SANDSTEP_CD=4.5;
 const SAND_RIPOSTE_WINDOW=2.0, SAND_RIPOSTE_RATE=0.35, SAND_RIPOSTE_CAP=3;
 // 第十九轮·云端 P3: 能量核心战技(有上限)。沙步熟练: 每级冷却 -0.4s(4.5→3.3); 回砂反击: 每级反击加成 +10%、封顶 +1(35%/+3 → 65%/+6)。
 const MASTERY_MAX=3;
-const combatMastery={step:0, riposte:0};
+const combatMastery={step:0, riposte:0, quake:0, recall:0};   // 第三十轮·本地: 新增主动战技 大地震颤/回沙卷盘
 function sandStepCd(){                                   // 总冷却缩减封顶为基础值的 35%(含熟练/稳足/词缀「沙步回声」)
   let cd=SANDSTEP_CD-0.4*combatMastery.step-(ruinCombatActive()&&masteryLevel("duneStrider")>=1?0.2:0)-(ruinCombatActive()?getExpeditionModifiers().sandstepCdr:0);
   return Math.max(SANDSTEP_CD*0.65,cd);
@@ -4992,7 +4993,7 @@ function riposteRate(){ return SAND_RIPOSTE_RATE+0.1*combatMastery.riposte+(ruin
 function riposteCap(){ return SAND_RIPOSTE_CAP+combatMastery.riposte; }
 function restoreCombatMastery(d){                 // 老存档无字段/坏值 → 0, 越界限幅到 0..3
   const o=d&&typeof d==="object"&&!Array.isArray(d)?d:{};
-  for(const k of ["step","riposte"]){ const n=Number(o[k]); combatMastery[k]=Number.isFinite(n)?clamp(Math.floor(n),0,MASTERY_MAX):0; }
+  for(const k of ["step","riposte","quake","recall"]){ const n=Number(o[k]); combatMastery[k]=Number.isFinite(n)?clamp(Math.floor(n),0,MASTERY_MAX):0; }
 }
 const SCARAB_TELEGRAPH_T=0.52, SCARAB_LUNGE_T=0.38, SCARAB_RECOVER_T=0.58;
 const SCARAB_CHARGE_RANGE=8.5, SCARAB_CHARGE_HIT_R=1.55, SCARAB_CHARGE_DAMAGE=2;
@@ -5558,6 +5559,24 @@ const RECIPES=[
   {name:"🏛 遗迹远征石板", desc:"刻有三符号谜面的石板，在合成台使用即可进入一局遗迹远征", cost:[[SANDSTONE,8],[GOLD_ORE,2],[GEM_ORE,1]],
    ok(){ return canStartRuinExpedition(); }, lockMsg:"正在远征/试炼/斗兽场中，或当前无法开启",
    run(){ if(craftOpen) toggleCraft(); return startRuinExpedition()?"遗迹远征已开启！解开三符号机关，击退守卫":"无法开启遗迹远征"; }},
+  // 第三十轮·本地: 主动战技(核心解锁+升级, 按 Z/Q 释放)
+  {name:"⚡ 战技·大地震颤", get desc(){ return "按 Z 震荡大地：8 格内敌人受击退与伤害（"+quakeLevel()+"/3 级，冷却 "+quakeCooldown()+" 秒）"; },
+   get coreCost(){ return quakeLevel()===0?6:(4+2*(quakeLevel()-1)); }, cost:[],
+   ok(){ return quakeLevel()<MASTERY_MAX; }, lockMsg:"大地震颤已满 3 级",
+   run(){ combatMastery.quake++; return "🌋 大地震颤 "+combatMastery.quake+"/3 已习得——按 Z 释放（冷却 "+quakeCooldown()+" 秒）"; }},
+  {name:"⚡ 战技·回沙卷盘", get desc(){ return "按 Q 立即重置沙步冷却，可与沙步连招（"+recallLevel()+"/3 级，冷却 "+recallCooldown()+" 秒）"; },
+   get coreCost(){ return recallLevel()===0?5:(4+(recallLevel()-1)*2); }, cost:[],
+   ok(){ return recallLevel()<MASTERY_MAX; }, lockMsg:"回沙卷盘已满 3 级",
+   run(){ combatMastery.recall++; return "🌀 回沙卷盘 "+combatMastery.recall+"/3 已习得——按 Q 重置沙步（冷却 "+recallCooldown()+" 秒）"; }},
+  // 第三十轮·本地: 热栏道具(右键使用, 触屏走放置键)
+  {name:"📯 回响号角", desc:"青铜号角：震退 6 格内所有敌人并造成 2 伤害（冷却 20 秒）", cost:[[IRON_ORE,2],[GOLD_ORE,2]],
+   ok(){ return bagCount("echo_horn")===0; }, lockMsg:"已拥有回响号角",
+   run(){ giveBlock("echo_horn",1); return "📯 回响号角已入物品栏（放空的热栏格）"; }},
+  {name:"⏳ 时之沙", desc:"封存流沙：8 秒移速 +40% 且免摔（冷却 45 秒）", cost:[[GOLD_ORE,3],[CRYSTAL,1]],
+   ok(){ return bagCount("time_shards")===0; }, lockMsg:"已拥有时之沙",
+   run(){ giveBlock("time_shards",1); return "⏳ 时之沙已入物品栏"; }},
+  {name:"🧴 绿洲水袋", desc:"解蝎毒并回复 6 生命（消耗品，一次缝 2 袋）", cost:[[CACTUS,2],[GLASS,1]],
+   run(){ giveBlock("waterskin",2); return "🧴 绿洲水袋 x2 已入物品栏"; }},
 ];
 // 第七轮③·本地: 其余材质的半砖/楼梯配方由材质表生成(砂岩的两条在上面手写)
 for(const M of SHAPE_MATS.slice(1)){
@@ -7105,6 +7124,8 @@ document.addEventListener("keydown",e=>{
     }
     if(e.code==="KeyW"){ if(now-lastW<260) player.sprint=true; lastW=now; }
     if(e.code==="KeyC" && !e.repeat){ e.preventDefault(); sandStep(); }      // 第十六轮·沙步：重复 keydown 不重复触发
+    if(e.code==="KeyZ" && !e.repeat){ e.preventDefault(); useQuake(); }      // 第三十轮·本地: 主动战技 大地震颤
+    if(e.code==="KeyQ" && !e.repeat){ e.preventDefault(); useRecall(); }     // 第三十轮·本地: 主动战技 回沙卷盘
     if(e.code>="Digit1"&&e.code<="Digit9") selectSlot(+e.code.slice(5)-1);
     if(e.code==="Digit0" && HOTBAR_ITEMS.length>9) selectSlot(9);   // 第 10 格(塞特之锤)
     if(e.code==="KeyE") toggleRide();
@@ -7378,6 +7399,9 @@ function doPlace(){
     else if(it==="rpg") fireRocket();
     else if(it==="gun") fireGun();
     else if(it==="flame") fireFlame();
+    else if(it==="echo_horn") useEchoHorn();
+    else if(it==="time_shards") useTimeShards();
+    else if(it==="waterskin") useWaterskin();
     return;
   }
   const hit=raycast(5.5, currentAim());
@@ -8126,6 +8150,17 @@ function heldParts(key, anchor){
     case "grapple":return[ at([0,-12*P,-1.5*P], [0.8*P,1.0*P,2.2*P], 61),    // 发射器机身
                            at([0,-12*P,-4.5*P],[0.5*P,0.5*P,1.2*P], 59),    // 钩爪前端
                            at([0,-13.4*P,-0.5*P],[0.4*P,0.9*P,0.5*P],60) ]; // 握把
+    case "echo_horn":                                            // 📯 回响号角(第三十轮·本地)
+      return [ at([0,-13.6*P,-0.4*P],[0.4*P,0.8*P,0.5*P], 60),   // 握把
+               at([0,-12.4*P,-2.4*P],[0.55*P,0.55*P,3.0*P], 86), // 金角身
+               at([0,-12.2*P,-5.0*P],[0.95*P,0.95*P,1.3*P], 86) ]; // 喇叭口
+    case "time_shards":                                          // ⏳ 时之沙
+      return [ at([0,-11.2*P,-1.4*P],[1.1*P,0.35*P,1.1*P], 86),  // 下框
+               at([0,-12.4*P,-1.4*P],[0.3*P,1.0*P,0.3*P], 59),   // 中柱
+               at([0,-13.6*P,-1.4*P],[1.1*P,0.35*P,1.1*P], 86) ];// 上框
+    case "waterskin":                                            // 🧴 绿洲水袋
+      return [ at([0,-12.4*P,-1.1*P],[0.9*P,1.3*P,0.55*P], 6),   // 皮囊(木色)
+               at([0,-13.4*P,-1.1*P],[0.4*P,0.5*P,0.4*P], 60) ]; // 木塞
     default:      return null;
   }
 }
@@ -9546,6 +9581,60 @@ const ICON_MACE=pixIcon([
 ".gg.............",
 "................"],
 {k:[52,52,60], H:[150,156,168], h:[198,204,214], T:[58,172,160], g:[228,180,60], w:[120,78,40]});
+const ICON_HORN=pixIcon([
+"................",
+"................",
+"..........ggg...",
+".........gGGgg..",
+".........gGGGGg.",
+".........gGGGGg.",
+"........gGGGg...",
+"........gGGg....",
+".......gGGg.....",
+".......gGGg.....",
+"......gGGg......",
+"......gGg.......",
+".....kGG........",
+"....kkG.........",
+"....kk..........",
+"................"],
+{g:[212,175,55], G:[244,214,100], k:[70,50,25]});
+const ICON_HOURGLASS=pixIcon([
+"................",
+"................",
+"....kkkkkkkk....",
+"....kGGGGGGk....",
+".....kGyyGk.....",
+"......kyyk......",
+".......ky.......",
+"......kyyk......",
+".....kGyyGk.....",
+"....kGyYYyGk....",
+"....kGGGGGGk....",
+"....kkkkkkkk....",
+"................",
+"................",
+"................",
+"................"],
+{k:[70,55,25], G:[212,175,55], y:[240,210,90], Y:[255,235,140]});
+const ICON_SKIN=pixIcon([
+"................",
+"................",
+"......kk........",
+".....k..k.......",
+".....kwwk.......",
+"....kwwwwk......",
+"...kwwwwwwk.....",
+"...kwWWWWwk.....",
+"...kwWWWWwk.....",
+"...kwWWWWwk.....",
+"....kwwwwk......",
+".....kwwk.......",
+"......kk........",
+"................",
+"................",
+"................"],
+{k:[70,50,30], w:[150,110,60], W:[90,175,125]});
 const ITEMS={
   mace:{name:"塞特之锤", icon:ICON_MACE},
   sword:{name:"铁剑", icon:ICON_SWORD},
@@ -9557,6 +9646,9 @@ const ITEMS={
   cola: {name:"可乐 (右键畅饮)", icon:ICON_COLA},
   grapple:{name:"钩爪 (右键甩出勾拉)", icon:ICON_GRAPPLE},
   firework:{name:"烟花 (右键发射)", icon:ICON_FIREWORK},
+  echo_horn:{name:"回响号角 (右键震退周围敌人)", icon:ICON_HORN},
+  time_shards:{name:"时之沙 (右键获得疾行与轻身)", icon:ICON_HOURGLASS},
+  waterskin:{name:"绿洲水袋 (右键饮用: 解毒回血)", icon:ICON_SKIN},
 };
 /* ---- ☀ 拉之烈阳剑 (第五轮·本地) ----
    铁剑的永久升级(按 B 合成: 金矿石×6 + 钻石×2)。命中伤害 16(铁剑 12)并灼烧 4 秒(每 0.5 秒 2 点);
@@ -12368,6 +12460,7 @@ function frame(now){
             : player.sneak ? 1.4
             : player.sprint ? 6.2 : 4.4;
     if(!player.flying) spd*=potionSpeedMul();          // 第五轮·云端: 迅捷药水
+    if(timeBuffT>0) spd*=1.4;                          // 第三十轮·本地: 时之沙 疾行
     if(water && !player.flying) spd*=0.55;
     if(lava && !player.flying) spd*=0.32;              // 岩浆里寸步难行
     if(colaBuffT>0) spd*=1.35;                          // 可乐: 移动速度提升
@@ -12405,7 +12498,7 @@ function frame(now){
     else if(!player.onGround) fallStart = fallStart===null ? player.y : Math.max(fallStart,player.y);
     else if(fallStart!==null){
       const drop=fallStart-player.y;
-      const fd=fallDamage(drop);                   // 虹之碎片 -25% / 间歇泉蒸汽托起后 ×1/4
+      const fd=(timeBuffT>0)?0:fallDamage(drop);   // 时之沙轻身: 免摔(第三十轮·本地); 虹之碎片 -25% / 间歇泉蒸汽托起后 ×1/4
       if(fd>0) damagePlayer(fd,0,0);
       fallStart=null; steamLift=false;
     }
@@ -12536,6 +12629,11 @@ function frame(now){
     colaBuffT=Math.max(0,colaBuffT-dt);
     grappleCd=Math.max(0,grappleCd-dt);
     fwCd=Math.max(0,fwCd-dt);
+    quakeCd=Math.max(0,quakeCd-dt);                              // 第三十轮·本地: 新战技/道具冷却与增益
+    recallCd=Math.max(0,recallCd-dt);
+    hornCd=Math.max(0,hornCd-dt);
+    timeCd=Math.max(0,timeCd-dt);
+    timeBuffT=Math.max(0,timeBuffT-dt);
     musicTick(dt);
     questTick(dt);
     updateNPC(dt);
@@ -14383,7 +14481,10 @@ window.__game = {
                               eliteChance:+eliteChance().toFixed(3), spawnCap:Math.min(8,2+Math.floor(Math.min(dayCount,10)/2)) }; },
   get streak(){ return { cur:killStreak, best:bestStreak, elites:elitesSlain }; },
   get cores(){ return cores; }, get armor(){ return armor; },
-  get combatMastery(){ return {step:combatMastery.step, riposte:combatMastery.riposte, sandStepCd:sandStepCd(), riposteRate:riposteRate(), riposteCap:riposteCap()}; },
+  get combatMastery(){ return {step:combatMastery.step, riposte:combatMastery.riposte, quake:combatMastery.quake, recall:combatMastery.recall,
+    sandStepCd:sandStepCd(), riposteRate:riposteRate(), riposteCap:riposteCap(), quakeCd:+quakeCd.toFixed(2), recallCd:+recallCd.toFixed(2)}; },
+  useQuake:(f)=>useQuake(f), useRecall:(f)=>useRecall(f), useEchoHorn, useTimeShards, useWaterskin,
+  bagCount:(id)=>bagCount(id),
   get ruinExpedition(){ return { active:ruinExpeditionState.active, phase:ruinExpeditionState.phase, wave:ruinExpeditionState.wave, runId:ruinExpeditionState.runId, route:ruinExpeditionState.route, completed:ruinExpeditionSave.completed, runs:ruinExpeditionSave.runs.slice() }; },
   startRuinExpedition:()=>startRuinExpedition(), abortRuinExpedition:()=>abortRuinExpedition(), pickExpeditionRoute:(r)=>pickExpeditionRoute(r),
   get meta(){ return { echoes:metaProgress.echoes, streak:metaProgress.streak, mastery:Object.assign({},metaProgress.mastery),
@@ -14409,6 +14510,79 @@ window.__game = {
   setDay(n){ dayCount=Math.max(1,n|0); return dayCount; },     // 调试/自测: 直接设定天数以检验难度曲线
   selftest
 };
+
+/* ---- ⚡ 主动战技与道具技能 (第三十轮·本地): 大地震颤(Z)/回沙卷盘(Q) 核心解锁升级; 回响号角/时之沙/绿洲水袋为热栏道具(触屏可右键) ---- */
+const QUAKE_CD_BASE=22, RECALL_CD_BASE=35, TIME_BUFF_T=8;
+let quakeCd=0, recallCd=0, hornCd=0, timeCd=0, timeBuffT=0;
+function quakeLevel(){ return combatMastery.quake|0; }
+function recallLevel(){ return combatMastery.recall|0; }
+function quakeCooldown(){ return QUAKE_CD_BASE-3*(quakeLevel()-1); }    // 22/19/16s
+function recallCooldown(){ return RECALL_CD_BASE-5*(recallLevel()-1); } // 35/30/25s
+function useQuake(force){                                // 大地震颤: 以脚下方块为中心的环形冲击波
+  if(quakeLevel()<1){ showName("⚡ 大地震颤尚未习得——在 B 合成台用能量核心解锁"); return false; }
+  if(force!==true && quakeCd>0){ showName("🌋 大地震颤冷却 "+Math.ceil(quakeCd)+"s"); return false; }
+  if(force!==true && (!playing() || dead || !player.onGround)){ showName("💨 大地震颤要双脚落地才能发动"); return false; }
+  quakeCd=force===true?quakeCd:quakeCooldown();
+  const dmg=8+4*(quakeLevel()-1);                        // 8/12/16
+  let hit=0;
+  for(const m of mobs.slice()){
+    if(m.hp<=0) continue;
+    const dx=m.x-player.x, dz=m.z-player.z, d=Math.hypot(dx,dz);
+    if(d>8 || Math.abs(m.y-player.y)>4) continue;
+    const kb=12*(1-d/9)+4;
+    hurtMob(m, dmg, dx/d*kb, dz/d*kb, hit>0); hit++;
+  }
+  for(let i=0;i<26;i++){ const a=i/26*6.283;             // 冲击环粒子
+    particles.push({x:player.x+Math.cos(a)*1.2, y:player.y+0.15, z:player.z+Math.sin(a)*1.2,
+      vx:Math.cos(a)*7, vz:Math.sin(a)*7, vy:0.8+Math.random()*1.2, life:0.45, size:0.11, u:4*TS, v:0, l:1.6});
+  }
+  sfxSunSweep && sfxSunSweep();
+  showName(hit?("🌋 大地震颤！震退 "+hit+" 个敌人（"+dmg+" 伤害）"):"🌋 大地震颤！脚下沙浪翻滚");
+  return true;
+}
+function useRecall(force){                               // 回沙卷盘: 立即重置沙步冷却(与沙步连招)
+  if(recallLevel()<1){ showName("⚡ 回沙卷盘尚未习得——在 B 合成台用能量核心解锁"); return false; }
+  if(force!==true && recallCd>0){ showName("🌀 回沙卷盘冷却 "+Math.ceil(recallCd)+"s"); return false; }
+  if(force!==true && (!playing() || dead)){ return false; }
+  if(force!==true && sandStepState.cd<=0){ showName("💨 沙步本就就绪——先按 C 沙步再回沙"); return false; }
+  recallCd=force===true?recallCd:recallCooldown();
+  sandStepState.cd=0; refreshSandStepButton();
+  if(recallLevel()>=3 && hp<maxHp){ hp=Math.min(maxHp,hp+2); updateHearts(); }   // 3 级: 额外回 2 血
+  showName("🌀 回沙！沙步冷却已重置"+(recallLevel()>=3?"（+2 生命）":""));
+  return true;
+}
+function useEchoHorn(){                                  // 📯 回响号角: 震退 6 格内敌人(道具, 冷却 20s)
+  if(hornCd>0){ showName("📯 回响号角冷却 "+Math.ceil(hornCd)+"s"); return false; }
+  hornCd=20;
+  let hit=0;
+  for(const m of mobs.slice()){
+    if(m.hp<=0) continue;
+    const dx=m.x-player.x, dz=m.z-player.z, d=Math.hypot(dx,dz);
+    if(d>6 || d<1e-3 || Math.abs(m.y-player.y)>4) continue;
+    const kb=16*(1-d/7)+5;
+    hurtMob(m, 2, dx/d*kb, dz/d*kb, hit>0); hit++;
+  }
+  for(let i=0;i<10;i++) particles.push({x:player.x+Math.cos(i/10*6.283)*0.8, y:player.y+1.2, z:player.z+Math.sin(i/10*6.283)*0.8,
+    vx:Math.cos(i/10*6.283)*3, vy:1.5+Math.random(), vz:Math.sin(i/10*6.283)*3, life:0.4, size:0.09, u:4*TS, v:0, l:1.4});
+  sfxSunSweep && sfxSunSweep();
+  showName(hit?("📯 号角长鸣！震退 "+hit+" 个敌人"):"📯 号角长鸣，沙海回荡…");
+  return true;
+}
+function useTimeShards(){                                // ⏳ 时之沙: 8 秒移速×1.4 + 免摔(道具, 冷却 45s)
+  if(timeCd>0){ showName("⏳ 时之沙冷却 "+Math.ceil(timeCd)+"s"); return false; }
+  timeCd=45; timeBuffT=TIME_BUFF_T;
+  showName("⏳ 时之沙流转：8 秒疾行 + 轻身免摔");
+  return true;
+}
+function useWaterskin(){                                 // 🧴 绿洲水袋: 解毒 + 回 6 血(消耗品)
+  if(bagCount("waterskin")<=0){ showName("🧴 没有水袋了——在 B 合成台再缝一个"); return false; }
+  if(hp>=maxHp && poisonT<=0){ showName("🧴 现在没有喝水的必要"); return false; }
+  bagTake("waterskin",1);
+  poisonT=0; const pt=document.getElementById("poisontint"); if(pt) pt.style.opacity=0;
+  hp=Math.min(maxHp,hp+6); updateHearts();
+  showName("🧴 清冽的绿洲水：解毒 +6 生命（剩 "+bagCount("waterskin")+" 袋）");
+  return true;
+}
 
 /* ---------- 自测: 每项都做真断言, 失败会给出实际值 ---------- */
 function selftest(){
@@ -15582,6 +15756,80 @@ function selftest(){
         abortRuinExpedition(); closeRuinGlyphPanel("8q6-cleanup"); closeMetaPanel(); closeExpeditionRoutePanel(true);
         mobs.length=0; for(const m of snapMob6) mobs.push(m);
         sunblade=sunblade6; updateHearts(); updateBuffHUD();
+      }
+    }
+
+    // 8q7. 主动战技与道具技能(第三十轮): 解锁门/冷却/伤害/击退/连招/消耗品/图标
+    {
+      closeRuinGlyphPanel("selftest-reset"); closeExpeditionRoutePanel(true); abortRuinExpedition(); closeMetaPanel();
+      const cmSnap7=Object.assign({},combatMastery);
+      const cdSnap7={quakeCd,recallCd,hornCd,timeCd,timeBuffT};
+      const stSnap7={cd:sandStepState.cd,evadeT:sandStepState.evadeT};
+      const hpSnap7={hp,maxHp}, poisonSnap7=poisonT, armor7=armor;
+      const bagSnap7=new Map(bag);
+      const mobsSnap7=mobs.slice();
+      const slSnap7={softLock,locked,ov:document.getElementById("overlay").style.display};
+      try{
+        softLock=true; locked=false; document.getElementById("overlay").style.display="none"; armor=0;
+        // 配方与图标
+        const qR=RECIPES.find(r=>r.name.indexOf("大地震颤")>=0), rcR=RECIPES.find(r=>r.name.indexOf("回沙卷盘")>=0);
+        const hR=RECIPES.find(r=>r.name.indexOf("回响号角")>=0), tR=RECIPES.find(r=>r.name.indexOf("时之沙")>=0), wR=RECIPES.find(r=>r.name.indexOf("绿洲水袋")>=0);
+        ok("新配方: 2 战技 + 3 道具齐全且消耗正确", !!qR && !!rcR && !!hR && !!tR && !!wR && qR.coreCost===6 && rcR.coreCost===5 &&
+           hR.cost[0][1]===2 && tR.cost.some(c=>c[0]===CRYSTAL) && wR.cost.some(c=>c[0]===CACTUS), "q="+(qR&&qR.coreCost)+" rc="+(rcR&&rcR.coreCost));
+        ok("新道具: ITEMS 图标与手持模型就绪", ITEMS.echo_horn && ITEMS.time_shards && ITEMS.waterskin &&
+           ITEMS.echo_horn.icon.width===16 && heldParts("echo_horn").length===3 && heldParts("waterskin").length===2 && heldParts("time_shards").length===3);
+        // 大地震颤: 未解锁拒绝
+        combatMastery.quake=0;
+        ok("大地震颤: 未解锁时按 Z 被拒", useQuake()===false);
+        // 解锁 1 级: 伤害 8 + 击退 + 冷却
+        combatMastery.quake=1;
+        mobs.length=0; spawnTrialMob("scarab", Math.floor(player.x)+3, Math.floor(player.y), Math.floor(player.z)+3, false);
+        const mq=mobs[0]; mq.hp=mq.maxHp=500; player.onGround=true; hp=maxHp=20;
+        const hpM0=mq.hp;
+        ok("大地震颤: 8 格内敌人受 8 伤害并被震退", useQuake()===true && mq.maxHp-mq.hp===8 && (mq.kbx||mq.kbz)>0 && quakeCd>0, "dmg="+(mq.maxHp-mq.hp));
+        ok("大地震颤: 冷却期内再按被拒", useQuake()===false);
+        combatMastery.quake=2; quakeCd=0;
+        ok("大地震颤: 2 级伤害 12、冷却 19 秒", quakeCooldown()===19 && (()=>{ mq.hp=mq.maxHp=500; useQuake(); return mq.maxHp-mq.hp; })()===12, "cd="+quakeCooldown());
+        // 回沙卷盘: 重置沙步冷却连招
+        combatMastery.recall=0;
+        ok("回沙卷盘: 未解锁时按 Q 被拒", useRecall()===false);
+        combatMastery.recall=1;
+        sandStepState.cd=4.2;
+        ok("回沙卷盘: Q 重置沙步冷却并进入自身冷却", useRecall()===true && sandStepState.cd===0 && recallCd>0);
+        sandStepState.cd=0;
+        ok("回沙卷盘: 沙步就绪时不消耗卷盘", useRecall()===false);
+        combatMastery.recall=3; hp=10; recallCd=0;
+        sandStepState.cd=4; useRecall();
+        ok("回沙卷盘: 3 级额外回 2 血、冷却 25 秒", hp===12 && recallCooldown()===25, "hp="+hp);
+        // 回响号角: 击退道具
+        bagTake("echo_horn",bagCount("echo_horn")); hornCd=0;
+        mobs.length=0; spawnTrialMob("mummy", Math.floor(player.x)+4, Math.floor(player.y), Math.floor(player.z)+4, false);
+        const mh=mobs[0]; mh.hp=mh.maxHp=500;
+        ok("回响号角: 震退 6 格内敌人(伤害 2)", useEchoHorn()===true && mh.maxHp-mh.hp===2 && (mh.kbx||mh.kbz)>0 && hornCd>0, "dmg="+(mh.maxHp-mh.hp));
+        ok("回响号角: 冷却期内再按被拒", useEchoHorn()===false);
+        // 时之沙: 增益与冷却
+        timeCd=0;
+        ok("时之沙: 8 秒疾行增益与 45 秒冷却", useTimeShards()===true && timeBuffT===TIME_BUFF_T && timeCd===45 && useTimeShards()===false);
+        // 绿洲水袋: 解毒回血消耗品
+        bagTake("waterskin",bagCount("waterskin")); bagAdd("waterskin",2); poisonT=5; hp=10; maxHp=20;
+        ok("绿洲水袋: 解毒 +6 血并消耗一袋", useWaterskin()===true && poisonT===0 && hp===16 && bagCount("waterskin")===1);
+        useWaterskin();
+        ok("绿洲水袋: 用尽后不可再饮", bagCount("waterskin")===0 && hp===20 && useWaterskin()===false);
+        // 存档往返: quake/recall 进 combatMastery
+        restoreCombatMastery({step:1, riposte:2, quake:3, recall:1});
+        ok("combatMastery 扩展: quake/recall 存取与钳位", combatMastery.quake===3 && combatMastery.recall===1);
+        restoreCombatMastery({step:1, quake:9, recall:-2});
+        ok("combatMastery 扩展: 坏值钳位到 0..3", combatMastery.quake===3 && combatMastery.recall===0);
+        restoreCombatMastery(cmSnap7);
+      } finally {
+        Object.assign(combatMastery, cmSnap7);
+        quakeCd=cdSnap7.quakeCd; recallCd=cdSnap7.recallCd; hornCd=cdSnap7.hornCd; timeCd=cdSnap7.timeCd; timeBuffT=cdSnap7.timeBuffT;
+        sandStepState.cd=stSnap7.cd; sandStepState.evadeT=stSnap7.evadeT;
+        hp=hpSnap7.hp; maxHp=hpSnap7.maxHp; poisonT=poisonSnap7; armor=armor7;
+        bag.clear(); for(const [k,v] of bagSnap7) bag.set(k,v);
+        mobs.length=0; for(const m of mobsSnap7) mobs.push(m);
+        softLock=slSnap7.softLock; locked=slSnap7.locked; document.getElementById("overlay").style.display=slSnap7.ov;
+        updateHearts(); updateXPHUD(); updateBuffHUD(); refreshSandStepButton();
       }
     }
 
