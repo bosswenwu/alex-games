@@ -2,6 +2,21 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-10-05 — 沙海奇境 第三十四轮·本地：狮鹫坐骑 + 驼队驿站快旅 + 翼装穿环赛道 + 叛军袭掠事件
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only。"世界活起来"四件套——全部复用既有体系（mountFly 骑乘/事件框架/粒子/地标发现），零新方块/图集。
+
+| Change | Player-visible behavior |
+| --- | --- |
+| 🦅 狮鹫坐骑 | B 合成「狮鹫哨子」（金×4+紫晶×2+铁×4）→ 右键吹响召唤狮鹫（再吹召回），靠近按 E 骑乘——飞行坐骑（速度 12，双击空格飞行），死亡可再召（冷却 20s）。 |
+| 🗺 驼队驿站 | B 合成「驼队地图」（金×3+芦苇×2+羊毛×2）→ 右键打开驿站面板：列出所有**已发现**的地标（80 格外），路费按距离计价（每 25 格 1 金），点选即驼队快旅抵达。大世界跑图 QoL，金子消耗口。 |
+| 🪂 翼装穿环赛道 | 翼装展开时自动生成 6 道金色光环赛道（沿视线延伸），穿环 +20 经验/环，六环全收 +100；落地/超时清赛道。 |
+| ⚔ 叛军袭掠事件 | 周期事件（约 7 分钟一次）：罗马叛军两波精锐（军团兵×3 → 百夫长+军团兵×2）袭掠商路，90 秒内全歼 → 金×8 钻×1 +100 经验 + 罗马声望+3；超时/死亡叛军遁走。左下状态栏显示波次与倒计时。 |
+
+**接线：**`MOB_DEFS.griffinM`（mountFly 飞行骑乘，复用摩托/飞机体系）+ `toggleGriffin()`；`caravanTargets/travelToLandmark/renderCaravanPanel` + `#caravan-panel` DOM/CSS/Esc/sandStepPanelOpen 收录；`wingRings/wingRingT` + `applyWingsuit` 穿环判定 + frame 环粒子可视化 + `finishWingsuit` 全收奖励；`rogueState/tickRogueRaid` + frame 调用 + buffHud 行；RECIPES ×4；`window.__game` 暴露 `regionTheme/startWingsuit/spawnYachtAt`。
+
+**Verification:** `node tools/headless.mjs selftest` **468/468** 于默认种子、`?seed=424242`、`?seed=2718281`、`?seed=314159`。另以无头 e2e 验证：七主题分区归属全对（60 个地标带格子）、游艇水面召唤、翼装 6/6 穿环与经验折算、叛军两波全歼平叛、讲解员注册。数值平衡与真人手感待点测。
+
 ## 2026-10-05 — 沙海奇境 第三十三轮·本地：区域文明主题化 + 金字塔降频 + 悬空修复 + 游艇/翼装/讲解员 NPC
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) only。响应用户反馈："金字塔过多、新建筑难找、建筑悬空；希望区域主题化（华夏/美国等）、游艇、骑马、翼装飞行、更多 NPC"。零新方块/图集。

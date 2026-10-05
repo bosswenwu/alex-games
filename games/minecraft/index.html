@@ -384,10 +384,12 @@
   #bazaar-panel .bz-ware:hover { background:#ffd23f22; border-color:#ffd23f66; }
   #bazaar-panel .bz-poor { opacity:.45; cursor:not-allowed; }
   #bazaar-panel .bz-cost { color:#ffd23f; font-weight:700; white-space:nowrap; }
-  #pottery-panel, #sphinx-panel, #mythic-panel, #lamp-panel, #ruin-glyph-panel, #expedition-route, #meta-panel { position:fixed; inset:0; z-index:62; display:none; align-items:center; justify-content:center; padding:20px; background:rgba(8,6,3,.82); cursor:pointer; }
-  #pottery-panel.on, #sphinx-panel.on, #mythic-panel.on, #lamp-panel.on, #ruin-glyph-panel.on, #expedition-route.on, #meta-panel.on { display:flex; }
+  #pottery-panel, #sphinx-panel, #mythic-panel, #lamp-panel, #ruin-glyph-panel, #expedition-route, #meta-panel, #caravan-panel { position:fixed; inset:0; z-index:62; display:none; align-items:center; justify-content:center; padding:20px; background:rgba(8,6,3,.82); cursor:pointer; }
+  #pottery-panel.on, #sphinx-panel.on, #mythic-panel.on, #lamp-panel.on, #ruin-glyph-panel.on, #expedition-route.on, #meta-panel.on, #caravan-panel.on { display:flex; }
   #pottery-panel .pt-card, #sphinx-panel .sx-card, #mythic-panel .pt-card, #lamp-panel .sx-card, #ruin-glyph-panel .sx-card, #expedition-route .sx-card, #meta-panel .pt-card { max-width:520px; width:100%; max-height:86vh; overflow:auto; background:linear-gradient(#1a140c,#120d07); border:2px solid #c9a24b; border-radius:12px; padding:20px 24px; color:#f0e6d0; box-shadow:0 10px 40px #000a; cursor:default; }
-  #pottery-panel h2, #sphinx-panel h2, #mythic-panel h2, #lamp-panel h2, #ruin-glyph-panel h2, #expedition-route h2, #meta-panel h2 { color:#ffd23f; margin:0 0 8px; font-size:19px; }
+  #pottery-panel h2, #sphinx-panel h2, #mythic-panel h2, #lamp-panel h2, #ruin-glyph-panel h2, #expedition-route h2, #meta-panel h2, #caravan-panel h2 { color:#ffd23f; margin:0 0 8px; font-size:19px; }
+  #caravan-panel .cv-row { display:flex; justify-content:space-between; gap:12px; padding:9px 11px; margin:6px 0; border:1px solid #ffffff1c; border-radius:9px; cursor:pointer; font-size:13px; line-height:1.5; }
+  #caravan-panel .cv-row:hover { background:#ffd23f1a; border-color:#ffd23f66; }
   #pottery-panel .pt-row { display:flex; justify-content:space-between; gap:12px; padding:8px 10px; margin:5px 0; border:1px solid #ffffff14; border-radius:8px; background:#ffffff08; }
   #pottery-panel .pt-row.locked { opacity:.42; }
   #pottery-panel .pt-n { font-weight:700; color:#ffe9c4; }
@@ -560,7 +562,7 @@
     　💎 晶洞高地：地表紫晶标出入口，地下方解石洞可采　⛵ 遗迹带：沉船/商队残骸藏金<br>
     <b>地标</b>：金字塔(墓室石棺唤醒法老王Boss)·斗兽场·宫殿·绿洲·彩虹桥·机场·赛车场·陨石坑·游乐场<br>
     　<b>🌍 世界地标</b>（草原群系随机生成）：🏯故宫 · 🏛希腊神庙 · 🖼世界美术馆(五幅名画马赛克) · 🗼埃菲尔铁塔 · ⛪科隆大教堂 · ♨罗马浴场 · 🏛白宫 · 🏯日本皇居 · 🏕蒙古包营地(旁有可驯服马群)<br>    　<b>🗺 文明区域</b>（世界按大区划定文明主题 —— 🏮华夏之地(故宫·长城·雷峰塔) / 🗽新大陆(白宫·自由女神) / 🗼欧罗巴(铁塔·科隆大教堂) / 🏛爱琴海畔(帕特农) / ⛩东瀛之岛(皇居) / 🐴草原之国(营地) / 🏛罗马故地(浴场) —— 同区地标同主题, 成片出现；各地标有<b>🗣讲解员</b> NPC）<br>
-    　<b>🛥 游艇</b>（B 合成后召至面前水面，按 E 驾驶，离水减速）· <b>🪂 翼装背包</b>（B 合成；右键或埃菲尔塔顶自动展开，滑翔 50 格有奖）<br>
+    　<b>🛥 游艇</b>（B 合成后召至面前水面，按 E 驾驶，离水减速）· <b>🪂 翼装背包</b>（B 合成；右键或埃菲尔塔顶自动展开，滑翔 50 格有奖；埃菲尔塔顶开赛道穿环）· <b>🦅 狮鹫哨子</b>（召唤飞行坐骑）· <b>🗺 驼队地图</b>（快旅已发现地标）<br>
     <b>尼罗河</b>穿过沙漠(有鱼与鳄鱼)；天上有<b>浮空岛</b>藏钻石；地底 y&lt;10 是岩浆海，越深越凶险<br>
     <b>第3晚起 Boss 轮换</b>：僵尸王 / 飞龙 / 钢铁泰坦 / 烈焰凤凰　拖动模式下移动鼠标瞄准
   </div>
@@ -618,6 +620,7 @@
 <div id="ruin-glyph-panel" role="dialog" aria-modal="true" aria-hidden="true" aria-label="遗迹三符号机关" onclick="closeRuinGlyphPanel('backdrop')"><div class="sx-card" onclick="event.stopPropagation()"></div></div>
 <div id="expedition-route" role="dialog" aria-modal="true" aria-hidden="true" aria-label="远征路线" onclick="pickExpeditionRoute('safe')"><div class="sx-card" onclick="event.stopPropagation()"></div></div>
 <div id="meta-panel" role="dialog" aria-modal="true" aria-hidden="true" aria-label="遗迹专精" onclick="closeMetaPanel()"><div class="pt-card" onclick="event.stopPropagation()"></div></div>
+<div id="caravan-panel" role="dialog" aria-modal="true" aria-hidden="true" aria-label="驼队驿站" onclick="closeCaravanPanel()"><div class="pt-card" onclick="event.stopPropagation()"></div></div>
 <div id="overlay" class="main-menu">
   <canvas id="brandmark" width="120" height="120"></canvas>
   <div id="title">沙海奇境</div>
@@ -5352,7 +5355,7 @@ function sandRiposteDamage(target,baseDamage){
 }
 function sandStepPanelOpen(){
   const ids=["craftPanel","enchPanel","potionPanel","chestPanel","furnacePanel","npcPanel","fullhelp","settingsPanel",
-    "bazaar-panel","pottery-panel","mythic-panel","lamp-panel","sphinx-panel","ruin-glyph-panel","expedition-route","meta-panel"];
+    "bazaar-panel","pottery-panel","mythic-panel","lamp-panel","sphinx-panel","ruin-glyph-panel","expedition-route","meta-panel","caravan-panel"];
   return ids.some(id=>{
     const el=document.getElementById(id); if(!el) return false;
     const cs=getComputedStyle(el);
@@ -5917,6 +5920,12 @@ const RECIPES=[
    run(){ giveBlock("waterskin",2); return "🧴 绿洲水袋 x2 已入物品栏"; }},
   {name:"🪂 翼装背包", desc:"18 秒滑翔：下落减缓、俯冲加速；从高处跃下体验翼装飞行（埃菲尔塔顶会自动展开）", cost:[[WOOL,4],[IRON_ORE,2]],
    run(){ giveBlock("wingsuit",1); return "🪂 翼装背包已入物品栏（右键展开）"; }},
+  {name:"🦅 狮鹫哨子", desc:"召唤/召回你的狮鹫坐骑（右键吹响；骑乘后双击空格飞行，速度 12）", cost:[[GOLD_ORE,4],[AMETHYST,2],[IRON_ORE,4]],
+   ok(){ return bagCount("griffin_whistle")===0; }, lockMsg:"已拥有狮鹫哨子",
+   run(){ giveBlock("griffin_whistle",1); return "🦅 狮鹫哨子已入物品栏（右键吹响）"; }},
+  {name:"🗺 驼队地图", desc:"打开驼队驿站：花金子快旅到任何已发现的地标", cost:[[GOLD_ORE,3],[REEDS,2],[WOOL,2]],
+   ok(){ return bagCount("caravan_map")===0; }, lockMsg:"已拥有驼队地图",
+   run(){ giveBlock("caravan_map",1); return "🗺 驼队地图已入物品栏（右键打开驿站）"; }},
   {name:"🛥 游艇", desc:"召唤一艘可驾驶的游艇到面前水域（按 E 登船，离水减速）", cost:[[IRON_ORE,6],[PLASTER_WHITE,4],[GLASS,3]],
    run(){ const d=lookDir(); for(let t=6;t<=28;t+=2){ const wx=Math.floor(player.x+d[0]*t), wz=Math.floor(player.z+d[2]*t);
      if(getBlock(wx,WATER_Y,wz)===WATER){ spawnYachtAt(wx,wz); return "🛥 游艇已下水（前方水面上，按 E 登船）"; } }
@@ -6553,6 +6562,9 @@ function updateBuffHUD(){
   }
   if(typeof expeditionState!=="undefined" && expeditionState.active){
     bits.push("🌊 金羊毛 "+Math.ceil(expeditionState.t)+"s");
+  }
+  if(typeof rogueState!=="undefined" && rogueState.active){
+    bits.push("⚔ 叛军袭掠 · 第 "+Math.min(rogueState.wave,2)+"/2 波 · "+Math.ceil(rogueState.t)+"s");
   }
   if(typeof ruinExpeditionState!=="undefined" && ruinExpeditionState.active){
     const rp=ruinExpeditionState.phase;
@@ -7467,6 +7479,7 @@ document.addEventListener("keydown",e=>{
   }
   if(e.code==="Escape" && npcPanelOpen){ closeNPCPanel(); return; }
   if(e.code==="Escape" && craftOpen){ toggleCraft(); return; }
+  { const cvE=document.getElementById("caravan-panel"); if(e.code==="Escape" && cvE && cvE.classList.contains("on")){ closeCaravanPanel(); return; } }
   if(e.code==="Escape" && enchOpen){ toggleEnch(); return; }
   if(e.code==="Escape" && potionOpen){ togglePotions(); return; }                 // 第五轮·云端
   if(e.code==="Escape" && chestOpen){ closeChest(); return; }                      // 第六轮·云端
@@ -7773,6 +7786,8 @@ function doPlace(){
     else if(it==="time_shards") useTimeShards();
     else if(it==="waterskin") useWaterskin();
     else if(it==="wingsuit") startWingsuit();
+    else if(it==="griffin_whistle") toggleGriffin();
+    else if(it==="caravan_map") openCaravanPanel();
     return;
   }
   const hit=raycast(5.5, currentAim());
@@ -8501,6 +8516,7 @@ const MOB_DEFS={
   plane:   {name:"客机(按E驾驶)", hp:60, speed:11.0,w:1.4, h:0.7, hostile:false, fly:true, plane:true, mount:true, mountFly:1, hover:26, scale:1.6, poof:155, drop:"core", parts:planeParts},
   bike:    {name:"悬浮摩托(按E骑乘)", hp:40, speed:9.0, w:0.5, h:0.7, hostile:false, fly:true, mount:true, mountFly:1, hover:3, poof:158, drop:"", parts:bikeParts},
   yacht:   {name:"游艇(水面按E驾驶)", hp:80, speed:8.0, w:0.9, h:0.8, hostile:false, mount:true, boat:true, poof:160, drop:"", parts:yachtParts},
+  griffinM:{name:"狮鹫(按E骑乘)", hp:150, speed:12.0, w:0.6, h:1.2, hostile:false, fly:true, mount:true, mountFly:1, hover:14, scale:1.1, poof:239, drop:"", parts:griffinParts},
 };
 const playerEnt={def:{parts:humanoid(TILES_S,false)}, x:0,y:0,z:0, yaw:0, vx:0,vz:0,
                  animT:0, hurtT:0, swingT:0, burning:false, held:null};
@@ -13033,6 +13049,7 @@ function frame(now){
     tickExpedition(dt);
     tickRuinExpedition(dt);
     tickUndeadNight(dt);
+    tickRogueRaid(dt);                              // 第三十四轮·本地: 叛军袭掠事件
     tickPotions(dt);                              // 第五轮·云端
     tickFishing(dt);                              // 第五轮·云端
     tickCamel(dt);                                // 第五轮·云端
@@ -13055,6 +13072,13 @@ function frame(now){
     fwCd=Math.max(0,fwCd-dt);
     quakeCd=Math.max(0,quakeCd-dt);                              // 第三十轮·本地: 新战技/道具冷却与增益
     wingT=Math.max(0,wingT-dt); wingCd=Math.max(0,wingCd-dt);      // 第三十三轮·本地: 翼装
+    wingRingT-=dt;
+    if(wingT>0 && wingRings.length && wingRingT<=0){               // 穿环赛道: 当前环金色粒子可视化
+      wingRingT=0.12;
+      const cp=wingRings.find(r2=>!r2.passed);
+      if(cp) for(let a2=0;a2<10;a2++){ const ang=a2/10*6.283;
+        particles.push({x:cp.x+Math.cos(ang)*4, y:cp.y+Math.sin(ang)*4, z:cp.z, vx:0,vy:0,vz:0, life:0.14, size:0.14, u:4*TS, v:0, l:1.2}); }
+    }
     if(wingT===0 && wingStart) finishWingsuit();
     if(wingCd<=0 && wingT<=0 && player.onGround && !riding && !dead){
       const es=nearStructure(["eiffel"],26);
@@ -14553,6 +14577,43 @@ function tickUndeadNight(dt){
     if(undeadNight.cd<=0 && sunH<0.06){ undeadNight.cd=280; startUndeadNight(); } }   // 修复: 亡者之夜只在夜里降临(刷怪整段受 night 门控, 白天触发则一片空)
 }
 
+/* ---- ⚔ 叛变军团袭掠(第三十四轮·本地): 周期事件 —— 罗马叛军袭掠商路, 两波精英叛军, 全歼平叛得厚赏 ---- */
+const rogueState={active:false, wave:0, alive:[], nextT:0, t:0, cd:420};
+function startRogueRaid(){
+  rogueState.active=true; rogueState.wave=0; rogueState.alive=[]; rogueState.nextT=1.5; rogueState.t=90;
+  showName("⚔ 叛变罗马军团正在袭掠商路！全歼叛军平乱（90 秒）"); updateBuffHUD(); return true;
+}
+function spawnRogueMob(type,elite){
+  const a=Math.random()*6.283, d=14+Math.random()*10;
+  const x=Math.floor(player.x+Math.cos(a)*d), z=Math.floor(player.z+Math.sin(a)*d);
+  const y=(typeof groundY==="function"?groundY(x,z):Math.round(player.y))+1;
+  const m=spawnTrialMob(type, x, y, z, !!elite);
+  if(m) rogueState.alive.push(m);
+  return !!m;
+}
+function endRogueRaid(win,msg){
+  for(const m of rogueState.alive){ const i=mobs.indexOf(m); if(i>=0){ deathPoof(m); mobs.splice(i,1); } }
+  rogueState.alive=[]; rogueState.active=false; rogueState.cd=420;
+  if(win){ giveBlock(GOLD_ORE,8); giveBlock(GEM_ORE,1); addXP(100); addFaction("rome",3);
+    showName("🏆 叛军已平定！商路恢复畅通（金x8 钻x1 +100经验 · 罗马声望+3）"); }
+  else if(msg) showName(msg);
+  updateBuffHUD();
+}
+function tickRogueRaid(dt){
+  if(!rogueState.active){ rogueState.cd-=dt; if(rogueState.cd<=0 && !dead) startRogueRaid(); return; }
+  if(dead){ endRogueRaid(false,"⚔ 你倒下了——叛军暂时退去"); return; }
+  rogueState.t-=dt;
+  rogueState.alive=rogueState.alive.filter(m=>m.hp>0 && mobs.includes(m));
+  if(rogueState.alive.length>0){ if(rogueState.t<=0) endRogueRaid(false,"⚔ 时辰已到——叛军遁入沙海"); return; }
+  if(rogueState.wave>=2){ endRogueRaid(true); return; }
+  rogueState.nextT-=dt;
+  if(rogueState.nextT>0) return;
+  const WV=[["legionary","legionary","legionary"],["centurion","legionary","legionary"]];
+  const list=WV[rogueState.wave++];
+  for(const type of list) spawnRogueMob(type, true);
+  rogueState.nextT=3;
+  showName("⚔ 叛军 第 "+rogueState.wave+"/2 波（皆为精锐）");
+}
 /* ---- ✨ 神话遗物收集: 六文明神器, 碎片从考古/斗兽场/法老/远征汇集, 集齐3枚拼合 → 一次性奖励+被动神力 ----
    鹰徽/安卡早已有被动; 灯/羊毛/法尔曾只发一次性掉落。现在六件都有可感知的被动, 按 K 可翻图鉴。 */
 const MYTHIC=[
@@ -15014,27 +15075,95 @@ function useWaterskin(){                                 // 🧴 绿洲水袋: �
   showName("🧴 清冽的绿洲水：解毒 +6 生命（剩 "+bagCount("waterskin")+" 袋）");
   return true;
 }
+/* ---- 🦅 狮鹫坐骑 & 🗺 驼队驿站(第三十四轮·本地) ---- */
+let griffinMob=null, griffinCd=0;
+function toggleGriffin(){                                // 哨子: 召唤/召回狮鹫
+  if(griffinCd>0){ showName("🦅 狮鹫冷却 "+Math.ceil(griffinCd)+"s"); return false; }
+  if(griffinMob && mobs.indexOf(griffinMob)>=0){
+    const i=mobs.indexOf(griffinMob); deathPoof(griffinMob); mobs.splice(i,1); griffinMob=null; griffinCd=20;
+    showName("🦅 狮鹫振翅归巢"); return true;
+  }
+  const a=player.yaw, gx=player.x+Math.sin(a)*4, gz=player.z-Math.cos(a)*4;
+  mobs.push({type:"griffinM",def:MOB_DEFS.griffinM,x:gx,y:Math.max(player.y+8,WATER_Y+12),z:gz,vx:0,vy:0,vz:0,kbx:0,kbz:0,
+    yaw:a,tgtYaw:a,hp:150,maxHp:150,hurtT:0,animT:0,t:0,atkCd:0,burnT:0,swingT:0,groanT:0,fleeT:0,onGround:false,pause:false,burning:false,held:null,tamed:true});
+  griffinMob=mobs[mobs.length-1];
+  showName("🦅 狮鹫应召而来——靠近按 E 骑乘（双击空格飞行）");
+  return true;
+}
+function caravanTargets(){                               // 已发现地标快旅列表(跳过 80 格内)
+  const list=[];
+  for(const k2 of landSeen){
+    const pp=k2.split(":"), st=structureAt(+pp[1],+pp[2]);
+    if(!st || !LANDMARKS[st.type]) continue;
+    const dist=Math.hypot(st.x-player.x, st.z-player.z);
+    if(dist<80) continue;
+    list.push({type:st.type, x:st.x, z:st.z, dist:Math.round(dist), cost:Math.max(2,Math.round(dist/25))});
+  }
+  list.sort((a,b2)=>a.dist-b2.dist);
+  return list;
+}
+function travelToLandmark(i){
+  const list=caravanTargets(); const t=list[i];
+  if(!t) return false;
+  if(bagCount(GOLD_ORE)<t.cost){ showName("🐪 驼队路费不足：需要 金x"+t.cost); return false; }
+  bagTake(GOLD_ORE,t.cost);
+  const gy=groundY(t.x+2,t.z+2);
+  player.x=t.x+2; player.z=t.z+2; player.y=(gy>0?gy+2:t.h+4); player.vx=player.vy=player.vz=0; pcx=1e9; refreshChunks();
+  closeCaravanPanel();
+  showName("🐪 驼队抵达 "+(LANDMARKS[t.type]||"地标")+"（路费 金x"+t.cost+"）");
+  saveGame(true);
+  return true;
+}
+function renderCaravanPanel(){
+  const card=document.querySelector("#caravan-panel .pt-card"); if(!card) return;
+  const list=caravanTargets(), gold=bagCount(GOLD_ORE);
+  let h='<h2>🐪 驼队驿站</h2><div style="color:#c9b98a;font-size:12px;margin:0 0 10px;line-height:1.6">驼队往返于你发现过的地标之间。路费按距离计价（每 25 格 1 金，最低 2 金）。现有 <b style="color:#ffd23f">金 x'+gold+'</b></div>';
+  h += list.length? list.map((t,i)=>'<div class="cv-row" data-i="'+i+'"><span>'+(LANDMARKS[t.type]||t.type)+'<span style="color:#a8e6a0;font-size:11px"> · '+t.dist+'m</span></span><span style="color:#ffd23f;white-space:nowrap">金x'+t.cost+'</span></div>').join("")
+       : '<div style="padding:10px;color:#7d7264;font-size:12px">还没有可用的目的地——先去探索更多地标（80 格外）</div>';
+  h+='<div style="margin-top:12px;color:#c9b98a;font-size:12px">点选目的地出发 · 按 <b style="color:#ffd23f">Esc</b> 关闭</div>';
+  card.innerHTML=h;
+  card.querySelectorAll(".cv-row").forEach(el=>el.onclick=()=>travelToLandmark(+el.dataset.i));
+}
+function openCaravanPanel(){ const el=document.getElementById("caravan-panel"); if(!el) return false;
+  renderCaravanPanel(); el.classList.add("on"); el.setAttribute("aria-hidden","false");
+  if(document.pointerLockElement) document.exitPointerLock(); return true; }
+function closeCaravanPanel(){ const el=document.getElementById("caravan-panel"); if(!el) return false;
+  const was=el.classList.contains("on"); el.classList.remove("on"); el.setAttribute("aria-hidden","true"); return was; }
 function spawnYachtAt(wx,wz){                            // 🛥 游艇下水(第三十三轮·本地)
   mobs.push({type:"yacht",def:MOB_DEFS.yacht,x:wx+0.5,y:WATER_Y+0.35,z:wz+0.5,vx:0,vy:0,vz:0,kbx:0,kbz:0,
     yaw:player.yaw,tgtYaw:0,hp:80,maxHp:80,hurtT:0,animT:0,t:0,atkCd:0,burnT:0,swingT:0,groanT:0,fleeT:0,onGround:false,pause:false,burning:false,held:null});
   return true;
 }
 /* ---- 🪂 翼装滑翔(第三十三轮·本地): 限制下落速率的滑翔态; 埃菲尔塔顶自动展开; 着陆结算滑翔距离挑战 ---- */
-let wingT=0, wingCd=0, wingStart=null;
+let wingT=0, wingCd=0, wingStart=null, wingRings=[], wingRingT=0;
 function startWingsuit(src){
   if(wingCd>0){ showName("🪂 翼装冷却 "+Math.ceil(wingCd)+"s"); return false; }
   wingT=18; wingCd=30; wingStart={x:player.x,z:player.z};
+  const ld0=lookDir(); wingRings=[];
+  for(let i=0;i<6;i++) wingRings.push({x:player.x+ld0[0]*26*(i+1), y:Math.max(45,Math.min(88,player.y-2-i*1.5)), z:player.z+ld0[2]*26*(i+1), passed:false});
   showName(src==="eiffel"?"🪂 塔顶翼装已展开——跳下去滑翔，飞得越远奖励越丰！":"🪂 翼装展开！滑翔 18 秒（落地结算距离）");
   return true;
 }
 function finishWingsuit(){
+  const all=wingRings.length && wingRings.every(r2=>r2.passed);
+  wingRings=[];
   const d=wingStart?Math.hypot(player.x-wingStart.x,player.z-wingStart.z)|0:0;
   wingT=0; wingStart=null;
+  if(all){ addXP(100); giveBlock(GILDED,2); showName("🪂 穿环全收 + 滑翔挑战完成！（鎏金×2）"); }
   if(d>=50){ addXP(80); giveBlock(GOLD_ORE,4); showName("🪂 翼装挑战达成！滑翔 "+d+" 格（+80 经验 金x4）"); }
   else if(d>5) showName("🪂 翼装着陆（滑翔 "+d+" 格，50 格有奖）");
 }
 function applyWingsuit(dt){
   if(wingT<=0 || player.onGround || player.flying || riding) return;
+  if(wingRings.length){                                  // 穿环判定(第一个未过的环)
+    const cp=wingRings.find(r2=>!r2.passed);
+    if(cp && Math.hypot(player.x-cp.x, player.y-cp.y, player.z-cp.z)<7){
+      cp.passed=true; addXP(20);
+      const left=wingRings.filter(r2=>!r2.passed).length;
+      showName(left?("🪂 穿环 "+(6-left)+"/6！+20 经验"):"🪂 六环全收！+100 经验");
+      if(!left) addXP(100);
+    }
+  }
   if(inWater()||inLava()) return;
   if(player.vy<-3.2) player.vy=-3.2;                    // 限制下落速率 → 滑翔
   const ld=lookDir();
@@ -16395,7 +16524,8 @@ function selftest(){
     // 8q11. 世界体系扩展(第三十三轮): 金字塔降频/主题分区/游艇/翼装/讲解员
     {
       const sx0=Math.floor(player.x/CELL), sz0=Math.floor(player.z/CELL);
-      const snap11={ wingT, wingCd, wingStart, xp, bag:new Map(bag), mobs:mobs.slice(), poisonT, themeOK:true };
+      const snap11={ wingT, wingCd, wingStart, xp, bag:new Map(bag), mobs:mobs.slice(), poisonT, themeOK:true,
+        px:player.x, py:player.y, pz:player.z };
       wingT=0; wingStart=null;
       try{
         // 1) 金字塔降频: 沙漠系格子中金字塔占比应显著低于旧值 0.20
@@ -16469,6 +16599,7 @@ function selftest(){
         xp=snap11.xp; bag.clear(); for(const [k,v] of snap11.bag) bag.set(k,v);
         mobs.length=0; for(const m of snap11.mobs) mobs.push(m);
         poisonT=snap11.poisonT;
+        player.x=snap11.px; player.z=snap11.pz; player.y=snap11.py; player.vx=player.vy=player.vz=0; pcx=1e9; refreshChunks();
         updateXPHUD(); updateHearts();
       }
     }
