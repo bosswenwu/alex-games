@@ -2,6 +2,24 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-10-04 — 沙海奇境 第三十一轮·本地：A 组收尾（触屏战技按钮/冷却可视化/平衡微调）+ ROADMAP 现状核对
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) + `ROADMAP.md`（文档现状核对）。不改既有存档结构。
+
+| Change | Player-visible behavior |
+| --- | --- |
+| 📱 Z/Q 触屏按钮 | 新增 🟣「Z 震颤」「Q 回沙」两枚触屏按钮（位于沙步按钮右侧），带未习得锁定/冷却倒计时/就绪三态；桌面快捷键不变。移动端战技功能补齐。 |
+| ⏳ 死亡清增益 | 死亡不再保留时之沙的 8 秒疾行+免摔增益（防"用完死亡重生免费逃课"）。 |
+| 🎒 背包格显示道具 | B 面板背包格现在也显示字符串道具（绿洲水袋存量、回响号角、时之沙），此前被方块过滤静默隐藏。 |
+| 🗡 热栏冷却遮罩 | 回响号角/时之沙在热栏槽位上显示黑色冷却液面（20s/45s 按比例回落）+ 悬停剩余秒数。 |
+| ⚖ 精英末波轻量化 | 险中求胜第 3 波「阿努比斯+木乃伊」→「阿努比斯+圣甲虫」：木乃伊范围重击与阿努比斯叠压过于致命（正式数值调参仍待 PR C 真人数据）。 |
+| 📜 编年史战技行 | 新增「⚔ 主动战技」行：震颤/卷盘当前等级与 Z/Q 提示。 |
+| 📄 ROADMAP.md 核对 | 「现状诊断/短板」按第二十九轮基线重写：历史缺失清单标记已上线项，真机性能与 PR C 调参标为当前真正瓶颈；P4 状态行同步（远征循环/回响/专精/词缀/战技道具已交付）。 |
+
+**How:** `refreshSkillButtons()`（Z/Q 按钮三态，frame 内调用）；`doDie` 清 `timeBuffT`；`renderCraft` 背包过滤放行字符串道具（`ITEMS[id]` 命名回退）；`rebuildHotbar` 注入 `.cdVeil` + `updateItemCds()`（frame 内，10% 步进防抖）；`RUIN_EXPEDITION_WAVES_ELITE[2]` 调整；`chronicleHTML` 加行。
+
+**Verification:** `node tools/headless.mjs selftest` **458/458** 于默认种子、`?seed=424242`、`?seed=2718281`、`?seed=314159`（新增 7 条：死亡清增益、Z/Q 按钮锁定/冷却态、背包格显示道具、方块显示不回归、冷却遮罩 50% 精确、精英末波、编年史行）。修复过程中自测触发器新加的 try/catch 立即捕获了一处测试作用域错误（cmSnap7 跨块引用）与一处号角测试落点浮动（+4/+4 → 距离 6.36 超出 6 格射程），均已按"修前提不放宽断言"处理。
+
 ## 2026-10-04 — 沙海奇境 第三十轮·本地：技能包 +2、物品包 +3（核心战技与战术道具）
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) only。技能包扩展进 `combatMastery`（quake/recall 两键，随既有 combatMastery 存档，老档缺字段归零）；新道具为热栏字符串道具（复用既有 giveBlock/图标/手持管线），不新增方块/图集/存档结构。

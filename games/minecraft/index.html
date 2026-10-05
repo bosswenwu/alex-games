@@ -50,6 +50,7 @@
   .gearMeter { height:4px; margin-top:3px; background:rgba(0,0,0,.7); border:1px solid rgba(0,0,0,.65); border-radius:3px; overflow:hidden; }
   .gearMeter i { display:block; height:100%; width:100%; background:#75d078; transition:width .15s,background-color .15s; }
   .slot .gearMeter { position:absolute; left:4px; right:4px; bottom:3px; z-index:2; height:4px; margin:0; pointer-events:none; }
+  .slot .cdVeil { position:absolute; left:0; right:0; bottom:0; height:0; background:rgba(0,0,0,.62); pointer-events:none; z-index:1; }
   .gearRepair .rc { text-align:right; }
   #npcPanel { position:absolute; inset:0; margin:auto; width:min(680px,92vw); max-height:80vh;
     display:none; flex-direction:column; gap:10px; padding:16px 18px; z-index:41;
@@ -359,6 +360,11 @@
   #btnDodge.is-counter { background:linear-gradient(145deg,rgba(255,207,91,.86),rgba(221,126,39,.78)); border-color:#fff0ad; color:#fff8d8;
                          box-shadow:0 0 0 2px rgba(255,208,93,.34),0 0 16px rgba(255,164,48,.5); }
   #btnDodge.is-riposte { background:rgba(255,225,127,.72); border-color:#fff4bd; color:#fff9df; }
+  #btnQuake, #btnRecall { left:316px; top:82px; width:60px; height:60px; font-size:10px; line-height:1.15; white-space:pre-line;
+              background:rgba(126,110,188,.38); border-color:rgba(198,182,255,.62); }
+  #btnRecall { left:382px; }
+  #btnQuake.is-cooldown, #btnRecall.is-cooldown { opacity:.74; }
+  #btnQuake.is-locked, #btnRecall.is-locked { opacity:.4; }
   #btnSlotL { left:26px; bottom:176px; width:52px; height:52px; font-size:20px; }
   #btnSlotR { left:120px; bottom:176px; width:52px; height:52px; font-size:20px; }
   #rotateHint { position:fixed; inset:0; z-index:60; display:none; align-items:center; justify-content:center;
@@ -510,6 +516,8 @@
   <div id="btnPlace" class="tbtn">使用</div>
   <div id="btnFly"   class="tbtn">飞行</div>
   <div id="btnDodge" class="tbtn" role="button" aria-label="沙步闪避：就绪">C<br>沙步</div>
+  <div id="btnQuake" class="tbtn" role="button" aria-label="大地震颤">Z<br>震颤</div>
+  <div id="btnRecall" class="tbtn" role="button" aria-label="回沙卷盘">Q<br>回沙</div>
   <div id="btnSlotL" class="tbtn">‹</div>
   <div id="btnSlotR" class="tbtn">›</div>
 </div>
@@ -5619,13 +5627,14 @@ function doCraft(i){
 let craftOpen=false;
 function renderCraft(){
   const g=document.getElementById("bagGrid"); if(!g) return;
-  const items=[...bag.entries()].filter(([id,n])=>n>0 && BLOCKS[id]);
+  const items=[...bag.entries()].filter(([id,n])=>n>0 && (BLOCKS[id] || typeof id==="string"));   // 第三十一轮·本地: 字符串道具(水袋等)也入背包格
   items.sort((a,b)=>b[1]-a[1]);
+  const itemName=id=>BLOCKS[id]?BLOCKS[id].name:(ITEMS[id]?ITEMS[id].name:String(id));
   const coreCell='<div class="bagCell" style="color:#ffd27a">⚡ 能量核心 <b>x'+cores+'</b></div>'
     +((vaultKeys.trial||vaultKeys.omen)?'<div class="bagCell" style="color:#f0d38a">🗝 试炼钥匙 <b>x'+vaultKeys.trial+'</b> · 不祥钥匙 <b>x'+vaultKeys.omen+'</b></div>':'');
   const bundleBtn=(typeof bundleState!=="undefined" && bundleState.owned)?'<div class="bagCell" id="openBundleBtn" style="cursor:pointer;color:#e8bb6a">👜 打开收纳袋 ('+storeTypes(bundleState.items)+'/'+BUNDLE_SLOTS+')</div>':'';   // 第六轮·云端
   g.innerHTML = coreCell + bundleBtn + (items.length
-    ? items.map(([id,n])=>'<div class="bagCell">'+BLOCKS[id].name+' <b>x'+n+'</b></div>').join("")
+    ? items.map(([id,n])=>'<div class="bagCell">'+itemName(id)+' <b>x'+n+'</b></div>').join("")
     : '<div class="bagCell bagEmpty">方块空空——去挖点方块吧</div>');
   document.getElementById("recipeList").innerHTML = RECIPES.map((r,i)=>{
     const okc=canCraft(r);
@@ -6581,6 +6590,7 @@ function damagePlayer(d,kx,kz){
 function doDie(){
   dead=true; softLock=false;
   abortRuinExpedition();
+  timeBuffT=0;                                    // 第三十一轮·本地: 死亡不保留时之沙增益(防重生逃课)
   sandStepState.feedbackT=0;
   clearSandRiposte();
   grappleTarget=null;                             // 死亡时清掉钩爪状态, 避免复活后诡异位移
@@ -6717,6 +6727,18 @@ function chariotRam(dt){
 const IS_TOUCH = (('ontouchstart' in window) || navigator.maxTouchPoints>0)
                  && !matchMedia('(pointer:fine)').matches;
 const touchState = { active:false, moveX:0, moveY:0, jump:false, fly:false, breaking:false, placing:false };
+function refreshSkillButtons(){                          // 第三十一轮·本地: Z/Q 触屏按钮状态(锁定/冷却/就绪)
+  const q=document.getElementById("btnQuake");
+  if(q){ const s=quakeLevel()<1?"locked":(quakeCd>0?"cooldown":"ready");
+    const txt=s==="locked"?"Z\n未习得":(s==="cooldown"?"Z\n"+Math.ceil(quakeCd)+"s":"Z\n震颤");
+    const st=s+":"+txt;
+    if(q.dataset.skillState!==st){ q.dataset.skillState=st; q.textContent=txt; q.classList.toggle("is-cooldown",s==="cooldown"); q.classList.toggle("is-locked",s==="locked"); } }
+  const rc=document.getElementById("btnRecall");
+  if(rc){ const s=recallLevel()<1?"locked":(recallCd>0?"cooldown":"ready");
+    const txt=s==="locked"?"Q\n未习得":(s==="cooldown"?"Q\n"+Math.ceil(recallCd)+"s":"Q\n回沙");
+    const st=s+":"+txt;
+    if(rc.dataset.skillState!==st){ rc.dataset.skillState=st; rc.textContent=txt; rc.classList.toggle("is-cooldown",s==="cooldown"); rc.classList.toggle("is-locked",s==="locked"); } }
+}
 function initTouchUI(){
   const ui=document.getElementById("touchui");
   if(!ui) return;
@@ -6796,6 +6818,9 @@ function initTouchUI(){
   hold("btnFly",  ()=>{ if(!riding){ player.flying=!player.flying; player.vy=0;
                           showName(player.flying?"飞行模式":"行走模式"); } });
   hold("btnDodge",()=>{ sandStep(); });
+  hold("btnQuake",()=>{ useQuake(); });
+  hold("btnRecall",()=>{ useRecall(); });
+  refreshSkillButtons();
   hold("btnSlotL",()=>{ const N=HOTBAR_ITEMS.length; selectSlot((selSlot-1+N)%N); });
   hold("btnSlotR",()=>{ const N=HOTBAR_ITEMS.length; selectSlot((selSlot+1)%N); });
 
@@ -6860,6 +6885,7 @@ function chronicleHTML(){
     + row('🎯 悬赏完成', bountyDone+' 单')
     + row('⚔ 当前强度', '第 '+dayCount+' 天 · 敌伤 ×'+foeDmgMul().toFixed(2)+' · 敌血 ×'+foeHpMul().toFixed(2))
     + row('⚡ 能量核心', cores+' 枚 · 护甲 '+armor+'/5 · 按 B 强化')
+    + row('⚔ 主动战技', '震颤 '+quakeLevel()+'/3 · 卷盘 '+recallLevel()+'/3 · 按 Z / Q')
     + row('🔮 当前天象', om)
     + row('🐫 波斯集市', bz)
     + row('🌊 金羊毛远征', ex)
@@ -10507,6 +10533,9 @@ function rebuildHotbar(){
       const meter=document.createElement("span"); meter.className="gearMeter"; meter.dataset.gear=id;
       meter.appendChild(document.createElement("i")); slot.appendChild(meter);
     }
+    if(typeof id==="string" && (id==="echo_horn"||id==="time_shards")){          // 第三十一轮·本地: 道具冷却遮罩
+      const veil=document.createElement("span"); veil.className="cdVeil"; veil.dataset.cdItem=id; slot.appendChild(veil);
+    }
     hb.appendChild(slot);
   });
   updateGearHud();
@@ -10517,6 +10546,15 @@ function updateGearHud(){
     const fill=meter.firstElementChild; if(fill){ fill.style.width=pct+"%"; fill.style.backgroundColor=pct>50?"#75d078":pct>20?"#e8c65b":"#e37753"; }
     const label=k==="sword"&&sunblade?"拉之烈阳剑":GEAR_DEFS[k].name;
     meter.title=label+" · 耐久 "+left+"/"+max+(pct===0?" · 威力保底 70%":"");
+  }
+}
+function updateItemCds(){                                // 第三十一轮·本地: 道具冷却遮罩(号角 20s/时之沙 45s)
+  for(const v of document.querySelectorAll("#hotbar .cdVeil")){
+    const id=v.dataset.cdItem;
+    const cur=id==="echo_horn"?hornCd:timeCd, max=id==="echo_horn"?20:45;
+    const h=Math.max(0,Math.min(1,cur/max))*100, key=Math.round(h*10);
+    if(v.dataset.h!==String(key)){ v.dataset.h=String(key); v.style.height=h+"%";
+      v.title=(id==="echo_horn"?"回响号角":"时之沙")+" 冷却 "+Math.ceil(cur)+"s"; }
   }
 }
 let nameTimer=null;
@@ -12541,6 +12579,8 @@ function frame(now){
     trySpawns(dt);
     updateBossBar();                                                            // Boss 血条实时刷新
     updateBountyHUD();                                                          // 悬赏进度实时刷新
+    updateItemCds();                                                            // 第三十一轮·本地: 道具冷却遮罩
+    refreshSkillButtons();                                                      // 第三十一轮·本地: Z/Q 触屏按钮状态
     if(killStreakT>0){ killStreakT-=dt; if(killStreakT<=0){ killStreak=0; } }   // 连杀窗口冷却归零
     const regenBless=(blessKind==="regen"&&blessT>0);
     if(!dead && hp<maxHp && (regenBless || performance.now()-lastDmg>7000)){
@@ -13703,7 +13743,7 @@ function tickExpedition(dt){
 
 /* ---- 🏛 遗迹远征: 把三符号机关接入一局可玩的短循环 ---- */
 const RUIN_EXPEDITION_WAVES=[["scarab","scarab","serqet"],["mummy","skeleton","serqet"],["anubis","mummy","scarab"]];
-const RUIN_EXPEDITION_WAVES_ELITE=[["serqet","scarab"],["anubis","serqet"],["anubis","mummy"]];   // 险中求胜: 全精英路线(血×1.5+精英掉核心), 通关回响+1
+const RUIN_EXPEDITION_WAVES_ELITE=[["serqet","scarab"],["anubis","serqet"],["anubis","scarab"]];   // 险中求胜: 全精英路线(血×1.5+精英掉核心), 通关回响+1; 末波轻量化(第三十一轮·本地): 木乃伊重击+阿努比斯叠压过于致命
 const ruinExpeditionState={ active:false, phase:"idle", runId:0, wave:0, alive:[], nextT:0, rewardClaimed:false, solution:[0,1,2], clueText:"", route:"safe", waves:null, bandaged:false, firstHitUsed:false };
 const ruinExpeditionSave={ runs:[], completed:0 };
 function hashRuin(seed,runId,n){ return Math.abs(Math.sin(seed*0.317+runId*0.719+n*1.337)); }
@@ -15803,7 +15843,7 @@ function selftest(){
         ok("回沙卷盘: 3 级额外回 2 血、冷却 25 秒", hp===12 && recallCooldown()===25, "hp="+hp);
         // 回响号角: 击退道具
         bagTake("echo_horn",bagCount("echo_horn")); hornCd=0;
-        mobs.length=0; spawnTrialMob("mummy", Math.floor(player.x)+4, Math.floor(player.y), Math.floor(player.z)+4, false);
+        mobs.length=0; spawnTrialMob("mummy", Math.floor(player.x)+3, Math.floor(player.y), Math.floor(player.z)+3, false);   // +3/+3 → 距离~4.2, 稳在 6 格射程内(不随出生小数浮动)
         const mh=mobs[0]; mh.hp=mh.maxHp=500;
         ok("回响号角: 震退 6 格内敌人(伤害 2)", useEchoHorn()===true && mh.maxHp-mh.hp===2 && (mh.kbx||mh.kbz)>0 && hornCd>0, "dmg="+(mh.maxHp-mh.hp));
         ok("回响号角: 冷却期内再按被拒", useEchoHorn()===false);
@@ -15830,6 +15870,59 @@ function selftest(){
         mobs.length=0; for(const m of mobsSnap7) mobs.push(m);
         softLock=slSnap7.softLock; locked=slSnap7.locked; document.getElementById("overlay").style.display=slSnap7.ov;
         updateHearts(); updateXPHUD(); updateBuffHUD(); refreshSandStepButton();
+      }
+    }
+
+    // 8q8. A组收尾(第三十一轮): 死亡清增益 / 触屏按钮状态 / 背包格显示道具 / 冷却遮罩 / 精英末波 / 编年史战技行
+    {
+      const snap8={timeBuffT, quakeCd, hornCd, dead:dead, title:document.getElementById("title").textContent,
+        sbt:document.getElementById("startbtn").textContent, sbd:document.getElementById("startbtn").disabled,
+        ov:document.getElementById("overlay").style.display, ovbg:document.getElementById("overlay").style.background,
+        hud:document.getElementById("hud").style.display, quakeL:combatMastery.quake, recallL:combatMastery.recall};
+      const bagSnap8=new Map(bag);
+      try{
+        // 死亡清时之沙增益
+        timeBuffT=TIME_BUFF_T; dead=false;
+        doDie();
+        ok("死亡清除时之沙增益(防重生逃课)", timeBuffT===0 && dead===true, "buff="+timeBuffT);
+        dead=false; document.getElementById("title").textContent=snap8.title;
+        document.getElementById("startbtn").textContent=snap8.sbt; document.getElementById("startbtn").disabled=snap8.sbd;
+        document.getElementById("overlay").style.display=snap8.ov; document.getElementById("overlay").style.background=snap8.ovbg;
+        document.getElementById("hud").style.display=snap8.hud;
+        // 触屏按钮: 存在 + 冷却态刷新 + 锁定态
+        const qb=document.getElementById("btnQuake"), rb=document.getElementById("btnRecall");
+        combatMastery.quake=0; quakeCd=0; refreshSkillButtons();
+        const lockedState=qb.classList.contains("is-locked");
+        combatMastery.quake=1; quakeCd=9; refreshSkillButtons();
+        const cdState=qb.classList.contains("is-cooldown") && /9/.test(qb.textContent);
+        ok("Z/Q 触屏按钮: 常驻 DOM、未习得锁定、冷却态倒计时", !!qb && !!rb && lockedState && cdState, "locked="+lockedState+" cd="+cdState);
+        // 背包格显示字符串道具
+        bagAdd("waterskin",2); renderCraft();
+        const bagTxt=document.getElementById("bagGrid").textContent;
+        ok("B 面板背包格显示字符串道具(水袋存量可见)", /绿洲水袋/.test(bagTxt) && /x2/.test(bagTxt));
+        bag.clear(); bagAdd(GOLD_ORE,3); renderCraft();
+        ok("B 面板背包格: 方块道具显示不受影响", /金矿石/.test(document.getElementById("bagGrid").textContent));
+        bag.clear(); for(const [k,v] of bagSnap8) bag.set(k,v); renderCraft();
+        // 热栏冷却遮罩
+        HOTBAR_ITEMS.push("echo_horn"); rebuildHotbar(); hornCd=10;
+        updateItemCds();
+        const veil=document.querySelector('#hotbar .cdVeil[data-cd-item="echo_horn"]');
+        ok("热栏冷却遮罩: 号角半冷即可视化", !!veil && Math.abs(parseFloat(veil.style.height)-50)<1, "h="+veil.style.height);
+        HOTBAR_ITEMS.pop(); rebuildHotbar(); hornCd=snap8.quakeCd*0; hornCd=0;
+        // 精英末波轻量化 + 编年史战技行
+        ok("精英路线末波轻量化: 木乃伊重击不再与阿努比斯叠压", RUIN_EXPEDITION_WAVES_ELITE[2].join()==="anubis,scarab", RUIN_EXPEDITION_WAVES_ELITE[2].join());
+        combatMastery.quake=2; combatMastery.recall=1;
+        ok("编年史列出主动战技等级", /震颤 2\/3/.test(chronicleHTML()) && /卷盘 1\/3/.test(chronicleHTML()));
+        combatMastery.quake=snap8.quakeL; combatMastery.recall=snap8.recallL;
+      } finally {
+        timeBuffT=snap8.timeBuffT; quakeCd=snap8.quakeCd; hornCd=0; dead=snap8.dead;
+        document.getElementById("title").textContent=snap8.title;
+        document.getElementById("startbtn").textContent=snap8.sbt; document.getElementById("startbtn").disabled=snap8.sbd;
+        document.getElementById("overlay").style.display=snap8.ov; document.getElementById("overlay").style.background=snap8.ovbg;
+        document.getElementById("hud").style.display=snap8.hud;
+        bag.clear(); for(const [k,v] of bagSnap8) bag.set(k,v); renderCraft();
+        combatMastery.quake=snap8.quakeL; combatMastery.recall=snap8.recallL;
+        updateHearts(); updateBuffHUD();
       }
     }
 
