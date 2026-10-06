@@ -17,6 +17,8 @@ Persistent handoff notes for future agents. Add a new entry for each user-visibl
 
 **查过、确认没问题（列出以免下轮重复劳动）：** `frame()` 的 `dt` 已有 clamp（`clamp((now-lastT)/1000,0,0.05)`，喂 5 次 `dt=30` 不抛错）；面板层级正确（背包 z-index 40 > overlay 10，64/64 采样点命中面板内部，鼠标事件不穿透到 canvas，无误挖）；背包开着时 Esc 能关；`vaultPrompt`/`npcPrompt`/`hud` 均已隐藏、不与背包叠压；点击非当前快捷栏格子能正确切栏并移动高亮；无 `TODO`/`FIXME` 遗留、无游离 `console.log`（仅自测报告内）、无无上限增长的容器；`updateVaultPrompt` 未改（实测无叠压，加 `bagOpen` 属于无证据改动）。
 
+**已知遗留（本轮刻意没做，需定夺范围）：** 逐采样生成噪声的写法在另外 **12 个音效函数**里同样存在，本轮只修了触发频率最高的 `sfxStep` 与挖掘相关的 `sfxBreak`/`sfxBrush`：`sfxHit`、`sfxStoneGrind`、`sfxFlame`、`sfxRocket`、`sfxGun`（战斗高频，收益大）、`sfxGeyser`、`sfxSunSweep`、`sfxEat`、`sfxHiss`、`sfxExplode`、`sfxFirework`、`sfxThunder`（多为一次性事件，收益小）。**不能照搬现在的缓存键** —— 这些函数包络不同（`lin` 6 个、`sin` 1 个、`Math.pow(1-x, 1.2/1.5/1.6/2/2.2)` 5 个），缓存键需扩成"形状+指数+长度"才能保证音色不变；改完应重新核对每个函数的缓冲采样数。同一批函数也都没有 `freeChain` 断链。
+
 **How:** 新增 `noiseBufs`(Map) + `noiseCtx` + `noiseBuf(len, shape)` + `freeChain(src, ...nodes)` 放在 `initAudio()` 之后；`sfxBreak`/`sfxBrush`/`sfxStep` 改为 `src.buffer=noiseBuf(len, ...)` + `src.start(t,0,len)` + `freeChain(...)`；`noiseCtx!==actx2` 时清空缓存（防 AudioContext 被换掉后旧缓冲作废）。`toggleCraft` 签名加 `noRelock`。其余为删除与清单补项。
 
 **Verification:** `node tools/headless.mjs selftest` **493/493** 于默认世界与 `?seed=424242`（新增 7 条断言，486→493）。新增断言覆盖：Tab 在暂停菜单/死亡时不弹背包、真实游戏态可开可关、从 B 面板切过来不再申请指针锁、共享缓冲 560 次发声后条目不增长、噪声源带 `onended` 且触发不抛错、`freeChain` 对已断开节点重复调用不抛错、自测结束后现场已还原。
