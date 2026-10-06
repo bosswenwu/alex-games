@@ -7996,7 +7996,11 @@ const noiseBufs=new Map(); let noiseCtx=null;   // 键 "长度|包络" -> 变体
 function makeNoiseBuf(len, env){
   const n=Math.round(actx2.sampleRate*len);
   const b=actx2.createBuffer(1,n,actx2.sampleRate), d=b.getChannelData(0);
-  const e=NOISE_ENV[env]||NOISE_ENV.lin;
+  /* 故意不写 || NOISE_ENV.lin 兜底: 包络名拼错会静默把音色换成线性衰减而毫无征兆
+     (第三十八轮就踩过这个坑 —— sfxBrush 误写 "sine", 而注册表里的键叫 "sin")。
+     宁可第一次发声就抛错, 也不要悄悄听起来不对。 */
+  const e=NOISE_ENV[env];
+  if(!e) throw new Error("NOISE_ENV 没有名为 \""+env+"\" 的包络");
   for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*e(i/n);
   return b;
 }
@@ -8027,7 +8031,7 @@ function sfxBreak(){
 function sfxBrush(){   // 刷子: 短促高频沙沙声
   if(!actx2) return;
   const t=actx2.currentTime, len=0.12;
-  const src=actx2.createBufferSource(); src.buffer=noisePick(len,"sine",3);
+  const src=actx2.createBufferSource(); src.buffer=noisePick(len,"sin",3);
   const f=actx2.createBiquadFilter(); f.type="highpass"; f.frequency.value=2600+Math.random()*900;
   const g=actx2.createGain(); g.gain.value=0.09;
   src.connect(f).connect(g).connect(actx2.destination); src.start(t,0,len);
@@ -18865,7 +18869,17 @@ function selftest(){
         ["sfxGeyser",()=>sfxGeyser(5)], ["sfxFirework",()=>sfxFirework()], ["sfxThunder",()=>sfxThunder()],
         ["sfxStep",()=>sfxStep(SAND)],
       ];
-      ok("第三十八轮: 覆盖全部 15 个发声函数", SFX38.length===15, "实际="+SFX38.length);
+      /* 上一版这条断言写的是 SFX38.length===15 —— 断言的是本地硬编码数组自己的长度,
+           跟游戏代码零关联, 永远不可能失败(恒真)。改成真的从源码里点名:
+           全文件搜出一共有多少个"建噪声缓冲 + 接 destination"的发声函数, 逐个点名。 */
+      const ALLSFX=["sfxBreak","sfxBrush","sfxStep","sfxSunSweep","sfxHit","sfxEat","sfxHiss",
+                    "sfxExplode","sfxGun","sfxRocket","sfxStoneGrind","sfxGeyser","sfxFirework",
+                    "sfxFlame","sfxThunder"];
+      const uncovered=[];
+      for(const n of ALLSFX){ if(!SFX38.some(p=>p[0]===n)) uncovered.push(n); }
+      ok("第三十八轮: 15 个发声函数逐个点名, 无一漏列(上一版断言的是硬编码数组自身长度, 恒真)",
+         SFX38.length===15 && uncovered.length===0,
+         "实到="+SFX38.length+" 漏列="+(uncovered.join(",")||"无"));
 
       if(actx2){
         // 1) 核心: 每个函数各调 5 轮, createBuffer 增量必须为 0(预热已把变体备齐)
@@ -18880,12 +18894,15 @@ function selftest(){
         ok("全部 15 个发声函数不再每次新建缓冲: 预热后再各调 5 轮, createBuffer 增量为 0",
            err38===null && warm38>0 && after38===warm38, "预热建了="+warm38+" 5轮后="+after38+" 错="+err38);
 
-        // 2) 缓存有界: 大量调用后键数量不再增长
+        // 2) 缓存有界: 大量调用后键数量与变体总数都不再增长
         const keys38=noiseBufs.size;
+        const bufCnt38=()=>{ let c=0; for(const [,a] of noiseBufs) c+=a.length; return c; };
+        const bufs38=bufCnt38();
         for(let r=0;r<10;r++) for(const [,f] of SFX38){ try{ f(); }catch(e){} }
         for(const m of [SAND,STONE,LOG,ICE,WATER,LAVA,GRASS]) sfxStep(m);
-        ok("缓存有界: 15 个函数再各调 10 轮 + 7 种脚步材质, 键数量不增长",
-           noiseBufs.size===keys38 && keys38>0, "一次="+keys38+" 之后="+noiseBufs.size);
+        ok("缓存有界: 15 个函数再各调 10 轮 + 7 种脚步材质, 键数量与变体总数都不增长",
+           noiseBufs.size===keys38 && bufCnt38()===bufs38 && keys38>0,
+           "键 一次="+keys38+" 之后="+noiseBufs.size+" / 变体 一次="+bufs38+" 之后="+bufCnt38());
 
         // 3) 每个键的采样数必须等于 round(sampleRate*len) —— 键名就是 len|env
         const lenBad=[];
@@ -18927,34 +18944,55 @@ function selftest(){
         const winRMS=(d,x0,x1)=>{ const n=d.length,a=Math.floor(x0*n),b=Math.floor(x1*n);
                                   let s=0; for(let i=a;i<b;i++) s+=d[i]*d[i];
                                   return Math.sqrt(s/Math.max(1,b-a)); };
+        /* 每个包络量 3 个变体再取平均: 单份缓冲的采样噪声会被比值放大
+           (sin 的 head 幅度是 9 种里最低的, 单份 sd≈0.085), 取 3 份平均把 sd 压到 ≈0.05。 */
         noiseBufs.clear(); noiseCtx=actx2;
         const envM={};
         for(const env of Object.keys(NOISE_ENV)){
-          const b=noiseBuf(0.4, env, 0), d=b.getChannelData(0);
-          const head=winRMS(d,0.02,0.10), mid=winRMS(d,0.45,0.55), tail=winRMS(d,0.90,0.98);
-          envM[env]={ midOverHead:+(mid/head).toFixed(3), tailOverHead:+(tail/head).toFixed(3) };
+          const accM=[], accT=[];
+          for(let v=0;v<3;v++){
+            const d=noiseBuf(0.4, env, v).getChannelData(0);
+            const head=winRMS(d,0.02,0.10);
+            accM.push(winRMS(d,0.45,0.55)/head); accT.push(winRMS(d,0.90,0.98)/head);
+          }
+          const avg=a=>a.reduce((x,y)=>x+y,0)/a.length;
+          envM[env]={ midOverHead:+avg(accM).toFixed(3), tailOverHead:+avg(accT).toFixed(3) };
         }
-        /* 期望值取自 tools/headless.mjs eval 实测(每项 5 次取平均):
-           lin 0.54/0.07  flat 1.00/1.00  sin 5.03/1.00  p12 0.47/0.04
-           p15 0.39/0.02  p16 0.37/0.015 p2 0.29/0.006 p22 0.25/0.004  gey 1.05/0.135
+        /* 期望值取自独立审计的重复实测均值(每项多次采样取平均), 不是我拍脑袋写的:
+           lin 0.53/0.07  flat 1.00/1.00  sin 5.00/1.00  p12 0.47/0.04
+           p15 0.39/0.02  p16 0.37/0.015 p2 0.29/0.006 p22 0.25/0.004  gey 1.06/0.135
            注意 sin 关于 x=0.5 对称, 所以 tail≈head(不是像衰减包络那样趋近 0);
-           gey 因有快起音 min(1,x*8), head 被压低, 所以 mid/head 略大于 1。 */
-        const want38={lin:[0.54,0.07], flat:[1.00,1.00], sin:[5.03,1.00], p12:[0.47,0.04],
+           gey 因有快起音 min(1,x*8), head 被压低, 所以 mid/head 略大于 1。
+           容差用相对值, 不用绝对值 —— 这是变异测试逼出来的。上一版 sin 只留 ±0.15 而实测
+           sd≈0.085, 等于 ±1.76σ, 实测 60 次里红 7 次(真机 13 次红 3 次), 是条随机红的断言;
+           但把绝对容差放宽到 ±0.30 之后, 变异测试又显示"把 p22 的指数误写成 1.6"
+           (实测 0.363 vs 期望 0.25, 差 0.113) 反而**抓不到**了。
+           改成 ±12% 后两类缺陷都能覆盖:
+             · sin 的 mid/head≈5, 3 份平均后 sd≈0.05 → ±12%≈±0.6≈±12σ, 足够稳
+             · lin 的 mid/head≈0.53, sd≈0.008 → ±12%≈±0.06≈±7σ, 足够稳
+             · p22 被误写成 1.6 → 0.363 > 0.25×1.12=0.28, 抓到
+             · p2 被误写成 1.5 → 0.363 > 0.29×1.12=0.325, 抓到
+           p16/p15 这对只差 5%, 相对容差盖不住(也确实不该靠这条盖) —— 指数互换由下面的
+           "严格递增"专门负责, 职责分开。tail 因为数值极小(0.004~0.135), 用 max(0.02, 15%)。 */
+        const want38={lin:[0.53,0.07], flat:[1.00,1.00], sin:[5.00,1.00], p12:[0.47,0.04],
                       p15:[0.39,0.02], p16:[0.37,0.015], p2:[0.29,0.006], p22:[0.25,0.004],
-                      gey:[1.05,0.135]};
+                      gey:[1.06,0.135]};
         const envBad=[];
         for(const [env,w] of Object.entries(want38)){
           const g=envM[env];
           if(!g) { envBad.push(env+"=缺"); continue; }
-          if(Math.abs(g.midOverHead-w[0])>0.15) envBad.push(env+" mid="+g.midOverHead+" 期望≈"+w[0]);
-          if(Math.abs(g.tailOverHead-w[1])>0.04) envBad.push(env+" tail="+g.tailOverHead+" 期望≈"+w[1]);
+          if(Math.abs(g.midOverHead-w[0])>w[0]*0.12) envBad.push(env+" mid="+g.midOverHead+" 期望≈"+w[0]+"(±12%)");
+          if(Math.abs(g.tailOverHead-w[1])>Math.max(0.02,w[1]*0.15)) envBad.push(env+" tail="+g.tailOverHead+" 期望≈"+w[1]);
         }
         ok("包络逐项核对: 9 种包络的 mid/head、tail/head 都与实测标定值相符",
            envBad.length===0, envBad.join("; ")||JSON.stringify(envM));
-        // 严格单调: 指数越大衰减越快 —— 这条才是"包络有没有串味"的关键守卫
+        /* 严格单调: 指数越大衰减越快。
+           加 0.01 的最小间隔: 相邻两项(p16 0.37 vs p15 0.39)真实只差 0.02, 而合成 sd≈0.007,
+           零容差等于靠运气(约 2.6σ)。0.01 的间隔既保留了真实次序, 又不会被采样噪声压塌。
+           注意: 这条只管"注册表内部指数有没有互相写反", 调用点接错名字由 6b 负责。 */
         const chain=["p22","p2","p16","p15","p12"].map(e=>envM[e].midOverHead);
-        let mono=true; for(let i=1;i<chain.length;i++) if(!(chain[i]>chain[i-1])) mono=false;
-        ok("包络指数无串味: 衰减速度按 p22<p2<p16<p15<p12 严格递增", mono, chain.join(" < "));
+        let mono=true; for(let i=1;i<chain.length;i++) if(!(chain[i]>chain[i-1]+0.01)) mono=false;
+        ok("包络指数无串味: 衰减速度按 p22<p2<p16<p15<p12 严格递增(含 0.01 最小间隔)", mono, chain.join(" < "));
         // 变体必须是彼此独立的缓冲(否则等于只有一份, 又变回机械音)
         let dupEnv=[];
         for(const env of Object.keys(NOISE_ENV)){
@@ -18963,6 +19001,40 @@ function selftest(){
           if(s.size!==3) dupEnv.push(env+"="+s.size);
         }
         ok("每种包络备的 3 个变体是彼此独立的缓冲(不是同一份)", dupEnv.length===0, dupEnv.join(",")||"9/9 各 3 份互不相同");
+
+        /* 6b) 包络名接线检查 —— 这一条是被独立审计逼出来的
+           审计发现: 上面两条包络断言都只遍历 Object.keys(NOISE_ENV)、直接调 noiseBuf(0.4,env,0),
+           从头到尾没检查过 15 个调用点实际传进去的字符串。于是 sfxBrush 误写成 "sine"
+           (注册表里的键叫 "sin"), 又被 makeNoiseBuf 的 || NOISE_ENV.lin 静默兜底吃掉,
+           刷子音效的包络整个从 sin(pi*x) 静默换成了 1-x —— 而上面 11 条断言**全部照过**。
+           这里改成两头都验: (a) 字符串必须是注册表里真实存在的键; (b) 更进一步, 直接量
+           该函数真实播放出去的缓冲, 它的 mid/head 必须与期望值相符 —— 不依赖名字, 只认波形。 */
+        const nameBad=[], playedBad=[];
+        noiseBufs.clear(); noiseCtx=actx2;
+        for(const [fn38,call38] of SFX38){
+          const m=String(eval(fn38)).match(/noisePick\([^,]+,"([^"]+)"/);
+          if(!m){ nameBad.push(fn38+"=源码里没有 noisePick 调用"); continue; }
+          if(!NOISE_ENV[m[1]]){ nameBad.push(fn38+"=\""+m[1]+"\" 不在 NOISE_ENV 里"); continue; }
+          let played=null;
+          const r1=actx2.createBufferSource.bind(actx2);
+          actx2.createBufferSource=function(){ const s=r1(); if(!played) played=s; return s; };
+          try{ call38(); }catch(e){ nameBad.push(fn38+"() 调用抛错: "+(e&&e.message||e)); }
+          actx2.createBufferSource=r1;
+          if(!played||!played.buffer){ nameBad.push(fn38+"=没拿到它用的 buffer"); continue; }
+          const dd=played.buffer.getChannelData(0);
+          const ratio=+(winRMS(dd,0.02,0.10)? winRMS(dd,0.45,0.55)/winRMS(dd,0.02,0.10) : 0).toFixed(3);
+          const w=want38[m[1]];
+          if(!w){ nameBad.push(fn38+"(env="+m[1]+") 缺期望值"); continue; }
+          /* 容差取 ±15%: 这里量的是单个函数实际播放的那一份缓冲(样本量比第 6 条更少),
+             sin 在干净状态下实测就有 5.291 vs 期望 5.00(±5.8%), 所以绝对容差必须放宽。
+             用相对容差则对全部 9 种包络都成立, 且仍能抓住"整条包络被换掉"这种粗错
+             (变异测试: sfxBrush 退化成 lin → 0.548 vs 期望 5.00, 差 89%, 抓到)。 */
+          if(Math.abs(ratio-w[0])>w[0]*0.15) playedBad.push(fn38+"(env="+m[1]+") 实测 mid/head="+ratio+" 期望≈"+w[0]+"(±15%)");
+        }
+        ok("15 个调用点的包络名都真实存在于 NOISE_ENV(拼错会立刻暴露, 不再静默降级)",
+           nameBad.length===0, nameBad.join("; ")||"15/15 全部命中");
+        ok("15 个函数实际播放出去的缓冲, 包络都与期望值相符(直接量波形, 不靠名字)",
+           playedBad.length===0, playedBad.join("; ")||"15/15 波形与期望一致");
       } else ok("第三十八轮音频统一自测", false, "无法创建 AudioContext");
 
       // 7) 不依赖音频上下文: 源码层面确认 15 个函数都挂了 freeChain, 且都没有残留的逐采样生成
