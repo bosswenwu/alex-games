@@ -2,6 +2,28 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-10-05 — 沙海奇境 第三十八轮·本地：共享噪声缓冲统一到全部 15 个发声函数 + 变体池 + 断链补齐
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only。**只动音频层，不新增玩法/素材/方块，不碰任何存档字段** —— 把第三十七轮遗留的 12 个发声函数统一到同一套机制。**第三十七轮「已知遗留」里列的那 12 个函数已在本次全部处理完**，那条遗留不要再重做。
+
+| 项 | 内容 |
+| --- | --- |
+| ⚡ 统一缓存 | `sfxSunSweep`/`sfxHit`/`sfxEat`/`sfxHiss`/`sfxExplode`/`sfxGun`/`sfxRocket`/`sfxStoneGrind`/`sfxGeyser`/`sfxFirework`/`sfxFlame`/`sfxThunder` 原本与第三十七轮修的 3 个一样，每次调用都新建 `AudioBuffer` 并逐采样填 `Math.random()`。现全部改为 `noisePick(len, 包络, 变体数)` |
+| 🎲 **变体池（关键取舍）** | 原实现每次都是**全新随机噪声**。若只缓存一份，同一音效每次播放波形会**完全相同** —— 尤其 `sfxHit`（低通 420、音量 0.5 全写死、无任何随机参数）会立刻变成机械连发。故每个键下备若干变体随机取用。变体数按触发频率给：**高频短音 3 份**（脚步/破坏/刷子/命中/进食/枪/火箭/火焰/石磨），**罕见长音 1 份**（烈阳/嘶声/爆炸/喷发/烟花/雷，1.3~1.6 秒占内存大头却几乎不重复触发） |
+| 🎚 包络注册表 | 9 种包络集中到 `NOISE_ENV`（`lin`/`flat`/`sin`/`p12`/`p15`/`p16`/`p2`/`p22`/`gey`），公式与原来逐采样写法**逐字对应**，音色不变。缓存键格式由 `"包络|长度"` 改为 `"长度|包络"`（第三十七轮有两条断言依赖旧键名，已同步改） |
+| ♻️ 断链补齐 | 这 12 个函数原本也都没有 `disconnect`/`onended`，同样把 `GainNode`/`BiquadFilter` 挂在 `destination` 上不放。全部补上 `freeChain(...)`；`sfxExplode`/`sfxGun` 的低频振荡器也挂 `onended` |
+| 🛡️ 上下文失效保护 | `noiseCtx!==actx2` 时清空缓存（`AudioContext` 若被换掉，旧缓冲作废）—— 第三十七轮已有，本轮保留 |
+
+**实测数据：** 触发全部 17 种发声（15 个函数 + 7 种脚步材质）20 轮后，缓存共 **16 个键 / 36 份缓冲 / 1.95 MB**（最长单键 0.29 MB），缓存键数**不再随游玩时间增长**。同样这 340 次发声，**旧做法要分配 340 个缓冲并逐采样填 8,841,600 个随机数** —— 缓冲数降到 1/9.4。真实主循环走 1.8 秒（约 7.4 格）+ 30 轮战斗/环境音：零控制台错误，缓存键数稳定。**`onended` 实测在 500ms 内被浏览器真正触发**（不只是挂上钩子），证实断链确实发生。
+
+**Verification:** `node tools/headless.mjs selftest` **504/504** 于默认世界与 `?seed=424242`（新增 11 条断言，493→504）。新增断言包括：15 个函数各调 5 轮后 `createBuffer` **增量为 0**（直接证明缓存生效）、缓存键数有界、每个键的采样数 == `round(sampleRate*键里的长度)`、`sfxHit`/`sfxStep`/`sfxFlame` 连发 40 次各用到 >1 种缓冲（防机械音回归）、罕见长音确实各只备 1 份、**9 种包络的 `mid/head` 与 `tail/head` 逐项核对 + 衰减速度按 `p22<p2<p16<p15<p12` 严格递增**（防包络串味，这是本次重构最大风险点）、每种包络 3 个变体是彼此独立的缓冲、15 个函数都挂了 `freeChain` 且无残留 `actx2.createBuffer`。
+
+**本轮被自测抓出的两个自身错误（如实记录）：** ① 包装 `actx2.createBuffer` 计数的探针没透传参数，触发 `TypeError: 3 arguments required`，导致"增量=0"的断言本身失效 → 改为 `function(...a){...realCB38(...a)}`；② 我按直觉把 `sin` 包络的 `tail/head` 期望写成 0.15，实测 1.005 —— 因为 `sin(πx)` 关于 `x=0.5` **对称**，head 与 tail 本就相等，是我的期望值错了不是代码错了。已改用 `eval` 实测值标定（每项 5 次取平均）并把依据写进注释。
+
+**How:** `NOISE_ENV`/`makeNoiseBuf(len,env)`/`noiseBuf(len,env,v)`/`noisePick(len,env,nv)` 放在 `initAudio()` 之后，`noiseBufs` 值类型由单个 buffer 改为变体数组（外层键仍是 `"长度|包络"`，故键数量统计语义不变）。每个发声函数把「新建 buffer + 逐采样填随机数」三行换成一行 `noisePick(...)`，`src.start(t)` 换成 `src.start(t,0,len)`，末尾加 `freeChain(...)`。
+
+**未能人工确认：** 本环境模型不支持读图（本轮无视觉改动）。**变体池只解决了"波形不再每次完全相同"，不改变音色设计本身；3 份变体在长时间高频播放下是否仍能听出重复，需真人试玩确认。** 记忆体占用 1.95 MB 是常驻成本（不再随时间增长），若目标平台内存极紧，可把高频音的变体数从 3 降到 2。音频总体积平衡（脚步/战斗/环境音谁盖过谁）同样需真人试听。
+
 ## 2026-10-05 — 沙海奇境 第三十七轮·本地：补漏与优化（Tab 作用域 / 指针锁竞态 / 共享噪声缓冲 / 音频节点回收）
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) only。**不新增任何玩法、素材、方块或存档字段** —— 只修上一轮自己引入的缺陷 + 一处既有性能浪费。所有结论都来自 `tools/headless.mjs eval` 的运行期实测，不是读代码推测。
@@ -18,6 +40,7 @@ Persistent handoff notes for future agents. Add a new entry for each user-visibl
 **查过、确认没问题（列出以免下轮重复劳动）：** `frame()` 的 `dt` 已有 clamp（`clamp((now-lastT)/1000,0,0.05)`，喂 5 次 `dt=30` 不抛错）；面板层级正确（背包 z-index 40 > overlay 10，64/64 采样点命中面板内部，鼠标事件不穿透到 canvas，无误挖）；背包开着时 Esc 能关；`vaultPrompt`/`npcPrompt`/`hud` 均已隐藏、不与背包叠压；点击非当前快捷栏格子能正确切栏并移动高亮；无 `TODO`/`FIXME` 遗留、无游离 `console.log`（仅自测报告内）、无无上限增长的容器；`updateVaultPrompt` 未改（实测无叠压，加 `bagOpen` 属于无证据改动）。
 
 **已知遗留（本轮刻意没做，需定夺范围）：** 逐采样生成噪声的写法在另外 **12 个音效函数**里同样存在，本轮只修了触发频率最高的 `sfxStep` 与挖掘相关的 `sfxBreak`/`sfxBrush`：`sfxHit`、`sfxStoneGrind`、`sfxFlame`、`sfxRocket`、`sfxGun`（战斗高频，收益大）、`sfxGeyser`、`sfxSunSweep`、`sfxEat`、`sfxHiss`、`sfxExplode`、`sfxFirework`、`sfxThunder`（多为一次性事件，收益小）。**不能照搬现在的缓存键** —— 这些函数包络不同（`lin` 6 个、`sin` 1 个、`Math.pow(1-x, 1.2/1.5/1.6/2/2.2)` 5 个），缓存键需扩成"形状+指数+长度"才能保证音色不变；改完应重新核对每个函数的缓冲采样数。同一批函数也都没有 `freeChain` 断链。
+> ✅ **已由第三十八轮处理完**（缓存键改为 `"长度|包络"` + 9 种包络注册表 + 变体池，`freeChain` 补齐）。本条遗留不再需要重做。
 
 **How:** 新增 `noiseBufs`(Map) + `noiseCtx` + `noiseBuf(len, shape)` + `freeChain(src, ...nodes)` 放在 `initAudio()` 之后；`sfxBreak`/`sfxBrush`/`sfxStep` 改为 `src.buffer=noiseBuf(len, ...)` + `src.start(t,0,len)` + `freeChain(...)`；`noiseCtx!==actx2` 时清空缓存（防 AudioContext 被换掉后旧缓冲作废）。`toggleCraft` 签名加 `noRelock`。其余为删除与清单补项。
 

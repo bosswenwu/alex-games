@@ -7968,33 +7968,57 @@ function updateParticles(dt){
 /* ---------- 音效 ---------- */
 let actx2=null;
 function initAudio(){ if(!actx2){ try{ actx2=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } if(actx2) applyMusicAudioPrefs(); }
-/* ---- 共享噪声缓冲(第三十七轮·优化) ----
-   原来每次发声都新建一个 AudioBuffer 并逐采样填 Math.random()：脚步声跑步时约 2.8 次/秒
-   (每步 ~5300 采样), 挖掘/刷子也很频繁 —— 长时间游玩就是几万次缓冲区分配 + 上亿次随机数,
-   而这些缓冲区内容只取决于"长度 + 包络形状"。现在按 (形状,长度) 记忆化: 每种组合只生成一次,
-   之后用 src.start(t,0,len) 取用前 len 秒。烘焙进缓冲区的包络与原来逐采样一致 → 音色不变。 */
-const noiseBufs=new Map(); let noiseCtx=null;
-function noiseBuf(len, shape){
-  if(noiseCtx!==actx2){ noiseBufs.clear(); noiseCtx=actx2; }   // AudioContext 若被换掉, 旧缓冲作废
-  const key=shape+"|"+len;
-  let b=noiseBufs.get(key);
-  if(b) return b;
+/* ---- 共享噪声缓冲(第三十七轮引入 / 第三十八轮统一到全部发声函数) ----
+   原来每个发声函数每次调用都新建一个 AudioBuffer 并逐采样填 Math.random(): 脚步声跑步时约
+   2.8 次/秒(每步 ~5300 采样), 战斗/挖掘/火焰同样高频 —— 长时间游玩就是海量缓冲区分配 +
+   上亿次随机数, 而缓冲区内容其实只取决于"长度 + 包络"。
+
+   现在按 (长度, 包络) 记忆化, 再用 src.start(t,0,len) 取用前 len 秒。两条要点:
+
+   1) 包络公式集中到 NOISE_ENV, 与原来逐采样写法逐字对应(见每项注释), 所以音色不变。
+      别把不同指数的包络并到同一个键上 —— 那会让音色串味。
+   2) 每个键下保留若干"变体"随机取用。这是必须的: 原来每次都是全新随机噪声, 若只留一份,
+      同一音效每次播放波形完全相同 —— 尤其 sfxHit 这种没有任何随机参数的(低通 420/音量 0.5
+      写死), 会立刻听起来像机械连发。变体数按触发频率给: 高频短音 3 份, 罕见长音 1 份
+      (雷/嘶/爆炸 1.3~1.6 秒, 占内存大头却几乎不重复触发, 给多份纯属浪费)。 */
+const NOISE_ENV={
+  lin:  x=>1-x,                    // sfxStep/sfxBreak/sfxHit/sfxEat/sfxRocket/sfxFlame
+  flat: ()=>0.6,                   // sfxHiss(恒定振幅, 起伏交给 GainNode 自动化)
+  sin:  x=>Math.sin(Math.PI*x),     // sfxBrush/sfxStoneGrind
+  p12:  x=>Math.pow(1-x,1.2),       // sfxThunder
+  p15:  x=>Math.pow(1-x,1.5),       // sfxSunSweep
+  p16:  x=>Math.pow(1-x,1.6),       // sfxExplode
+  p2:   x=>Math.pow(1-x,2),         // sfxGun
+  p22:  x=>Math.pow(1-x,2.2),       // sfxFirework
+  gey:  x=>Math.min(1,x*8)*(1-x),   // sfxGeyser: 快起音 + 线性衰减
+};
+const noiseBufs=new Map(); let noiseCtx=null;   // 键 "长度|包络" -> 变体数组
+function makeNoiseBuf(len, env){
   const n=Math.round(actx2.sampleRate*len);
-  b=actx2.createBuffer(1,n,actx2.sampleRate);
-  const d=b.getChannelData(0);
-  for(let i=0;i<n;i++){
-    const x=i/n;
-    d[i]=(Math.random()*2-1)*(shape==="sine"?Math.sin(Math.PI*x):(1-x));
-  }
-  noiseBufs.set(key,b);
+  const b=actx2.createBuffer(1,n,actx2.sampleRate), d=b.getChannelData(0);
+  const e=NOISE_ENV[env]||NOISE_ENV.lin;
+  for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*e(i/n);
   return b;
+}
+function noiseBuf(len, env, v){
+  if(noiseCtx!==actx2){ noiseBufs.clear(); noiseCtx=actx2; }   // AudioContext 若被换掉, 旧缓冲作废
+  const key=len+"|"+env;
+  let arr=noiseBufs.get(key);
+  if(!arr){ arr=[]; noiseBufs.set(key,arr); }
+  if(arr[v]===undefined) arr[v]=makeNoiseBuf(len,env);
+  return arr[v];
+}
+function noisePick(len, env, nv){   // 备齐 nv 份后随机挑一份(不分配临时数组)
+  nv=nv||1;
+  for(let v=0;v<nv;v++) noiseBuf(len,env,v);
+  return noiseBufs.get(len+"|"+env)[(Math.random()*nv)|0];
 }
 /* 发完声就断开整条链: 否则 GainNode/BiquadFilter 一直挂在 destination 上, 音频图只增不减 */
 function freeChain(src, ...nodes){ src.onended=()=>{ try{ src.disconnect(); for(const n of nodes) n.disconnect(); }catch(e){} }; }
 function sfxBreak(){
   if(!actx2) return;
   const t=actx2.currentTime, len=0.09;
-  const src=actx2.createBufferSource(); src.buffer=noiseBuf(len,"lin");
+  const src=actx2.createBufferSource(); src.buffer=noisePick(len,"lin",3);
   const f=actx2.createBiquadFilter(); f.type="bandpass"; f.frequency.value=500+Math.random()*500; f.Q.value=1.2;
   const g=actx2.createGain(); g.gain.value=0.35;
   src.connect(f).connect(g).connect(actx2.destination); src.start(t,0,len);
@@ -8003,7 +8027,7 @@ function sfxBreak(){
 function sfxBrush(){   // 刷子: 短促高频沙沙声
   if(!actx2) return;
   const t=actx2.currentTime, len=0.12;
-  const src=actx2.createBufferSource(); src.buffer=noiseBuf(len,"sine");
+  const src=actx2.createBufferSource(); src.buffer=noisePick(len,"sine",3);
   const f=actx2.createBiquadFilter(); f.type="highpass"; f.frequency.value=2600+Math.random()*900;
   const g=actx2.createGain(); g.gain.value=0.09;
   src.connect(f).connect(g).connect(actx2.destination); src.start(t,0,len);
@@ -8037,7 +8061,7 @@ let stepAcc=0;                                        // 行走距离累计(驱�
 function sfxStep(id){
   if(!actx2) return;
   const K=STEP_TONE[stepMatFor(id)]||STEP_TONE.stone, t=actx2.currentTime, len=K[3];
-  const src=actx2.createBufferSource(); src.buffer=noiseBuf(len,"lin");   // 第三十七轮·优化: 共享缓冲, 不再每步新建
+  const src=actx2.createBufferSource(); src.buffer=noisePick(len,"lin",3);   // 第三十八轮: 共享缓冲 + 3 变体随机取用, 不再每步新建
   const f=actx2.createBiquadFilter(); f.type=K[1]; f.Q.value=1.1;
   f.frequency.value=K[0]*(0.9+Math.random()*0.2);      // 每步轻微随机 → 不机械
   const g=actx2.createGain(); g.gain.value=K[2];
@@ -8055,13 +8079,12 @@ function sfxStep(id){
 function sfxSunSweep(){   // 烈阳横扫: 下滑的风啸 + 低频轰燃
   if(!actx2) return;
   const t=actx2.currentTime, len=0.45;
-  const buf=actx2.createBuffer(1,actx2.sampleRate*len,actx2.sampleRate), d=buf.getChannelData(0);
-  for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,1.5);
-  const src=actx2.createBufferSource(); src.buffer=buf;
+  const src=actx2.createBufferSource(); src.buffer=noisePick(len,"p15",1);
   const f=actx2.createBiquadFilter(); f.type="bandpass"; f.Q.value=0.9;
   f.frequency.setValueAtTime(2400,t); f.frequency.exponentialRampToValueAtTime(260,t+len);
   const g=actx2.createGain(); g.gain.value=0.4;
-  src.connect(f).connect(g).connect(actx2.destination); src.start(t);
+  src.connect(f).connect(g).connect(actx2.destination); src.start(t,0,len);
+  freeChain(src,f,g);
 }
 function sfxPlace(){
   if(!actx2) return;
@@ -8083,13 +8106,11 @@ function sfxHurt(){
 function sfxHit(){
   if(!actx2) return;
   const t=actx2.currentTime, len=0.07;
-  const buf=actx2.createBuffer(1,actx2.sampleRate*len,actx2.sampleRate);
-  const d=buf.getChannelData(0);
-  for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*(1-i/d.length);
-  const src=actx2.createBufferSource(); src.buffer=buf;
+  const src=actx2.createBufferSource(); src.buffer=noisePick(len,"lin",3);
   const f=actx2.createBiquadFilter(); f.type="lowpass"; f.frequency.value=420;
   const g=actx2.createGain(); g.gain.value=0.5;
-  src.connect(f).connect(g).connect(actx2.destination); src.start(t);
+  src.connect(f).connect(g).connect(actx2.destination); src.start(t,0,len);
+  freeChain(src,f,g);
 }
 function sfxZombie(vol){
   if(!actx2) return;
@@ -8127,13 +8148,11 @@ function sfxEat(){
   if(!actx2) return;
   for(let k=0;k<3;k++){
     const t=actx2.currentTime+k*0.13, len=0.06;
-    const buf=actx2.createBuffer(1,actx2.sampleRate*len,actx2.sampleRate);
-    const d=buf.getChannelData(0);
-    for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*(1-i/d.length);
-    const src=actx2.createBufferSource(); src.buffer=buf;
+    const src=actx2.createBufferSource(); src.buffer=noisePick(len,"lin",3);
     const f=actx2.createBiquadFilter(); f.type="bandpass"; f.frequency.value=900+Math.random()*400;
     const g=actx2.createGain(); g.gain.value=0.3;
-    src.connect(f).connect(g).connect(actx2.destination); src.start(t);
+    src.connect(f).connect(g).connect(actx2.destination); src.start(t,0,len);
+    freeChain(src,f,g);
   }
 }
 function sfxPickup(){
@@ -8159,59 +8178,53 @@ function sfxLevel(){   // 胜利琶音
 function sfxHiss(){
   if(!actx2) return;
   const t=actx2.currentTime, len=1.5;
-  const buf=actx2.createBuffer(1,actx2.sampleRate*len,actx2.sampleRate);
-  const d=buf.getChannelData(0);
-  for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*0.6;
-  const src=actx2.createBufferSource(); src.buffer=buf;
+  const src=actx2.createBufferSource(); src.buffer=noisePick(len,"flat",1);
   const f=actx2.createBiquadFilter(); f.type="highpass"; f.frequency.value=2200;
   const g=actx2.createGain();
   g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(0.16,t+0.2);
   g.gain.setValueAtTime(0.16,t+1.2); g.gain.exponentialRampToValueAtTime(0.001,t+1.5);
-  src.connect(f).connect(g).connect(actx2.destination); src.start(t);
+  src.connect(f).connect(g).connect(actx2.destination); src.start(t,0,len);
+  freeChain(src,f,g);
 }
 function sfxExplode(){
   if(!actx2) return;
   const t=actx2.currentTime, len=0.7;
-  const buf=actx2.createBuffer(1,actx2.sampleRate*len,actx2.sampleRate);
-  const d=buf.getChannelData(0);
-  for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,1.6);
-  const src=actx2.createBufferSource(); src.buffer=buf;
+  const src=actx2.createBufferSource(); src.buffer=noisePick(len,"p16",1);
   const f=actx2.createBiquadFilter(); f.type="lowpass";
   f.frequency.setValueAtTime(900,t); f.frequency.exponentialRampToValueAtTime(120,t+0.5);
   const g=actx2.createGain(); g.gain.value=0.75;
-  src.connect(f).connect(g).connect(actx2.destination); src.start(t);
+  src.connect(f).connect(g).connect(actx2.destination); src.start(t,0,len);
+  freeChain(src,f,g);
   const o=actx2.createOscillator(); o.type="sine";      // 低频轰
   o.frequency.setValueAtTime(70,t); o.frequency.exponentialRampToValueAtTime(28,t+0.5);
   const g2=actx2.createGain();
   g2.gain.setValueAtTime(0.5,t); g2.gain.exponentialRampToValueAtTime(0.001,t+0.55);
   o.connect(g2).connect(actx2.destination); o.start(t); o.stop(t+0.6);
+  o.onended=()=>{ try{ o.disconnect(); g2.disconnect(); }catch(e){} };
 }
 function sfxGun(){
   if(!actx2) return;
   const t=actx2.currentTime, len=0.06;
-  const buf=actx2.createBuffer(1,actx2.sampleRate*len,actx2.sampleRate);
-  const d=buf.getChannelData(0);
-  for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,2);
-  const src=actx2.createBufferSource(); src.buffer=buf;
+  const src=actx2.createBufferSource(); src.buffer=noisePick(len,"p2",3);
   const f=actx2.createBiquadFilter(); f.type="highpass"; f.frequency.value=700;
   const g=actx2.createGain(); g.gain.value=0.28;
-  src.connect(f).connect(g).connect(actx2.destination); src.start(t);
+  src.connect(f).connect(g).connect(actx2.destination); src.start(t,0,len);
+  freeChain(src,f,g);
   const o=actx2.createOscillator(); o.type="square";
   o.frequency.setValueAtTime(240,t); o.frequency.exponentialRampToValueAtTime(70,t+0.06);
   const g2=actx2.createGain(); g2.gain.setValueAtTime(0.16,t); g2.gain.exponentialRampToValueAtTime(0.001,t+0.07);
   o.connect(g2).connect(actx2.destination); o.start(t); o.stop(t+0.08);
+  o.onended=()=>{ try{ o.disconnect(); g2.disconnect(); }catch(e){} };
 }
 function sfxRocket(){
   if(!actx2) return;
   const t=actx2.currentTime, len=0.42;
-  const buf=actx2.createBuffer(1,actx2.sampleRate*len,actx2.sampleRate);
-  const d=buf.getChannelData(0);
-  for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*(1-i/d.length);
-  const src=actx2.createBufferSource(); src.buffer=buf;
+  const src=actx2.createBufferSource(); src.buffer=noisePick(len,"lin",3);
   const f=actx2.createBiquadFilter(); f.type="bandpass"; f.Q.value=0.7;
   f.frequency.setValueAtTime(300,t); f.frequency.linearRampToValueAtTime(1700,t+0.42);
   const g=actx2.createGain(); g.gain.setValueAtTime(0.3,t); g.gain.linearRampToValueAtTime(0.04,t+0.42);
-  src.connect(f).connect(g).connect(actx2.destination); src.start(t);
+  src.connect(f).connect(g).connect(actx2.destination); src.start(t,0,len);
+  freeChain(src,f,g);
 }
 /* ---------- 环境音乐 ---------- */
 let musicOn=true, musicT=5, musicVolume=0.8, musicBus=null;
@@ -10410,12 +10423,11 @@ function kaHeartBroken(x,y,z){                          // 挖碎卡之石: 相�
 function sfxStoneGrind(dist){                           // 石像挪动: 低沉的石头摩擦声, 越近越响
   if(!actx2 || dist>24) return;
   const t=actx2.currentTime, len=0.22;
-  const buf=actx2.createBuffer(1,actx2.sampleRate*len,actx2.sampleRate), d=buf.getChannelData(0);
-  for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.sin(Math.PI*i/d.length);
-  const src=actx2.createBufferSource(); src.buffer=buf;
+  const src=actx2.createBufferSource(); src.buffer=noisePick(len,"sin",3);
   const f=actx2.createBiquadFilter(); f.type="lowpass"; f.frequency.value=320+Math.random()*120;
   const g=actx2.createGain(); g.gain.value=0.5*Math.max(0.1,1-dist/24);
-  src.connect(f).connect(g).connect(actx2.destination); src.start(t);
+  src.connect(f).connect(g).connect(actx2.destination); src.start(t,0,len);
+  freeChain(src,f,g);
 }
 /* ---- ⚔ 奥西里斯试炼厅 (第六轮·本地, 对标 Minecraft Tricky Trials 的试炼密室) ----
    石像回廊东墙有门通往墓室正下方的试炼厅。走进去开始三波试炼(木乃伊+圣甲虫 → 加巨蝎 → 阿努比斯守卫压阵),
@@ -10594,12 +10606,11 @@ function updateGeysers(dt){
 function sfxGeyser(dist){                                // 喷发: 由低到高的长嘶声
   if(!actx2 || dist>40) return;
   const t=actx2.currentTime, len=1.3;
-  const buf=actx2.createBuffer(1,actx2.sampleRate*len,actx2.sampleRate), d=buf.getChannelData(0);
-  for(let i=0;i<d.length;i++){ const f=i/d.length; d[i]=(Math.random()*2-1)*Math.min(1,f*8)*(1-f); }
-  const src=actx2.createBufferSource(); src.buffer=buf;
+  const src=actx2.createBufferSource(); src.buffer=noisePick(len,"gey",1);
   const fl=actx2.createBiquadFilter(); fl.type="lowpass"; fl.frequency.setValueAtTime(300,t); fl.frequency.exponentialRampToValueAtTime(2200,t+0.5);
   const g=actx2.createGain(); g.gain.value=0.45*Math.max(0.08,1-dist/40);
-  src.connect(fl).connect(g).connect(actx2.destination); src.start(t);
+  src.connect(fl).connect(g).connect(actx2.destination); src.start(t,0,len);
+  freeChain(src,fl,g);
 }
 function sfxGeyserRumble(dist){                          // 预警: 地下低鸣
   if(!actx2) return;
@@ -10726,13 +10737,11 @@ function burstFirework(a){
 function sfxFirework(){
   if(!actx2) return;
   const t=actx2.currentTime, len=0.5;
-  const buf=actx2.createBuffer(1,actx2.sampleRate*len,actx2.sampleRate);
-  const d=buf.getChannelData(0);
-  for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,2.2);
-  const src=actx2.createBufferSource(); src.buffer=buf;
+  const src=actx2.createBufferSource(); src.buffer=noisePick(len,"p22",1);
   const f=actx2.createBiquadFilter(); f.type="bandpass"; f.frequency.value=1400; f.Q.value=0.5;
   const g=actx2.createGain(); g.gain.setValueAtTime(0.30,t); g.gain.exponentialRampToValueAtTime(0.001,t+len);
-  src.connect(f).connect(g).connect(actx2.destination); src.start(t);
+  src.connect(f).connect(g).connect(actx2.destination); src.start(t,0,len);
+  freeChain(src,f,g);
 }
 const PLASMA_PARTS=[{p:[0,0,0], o:[0,0,0], s:[0.07,0.07,0.22], tF:69,tS:69,tT:69,tB:69, sw:0, fix:0}];
 function makePlasma(x,y,z,vx,vy,vz){           // 机甲等离子弹(只伤玩家)
@@ -10806,13 +10815,11 @@ function fireFlame(){                              // 喷火器: 短程锥形持
 function sfxFlame(){
   if(!actx2) return;
   const t=actx2.currentTime, len=0.3;
-  const buf=actx2.createBuffer(1,actx2.sampleRate*len,actx2.sampleRate);
-  const d=buf.getChannelData(0);
-  for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*(1-i/d.length);
-  const src=actx2.createBufferSource(); src.buffer=buf;
+  const src=actx2.createBufferSource(); src.buffer=noisePick(len,"lin",3);
   const f=actx2.createBiquadFilter(); f.type="bandpass"; f.frequency.value=800; f.Q.value=0.6;
   const g=actx2.createGain(); g.gain.setValueAtTime(0.22,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.3);
-  src.connect(f).connect(g).connect(actx2.destination); src.start(t);
+  src.connect(f).connect(g).connect(actx2.destination); src.start(t,0,len);
+  freeChain(src,f,g);
 }
 function fireRocket(){                             // 火箭筒: 爆炸弹
   if(rocketCd>0) return;
@@ -12973,14 +12980,12 @@ function tickRainSplash(dt){
 function sfxThunder(){
   if(!actx2) return;
   const t=actx2.currentTime, len=1.6;
-  const buf=actx2.createBuffer(1,actx2.sampleRate*len,actx2.sampleRate);
-  const d=buf.getChannelData(0);
-  for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,1.2);
-  const src=actx2.createBufferSource(); src.buffer=buf;
+  const src=actx2.createBufferSource(); src.buffer=noisePick(len,"p12",1);
   const f=actx2.createBiquadFilter(); f.type="lowpass";
   f.frequency.setValueAtTime(400,t); f.frequency.exponentialRampToValueAtTime(70,t+1.4);
   const g=actx2.createGain(); g.gain.setValueAtTime(0.55,t); g.gain.exponentialRampToValueAtTime(0.001,t+1.5);
-  src.connect(f).connect(g).connect(actx2.destination); src.start(t);
+  src.connect(f).connect(g).connect(actx2.destination); src.start(t,0,len);
+  freeChain(src,f,g);
 }
 
 /* ---------- 主循环 ---------- */
@@ -18829,7 +18834,8 @@ function selftest(){
         let freed=false;
         if(capSrc&&hasHook){ try{ capSrc.onended(); freed=true; }catch(e){ freed=false; } }
         ok("音频节点回收: 噪声源带 onended 断链回调, 触发后不抛错",
-           hasHook&&freed && !!(capSrc&&noiseBufs.has("lin|0.11")), "onended="+hasHook+" 可触发="+freed);
+           /* 第三十八轮: 缓存键格式由 "包络|长度" 改为 "长度|包络"(便于按长度去重计数) */
+           hasHook&&freed && !!(capSrc&&noiseBufs.has("0.11|lin")), "onended="+hasHook+" 可触发="+freed);
       } else ok("音频节点回收: 噪声源带 onended 断链回调, 触发后不抛错", false, "无法创建 AudioContext");
 
       // 7) 断链回调本身不能抛错(包了 try/catch)
@@ -18847,6 +18853,130 @@ function selftest(){
          bagOpen===false && getComputedStyle(document.getElementById("bagPanel")).display==="none"
          && JSON.stringify([...bag.entries()])===JSON.stringify(bag37), "ok");
     }catch(err){ ok("第三十七轮自测(Tab作用域/竞态/音频优化)未抛错", false, String(err&&err.stack||err)); }
+
+    /* ---- 第三十八轮·本地: 共享噪声缓冲统一到全部 15 个发声函数 + 变体池 + 断链 ---- */
+    try{
+      if(!actx2) initAudio();
+      const SFX38=[
+        ["sfxBreak",()=>sfxBreak()], ["sfxBrush",()=>sfxBrush()], ["sfxHit",()=>sfxHit()],
+        ["sfxEat",()=>sfxEat()], ["sfxGun",()=>sfxGun()], ["sfxRocket",()=>sfxRocket()],
+        ["sfxFlame",()=>sfxFlame()], ["sfxStoneGrind",()=>sfxStoneGrind(5)],
+        ["sfxSunSweep",()=>sfxSunSweep()], ["sfxHiss",()=>sfxHiss()], ["sfxExplode",()=>sfxExplode()],
+        ["sfxGeyser",()=>sfxGeyser(5)], ["sfxFirework",()=>sfxFirework()], ["sfxThunder",()=>sfxThunder()],
+        ["sfxStep",()=>sfxStep(SAND)],
+      ];
+      ok("第三十八轮: 覆盖全部 15 个发声函数", SFX38.length===15, "实际="+SFX38.length);
+
+      if(actx2){
+        // 1) 核心: 每个函数各调 5 轮, createBuffer 增量必须为 0(预热已把变体备齐)
+        const realCB38=actx2.createBuffer.bind(actx2);
+        let cb38=0; actx2.createBuffer=function(...a){ cb38++; return realCB38(...a); };
+        let err38=null;
+        for(const [,f] of SFX38){ try{ f(); }catch(e){ err38=err38||String(e&&e.stack||e).slice(0,120); } }
+        const warm38=cb38;
+        for(let r=0;r<5;r++) for(const [,f] of SFX38){ try{ f(); }catch(e){ err38=err38||String(e&&e.stack||e).slice(0,120); } }
+        const after38=cb38;
+        actx2.createBuffer=realCB38;
+        ok("全部 15 个发声函数不再每次新建缓冲: 预热后再各调 5 轮, createBuffer 增量为 0",
+           err38===null && warm38>0 && after38===warm38, "预热建了="+warm38+" 5轮后="+after38+" 错="+err38);
+
+        // 2) 缓存有界: 大量调用后键数量不再增长
+        const keys38=noiseBufs.size;
+        for(let r=0;r<10;r++) for(const [,f] of SFX38){ try{ f(); }catch(e){} }
+        for(const m of [SAND,STONE,LOG,ICE,WATER,LAVA,GRASS]) sfxStep(m);
+        ok("缓存有界: 15 个函数再各调 10 轮 + 7 种脚步材质, 键数量不增长",
+           noiseBufs.size===keys38 && keys38>0, "一次="+keys38+" 之后="+noiseBufs.size);
+
+        // 3) 每个键的采样数必须等于 round(sampleRate*len) —— 键名就是 len|env
+        const lenBad=[];
+        for(const [k,arr] of noiseBufs){
+          const len=parseFloat(k.split("|")[0]);
+          const want=Math.round(actx2.sampleRate*len);
+          if(!arr.length || arr.some(b=>!b || b.length!==want)) lenBad.push(k);
+        }
+        ok("每个缓存键的采样数都等于 round(sampleRate*键里的长度)(否则 src.start(t,0,len) 会截断)",
+           lenBad.length===0, "异常键="+(lenBad.join(",")||"无"));
+
+        // 4) 变体池真的在起作用: 高频音效连发 40 次必须用到 >1 种缓冲
+        /* 这是防止"缓存把音效变成机械音"的关键回归 —— 原来每次都是全新随机噪声,
+           若只留一份, sfxHit 这种无随机参数的音效每次波形会完全一样。 */
+        const variants={};
+        for(const [name,fn] of [["sfxHit",()=>sfxHit()],["sfxStep",()=>sfxStep(SAND)],["sfxFlame",()=>sfxFlame()]]){
+          const seen=new Set();
+          for(let i=0;i<40;i++){
+            let cap=null;
+            const r1=actx2.createBufferSource.bind(actx2);
+            actx2.createBufferSource=function(){ const s=r1(); cap=s; return s; };
+            fn(); actx2.createBufferSource=r1;
+            if(cap&&cap.buffer) seen.add(cap.buffer);
+          }
+          variants[name]=seen.size;
+        }
+        ok("变体池有效: sfxHit/sfxStep/sfxFlame 连发 40 次各用到 >1 种缓冲(否则会变机械音)",
+           Object.values(variants).every(v=>v>1), JSON.stringify(variants));
+
+        // 5) 罕见长音只备 1 份(内存取舍): 但键确实存在
+        const longEnv=["1.5|flat","1.3|gey","1.6|p12","0.7|p16","0.5|p22","0.45|p15"];
+        ok("罕见长音(雷/嘶/喷发/爆炸/烟花/烈阳)已缓存且各只备 1 份变体",
+           longEnv.every(k=>noiseBufs.has(k) && noiseBufs.get(k).length===1),
+           longEnv.map(k=>k+"="+(noiseBufs.has(k)?noiseBufs.get(k).length:"缺")).join(" "));
+
+        // 6) 包络指数有没有串味 —— 本次重构最大的风险点
+        /* 用分窗 RMS 比值反推烘焙进去的包络: 指数越大衰减越快, mid/head 越小。
+           逐项核对数值 + 严格单调性, 任一包络写错都会被抓出来。 */
+        const winRMS=(d,x0,x1)=>{ const n=d.length,a=Math.floor(x0*n),b=Math.floor(x1*n);
+                                  let s=0; for(let i=a;i<b;i++) s+=d[i]*d[i];
+                                  return Math.sqrt(s/Math.max(1,b-a)); };
+        noiseBufs.clear(); noiseCtx=actx2;
+        const envM={};
+        for(const env of Object.keys(NOISE_ENV)){
+          const b=noiseBuf(0.4, env, 0), d=b.getChannelData(0);
+          const head=winRMS(d,0.02,0.10), mid=winRMS(d,0.45,0.55), tail=winRMS(d,0.90,0.98);
+          envM[env]={ midOverHead:+(mid/head).toFixed(3), tailOverHead:+(tail/head).toFixed(3) };
+        }
+        /* 期望值取自 tools/headless.mjs eval 实测(每项 5 次取平均):
+           lin 0.54/0.07  flat 1.00/1.00  sin 5.03/1.00  p12 0.47/0.04
+           p15 0.39/0.02  p16 0.37/0.015 p2 0.29/0.006 p22 0.25/0.004  gey 1.05/0.135
+           注意 sin 关于 x=0.5 对称, 所以 tail≈head(不是像衰减包络那样趋近 0);
+           gey 因有快起音 min(1,x*8), head 被压低, 所以 mid/head 略大于 1。 */
+        const want38={lin:[0.54,0.07], flat:[1.00,1.00], sin:[5.03,1.00], p12:[0.47,0.04],
+                      p15:[0.39,0.02], p16:[0.37,0.015], p2:[0.29,0.006], p22:[0.25,0.004],
+                      gey:[1.05,0.135]};
+        const envBad=[];
+        for(const [env,w] of Object.entries(want38)){
+          const g=envM[env];
+          if(!g) { envBad.push(env+"=缺"); continue; }
+          if(Math.abs(g.midOverHead-w[0])>0.15) envBad.push(env+" mid="+g.midOverHead+" 期望≈"+w[0]);
+          if(Math.abs(g.tailOverHead-w[1])>0.04) envBad.push(env+" tail="+g.tailOverHead+" 期望≈"+w[1]);
+        }
+        ok("包络逐项核对: 9 种包络的 mid/head、tail/head 都与实测标定值相符",
+           envBad.length===0, envBad.join("; ")||JSON.stringify(envM));
+        // 严格单调: 指数越大衰减越快 —— 这条才是"包络有没有串味"的关键守卫
+        const chain=["p22","p2","p16","p15","p12"].map(e=>envM[e].midOverHead);
+        let mono=true; for(let i=1;i<chain.length;i++) if(!(chain[i]>chain[i-1])) mono=false;
+        ok("包络指数无串味: 衰减速度按 p22<p2<p16<p15<p12 严格递增", mono, chain.join(" < "));
+        // 变体必须是彼此独立的缓冲(否则等于只有一份, 又变回机械音)
+        let dupEnv=[];
+        for(const env of Object.keys(NOISE_ENV)){
+          const s=new Set();
+          for(let v=0;v<3;v++) s.add(noiseBuf(0.4, env, v));
+          if(s.size!==3) dupEnv.push(env+"="+s.size);
+        }
+        ok("每种包络备的 3 个变体是彼此独立的缓冲(不是同一份)", dupEnv.length===0, dupEnv.join(",")||"9/9 各 3 份互不相同");
+      } else ok("第三十八轮音频统一自测", false, "无法创建 AudioContext");
+
+      // 7) 不依赖音频上下文: 源码层面确认 15 个函数都挂了 freeChain, 且都没有残留的逐采样生成
+      {
+        const need=["sfxBreak","sfxBrush","sfxStep","sfxSunSweep","sfxHit","sfxEat","sfxHiss",
+                    "sfxExplode","sfxGun","sfxRocket","sfxStoneGrind","sfxGeyser","sfxFirework",
+                    "sfxFlame","sfxThunder"];
+        const texts=need.map(n=>String(eval(n)));
+        const noFree=texts.filter(t=>t.includes("freeChain(")).length;
+        const noCreateBuf=texts.filter(t=>t.includes("actx2.createBuffer(")).length;
+        ok("15 个发声函数全部挂了 freeChain 断链", noFree===15, noFree+"/15");
+        ok("15 个发声函数里没有残留的逐采样噪声生成(actx2.createBuffer)", noCreateBuf===0, "残留="+noCreateBuf);
+      }
+    }catch(err){ ok("第三十八轮自测(音频统一)未抛错", false, String(err&&err.stack||err)); }
 
     // 收尾再确认一次: 即使中途 saveGame 写过测试世界, 还原后玩家存档仍在
     sandseaStorageRestore(liveStore);
