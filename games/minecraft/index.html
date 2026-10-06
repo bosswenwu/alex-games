@@ -6113,7 +6113,7 @@ function toggleEnch(){
   if(enchOpen){ renderEnch(); if(document.pointerLockElement) document.exitPointerLock(); }
   else if(!softLock) enterPointerLock();
 }
-function toggleCraft(){
+function toggleCraft(noRelock){
   if(enchOpen) toggleEnch();
   craftOpen=!craftOpen;
   if(craftOpen) tutEvent("craft");
@@ -6122,7 +6122,7 @@ function toggleCraft(){
   if(craftOpen){
     renderCraft();
     if(document.pointerLockElement) document.exitPointerLock();
-  } else if(!softLock) enterPointerLock();
+  } else if(!softLock && !noRelock) enterPointerLock();   // noRelock: 紧接着要开别的面板时别抢指针锁
 }
 /* =========================================================
    🎒 背包面板(第三十六轮·本地, Tab 开/关)
@@ -6158,7 +6158,10 @@ function renderBagPanel(){
   if(g2) g2.innerHTML=bagItemCells("背包空空——去挖点方块吧");
 }
 function openBagPanel(){
-  if(craftOpen) toggleCraft();
+  /* 第三十七轮·修: 原来这里调 toggleCraft() 关合成面板, 而关面板的收尾会去申请指针锁,
+     紧接着本函数又 exitPointerLock() 撤销它 —— 两次异步请求打架, 申请若晚到, 玩家会在
+     背包开着的情况下被指针捕获, 鼠标点不到快捷栏格子。传 noRelock 让它别去抢锁。 */
+  if(craftOpen) toggleCraft(true);
   bagOpen=true;
   document.getElementById("bagPanel").style.display="flex";
   renderBagPanel();
@@ -7566,8 +7569,11 @@ document.addEventListener("keydown",e=>{
   if(e.code==="KeyK" && !e.repeat){ e.preventDefault(); toggleMythicPanel(); return; }
   if(e.code==="KeyI" && !e.repeat){ e.preventDefault(); const mp3=document.getElementById("meta-panel"); if(mp3 && mp3.classList.contains("on")) closeMetaPanel(); else openMetaPanel(); return; }   // 第二十七轮·本地: 遗迹专精
   /* 第三十六轮·本地: Tab = 背包总览。放在 playing() 之前 —— 开面板会退指针锁, 否则关不掉。
-     注意别抢 I(遗迹专精)/B(合成面板)。Tab 在设置/符文面板里已被那两个面板的焦点循环消费, 不会走到这里。 */
-  if(e.code==="Tab" && !e.repeat && !softLock){ e.preventDefault(); toggleBagPanel(); return; }
+     第三十七轮·修: 守卫从 "!softLock" 收紧为"正在游戏且没有遮罩"。
+     原守卫在暂停菜单打开(softLock=false)和死亡后也会放行 → 玩家在主菜单上按 Tab 会凭空
+     弹出一个背包面板, 还会吃掉菜单的键盘焦点导航。现在: 背包已开着时 Tab 一律可关;
+     想新开必须处于真实游戏态(playing() && !dead && 无遮罩)。 */
+  if(e.code==="Tab" && !e.repeat && (bagOpen || (playing() && !dead && overlay.style.display==="none"))){ e.preventDefault(); toggleBagPanel(); return; }
   if(e.code==="KeyL" && !e.repeat){                                          // 须在 playing() 之前: 开面板会退指针锁并暂停, 否则再按 L 关不掉
     e.preventDefault();
     const lp=document.getElementById("lamp-panel");
@@ -7962,27 +7968,46 @@ function updateParticles(dt){
 /* ---------- 音效 ---------- */
 let actx2=null;
 function initAudio(){ if(!actx2){ try{ actx2=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } if(actx2) applyMusicAudioPrefs(); }
+/* ---- 共享噪声缓冲(第三十七轮·优化) ----
+   原来每次发声都新建一个 AudioBuffer 并逐采样填 Math.random()：脚步声跑步时约 2.8 次/秒
+   (每步 ~5300 采样), 挖掘/刷子也很频繁 —— 长时间游玩就是几万次缓冲区分配 + 上亿次随机数,
+   而这些缓冲区内容只取决于"长度 + 包络形状"。现在按 (形状,长度) 记忆化: 每种组合只生成一次,
+   之后用 src.start(t,0,len) 取用前 len 秒。烘焙进缓冲区的包络与原来逐采样一致 → 音色不变。 */
+const noiseBufs=new Map(); let noiseCtx=null;
+function noiseBuf(len, shape){
+  if(noiseCtx!==actx2){ noiseBufs.clear(); noiseCtx=actx2; }   // AudioContext 若被换掉, 旧缓冲作废
+  const key=shape+"|"+len;
+  let b=noiseBufs.get(key);
+  if(b) return b;
+  const n=Math.round(actx2.sampleRate*len);
+  b=actx2.createBuffer(1,n,actx2.sampleRate);
+  const d=b.getChannelData(0);
+  for(let i=0;i<n;i++){
+    const x=i/n;
+    d[i]=(Math.random()*2-1)*(shape==="sine"?Math.sin(Math.PI*x):(1-x));
+  }
+  noiseBufs.set(key,b);
+  return b;
+}
+/* 发完声就断开整条链: 否则 GainNode/BiquadFilter 一直挂在 destination 上, 音频图只增不减 */
+function freeChain(src, ...nodes){ src.onended=()=>{ try{ src.disconnect(); for(const n of nodes) n.disconnect(); }catch(e){} }; }
 function sfxBreak(){
   if(!actx2) return;
   const t=actx2.currentTime, len=0.09;
-  const buf=actx2.createBuffer(1,actx2.sampleRate*len,actx2.sampleRate);
-  const d=buf.getChannelData(0);
-  for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*(1-i/d.length);
-  const src=actx2.createBufferSource(); src.buffer=buf;
+  const src=actx2.createBufferSource(); src.buffer=noiseBuf(len,"lin");
   const f=actx2.createBiquadFilter(); f.type="bandpass"; f.frequency.value=500+Math.random()*500; f.Q.value=1.2;
   const g=actx2.createGain(); g.gain.value=0.35;
-  src.connect(f).connect(g).connect(actx2.destination); src.start(t);
+  src.connect(f).connect(g).connect(actx2.destination); src.start(t,0,len);
+  freeChain(src,f,g);
 }
 function sfxBrush(){   // 刷子: 短促高频沙沙声
   if(!actx2) return;
   const t=actx2.currentTime, len=0.12;
-  const buf=actx2.createBuffer(1,actx2.sampleRate*len,actx2.sampleRate);
-  const d=buf.getChannelData(0);
-  for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.sin(Math.PI*i/d.length);
-  const src=actx2.createBufferSource(); src.buffer=buf;
+  const src=actx2.createBufferSource(); src.buffer=noiseBuf(len,"sine");
   const f=actx2.createBiquadFilter(); f.type="highpass"; f.frequency.value=2600+Math.random()*900;
   const g=actx2.createGain(); g.gain.value=0.09;
-  src.connect(f).connect(g).connect(actx2.destination); src.start(t);
+  src.connect(f).connect(g).connect(actx2.destination); src.start(t,0,len);
+  freeChain(src,f,g);
 }
 /* ---- 👣 脚步声(第三十六轮·本地): 按脚下方块材质选音色 ----
    每步 = 一段带通滤过的噪声(材质的"摩擦"质感) + 一个短促低频"咚"(硬地面的体感)。
@@ -8012,19 +8037,19 @@ let stepAcc=0;                                        // 行走距离累计(驱�
 function sfxStep(id){
   if(!actx2) return;
   const K=STEP_TONE[stepMatFor(id)]||STEP_TONE.stone, t=actx2.currentTime, len=K[3];
-  const buf=actx2.createBuffer(1,Math.round(actx2.sampleRate*len),actx2.sampleRate), d=buf.getChannelData(0);
-  for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*(1-i/d.length);
-  const src=actx2.createBufferSource(); src.buffer=buf;
+  const src=actx2.createBufferSource(); src.buffer=noiseBuf(len,"lin");   // 第三十七轮·优化: 共享缓冲, 不再每步新建
   const f=actx2.createBiquadFilter(); f.type=K[1]; f.Q.value=1.1;
   f.frequency.value=K[0]*(0.9+Math.random()*0.2);      // 每步轻微随机 → 不机械
   const g=actx2.createGain(); g.gain.value=K[2];
-  src.connect(f).connect(g).connect(actx2.destination); src.start(t);
+  src.connect(f).connect(g).connect(actx2.destination); src.start(t,0,len);
+  freeChain(src,f,g);                                  // 第三十七轮·优化: 发完即断开
   if(K[4]){
     const o=actx2.createOscillator(); o.type="sine"; o.frequency.setValueAtTime(K[4],t);
     o.frequency.exponentialRampToValueAtTime(K[4]*0.55,t+0.06);
     const og=actx2.createGain();
     og.gain.setValueAtTime(K[2]*1.1,t); og.gain.exponentialRampToValueAtTime(0.001,t+0.07);
     o.connect(og).connect(actx2.destination); o.start(t); o.stop(t+0.08);
+    o.onended=()=>{ try{ o.disconnect(); og.disconnect(); }catch(e){} };
   }
 }
 function sfxSunSweep(){   // 烈阳横扫: 下滑的风啸 + 低频轰燃
@@ -13243,7 +13268,11 @@ function frame(now){
     musicTick(dt);
     questTick(dt);
     updateNPC(dt);
-    if(bagOpen) renderBagPanel();        // 第三十六轮·本地: 背包开着时保持快捷栏高亮/数量同步
+    /* 第三十七轮·删: 原来这里有一行 if(bagOpen) renderBagPanel(); 它是死代码 ——
+       打开背包会退指针锁 → pauseGame() → softLock=false → playing() 为假, 整个
+       if(playing()) 块(含这一行)根本不执行(实测静置 1 秒, 容器 innerHTML 写入 0 次)。
+       留着会给人"面板会实时刷新"的错觉。实测背包开着时游戏完全冻结(数字键/移动键失效、
+       生命值不变), 面板内容本来就不会过期; 真正需要刷新的两处(打开、切格高亮)已显式调用。 */
     updateArch(dt);
     updateGeysers(dt);
     updateTutorial(dt);
@@ -17055,7 +17084,7 @@ function selftest(){
         const yawR=player.yaw; if(spot) player.yaw=Math.atan2(spot.dx,-spot.dz);   // 真实按键走视线方向: 对准已知可走的方向, 免得随机朝向正对墙而没触发
         const kR=Object.assign({},keys); for(const k in keys) keys[k]=false;          // 先前测试可能留下按住的方向键, 会把方向拐到侧面
         // 真实按键前把 sandStep 的全部守卫前提显式固定(优先级 A): 面板/触屏/骑乘/钩爪/飞行 —— 快照→派发→恢复, 断言本身不放宽
-        const PANEL_IDS=["craftPanel","enchPanel","potionPanel","chestPanel","furnacePanel","npcPanel","fullhelp","settingsPanel","bazaar-panel","pottery-panel","mythic-panel","lamp-panel","sphinx-panel"];
+        const PANEL_IDS=["craftPanel","enchPanel","potionPanel","chestPanel","furnacePanel","npcPanel","fullhelp","settingsPanel","bazaar-panel","pottery-panel","mythic-panel","lamp-panel","sphinx-panel","ruin-glyph-panel","expedition-route","meta-panel","caravan-panel","bagPanel"];   // 第三十七轮·本地: 原本止于 sphinx-panel, 漏了 ruin-glyph/expedition-route/meta/caravan 与新增的 bagPanel; 与 sandStepPanelOpen 的清单对齐
         const panelSnap=PANEL_IDS.map(id=>{ const el=document.getElementById(id); return el?{id,cn:el.className,dp:el.style.display}:null; }).filter(Boolean);
         for(const p of panelSnap){ const el=document.getElementById(p.id); el.classList.remove("on"); el.style.display="none"; }
         const touch0=touchState.active, rideK=riding, gtK=grappleTarget, flyK=player.flying;
@@ -18731,6 +18760,93 @@ function selftest(){
       bag.clear(); for(const [k,v] of bagSaved) bag.set(k,v);
       ok("Tab 背包面板: 不新增任何存档字段(还原后背包逐项一致)", JSON.stringify([...bag.entries()])===before, "match="+(JSON.stringify([...bag.entries()])===before));
     }catch(err){ ok("第三十六轮自测(脚步声/气泡/背包)未抛错", false, String(err&&err.stack||err)); }
+
+    /* ---- 第三十七轮·本地: 补漏与优化(Tab 作用域/指针锁竞态/共享噪声缓冲/节点回收) ---- */
+    try{
+      const snap37={ sl:softLock, lk:locked, dd:dead, ov:overlay.style.display, so:selSlot,
+                     craft:craftOpen, keys:Object.assign({},keys) };
+      const bag37=[...bag.entries()];
+      const pressTab=()=>document.dispatchEvent(new KeyboardEvent("keydown",{code:"Tab",key:"Tab",bubbles:true}));
+      const cleanUp=()=>{ if(bagOpen) closeBagPanel(); if(craftOpen) toggleCraft(true);
+        document.getElementById("bagPanel").style.display="none"; bag.clear(); for(const [k,v] of bag37) bag.set(k,v); };
+
+      // 1) 暂停菜单打开时按 Tab: 不得凭空弹出背包(旧守卫 !softLock 会放行)
+      bagOpen=false; craftOpen=false; softLock=false; locked=false; dead=false;
+      overlay.style.display="flex";                      // 暂停菜单可见(softLock=false)
+      pressTab();
+      const tabOnMenu=bagOpen;
+      cleanUp();
+      // 2) 死亡状态下按 Tab: 同样不得弹出背包
+      softLock=false; locked=false; dead=true; overlay.style.display="flex";
+      pressTab();
+      const tabOnDead=bagOpen;
+      dead=false; cleanUp();
+      ok("Tab 键不劫持: 暂停菜单打开时 / 已死亡时 都不会弹出背包",
+         tabOnMenu===false && tabOnDead===false, "菜单="+tabOnMenu+" 死亡="+tabOnDead);
+
+      // 3) 真实游戏态按 Tab: 能开; 再按一次: 能关
+      bagOpen=false; softLock=true; locked=false; dead=false; overlay.style.display="none";
+      pressTab(); const tabOpen=bagOpen;
+      pressTab(); const tabClose=bagOpen;
+      cleanUp();
+      ok("Tab 键在真实游戏态可开可关背包(收紧守卫后没把功能改坏)",
+         tabOpen===true && tabClose===false, "开="+tabOpen+" 关="+tabClose);
+
+      // 4) 指针锁竞态: 从 B 合成面板切到 Tab 背包时, 不得再去申请指针锁
+      bagOpen=false; craftOpen=false; document.getElementById("craftPanel").style.display="none";
+      const realEnter37=enterPointerLock; let enterCalls37=0;
+      enterPointerLock=function(){ enterCalls37++; return realEnter37.apply(this,arguments); };
+      craftOpen=true; document.getElementById("craftPanel").style.display="flex";
+      enterCalls37=0; openBagPanel();
+      const raceCalls=enterCalls37;
+      closeBagPanel(); enterPointerLock=realEnter37; cleanUp();
+      ok("Tab 背包: 从 B 面板切过来时不再申请指针锁(修掉与 exitPointerLock 的竞态)",
+         raceCalls===0 && craftOpen===false, "enterPointerLock="+raceCalls);
+
+      // 5) 共享噪声缓冲: 反复触发所有材质, 缓冲区数量不随触发次数增长
+      /* 关键: 正常游戏里 actx2 是玩家第一次手势时才建的, 自动化自测没有手势 → actx2 为 null。
+         不主动 initAudio() 的话下面两条断言会走"跳过"分支变成空跑通过(已实测踩过)。 */
+      if(!actx2) initAudio();
+      if(actx2){
+        noiseBufs.clear(); noiseCtx=actx2;
+        for(let r=0;r<40;r++) for(const m of [SAND,STONE,LOG,ICE,WATER,LAVA,GRASS]) sfxStep(m);
+        const afterFirst=noiseBufs.size;
+        for(let r=0;r<40;r++) for(const m of [SAND,STONE,LOG,ICE,WATER,LAVA,GRASS]) sfxStep(m);
+        const afterSecond=noiseBufs.size;
+        // 560 次发声后, 缓冲区只应按"长度+包络"去重(最多 6 种长度), 而不是 560 个
+        ok("共享噪声缓冲: 560 次脚步声只生成按长度去重的少量缓冲区(不再每次新建)",
+           afterSecond===afterFirst && afterFirst>=1 && afterFirst<=8, "一次="+afterFirst+" 两次="+afterSecond);
+      } else ok("共享噪声缓冲: 560 次脚步声只生成按长度去重的少量缓冲区(不再每次新建)", false, "无法创建 AudioContext");
+
+      // 6) 音频节点回收: 发声后 src 挂了 onended 断开回调(依赖上面已建好的 actx2)
+      if(actx2){
+        let capSrc=null;
+        const realCBS=actx2.createBufferSource.bind(actx2);
+        actx2.createBufferSource=function(){ const s=realCBS(); capSrc=s; return s; };
+        sfxStep(SAND);
+        actx2.createBufferSource=realCBS;
+        const hasHook=!!(capSrc&&typeof capSrc.onended==="function");
+        let freed=false;
+        if(capSrc&&hasHook){ try{ capSrc.onended(); freed=true; }catch(e){ freed=false; } }
+        ok("音频节点回收: 噪声源带 onended 断链回调, 触发后不抛错",
+           hasHook&&freed && !!(capSrc&&noiseBufs.has("lin|0.11")), "onended="+hasHook+" 可触发="+freed);
+      } else ok("音频节点回收: 噪声源带 onended 断链回调, 触发后不抛错", false, "无法创建 AudioContext");
+
+      // 7) 断链回调本身不能抛错(包了 try/catch)
+      ok("音频节点回收: freeChain 对已断开的节点重复调用不抛错", (()=>{
+        try{ const fake={onended:null,disconnect(){throw new Error("already gone")}};
+             freeChain(fake,fake); fake.onended(); return true; }catch(e){ return false; }
+      })(), "重复调用安全");
+
+      // 还原现场
+      cleanUp();
+      softLock=snap37.sl; locked=snap37.lk; dead=snap37.dd; overlay.style.display=snap37.ov; selSlot=snap37.so;
+      craftOpen=snap37.craft; document.getElementById("craftPanel").style.display = snap37.craft ? "flex":"none";
+      for(const k in keys) keys[k]=(k in snap37.keys)?snap37.keys[k]:false;
+      ok("第三十七轮自测结束后背包/面板/输入状态已还原",
+         bagOpen===false && getComputedStyle(document.getElementById("bagPanel")).display==="none"
+         && JSON.stringify([...bag.entries()])===JSON.stringify(bag37), "ok");
+    }catch(err){ ok("第三十七轮自测(Tab作用域/竞态/音频优化)未抛错", false, String(err&&err.stack||err)); }
 
     // 收尾再确认一次: 即使中途 saveGame 写过测试世界, 还原后玩家存档仍在
     sandseaStorageRestore(liveStore);

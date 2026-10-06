@@ -2,6 +2,29 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-10-05 — 沙海奇境 第三十七轮·本地：补漏与优化（Tab 作用域 / 指针锁竞态 / 共享噪声缓冲 / 音频节点回收）
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only。**不新增任何玩法、素材、方块或存档字段** —— 只修上一轮自己引入的缺陷 + 一处既有性能浪费。所有结论都来自 `tools/headless.mjs eval` 的运行期实测，不是读代码推测。
+
+| Fix | 问题（实测证据） | 处理 |
+| --- | --- | --- |
+| 🐛 Tab 键作用域过宽 | 守卫是 `!softLock`。实测：暂停菜单打开时（`softLock=false`）按 Tab 会**凭空弹出背包面板**；死亡后按 Tab 同样弹出。副作用是吃掉菜单的键盘焦点导航 | 收紧为 `bagOpen \|\| (playing() && !dead && overlay.style.display==="none")` —— 背包开着时 Tab 一律可关；想新开必须处于真实游戏态。设置面板原本就被自己的焦点循环消费，不受影响 |
+| 🐛 指针锁竞态（第三十六轮引入） | 从 B 合成面板切到 Tab 背包时实测 `enterPointerLock` 被调用 **1 次**：`toggleCraft()` 关面板的收尾去申请指针锁，紧接着 `openBagPanel()` 又 `exitPointerLock()` 撤销它。两次异步请求打架，申请若晚到，玩家会在背包开着时被指针捕获、鼠标点不到快捷栏格子 | `toggleCraft(noRelock)` 增加参数，`openBagPanel()` 传 `true`，关面板时不再抢锁。实测降为 **0 次** |
+| ⚡ 每次发声都新建噪声缓冲 | `sfxBreak`/`sfxBrush`/`sfxStep` 每次调用都 `createBuffer(...)` 并**逐采样**填 `Math.random()`。脚步声跑步时约 2.8 次/秒（每步 ~5300 采样），挖掘/刷子也很频繁 | 按 `(包络形状, 长度)` 记忆化，生成一次后用 `src.start(t,0,len)` 取用前 len 秒。缓冲内烘焙的包络与原来逐采样一致 → **音色不变** |
+| ⚡ 音频节点只增不减 | 三个发声函数都没有 `disconnect`、也没有 `onended`：`GainNode`/`BiquadFilter` 一直挂在 `destination` 上，音频图只增不减（此为既有模式，非上一轮引入） | 新增 `freeChain(src, ...nodes)`：`src.onended` 时断开整条链（包 try/catch，可重复调用）。`sfxStep` 的低频咚振荡器同样挂 `onended` |
+| 🧹 死代码 | 上一轮加的 `if(bagOpen) renderBagPanel();`（在 `frame()` 的 `if(playing())` 块内）**永远执行不到**：打开背包会退指针锁 → `pauseGame()` → `softLock=false` → `playing()` 为假。实测静置 1 秒，三个容器 `innerHTML` 写入 **0 次** | 删除。留着会给人"面板实时刷新"的错觉。实测背包开着时游戏完全冻结（数字键/移动键失效、生命值不变），面板内容本就不会过期；真正需要刷新的两处（打开、切格高亮）已显式调用 |
+| 🧹 自测面板清单漏项 | 沙步边界测试的 `PANEL_IDS` 原本止于 `sphinx-panel`，漏掉 `ruin-glyph-panel`/`expedition-route`/`meta-panel`/`caravan-panel` 与新增的 `bagPanel`（该测试要先隐藏所有面板再断言沙步守卫，前提是它们都关着） | 补齐 5 个，与 `sandStepPanelOpen()` 的清单对齐 |
+
+**查过、确认没问题（列出以免下轮重复劳动）：** `frame()` 的 `dt` 已有 clamp（`clamp((now-lastT)/1000,0,0.05)`，喂 5 次 `dt=30` 不抛错）；面板层级正确（背包 z-index 40 > overlay 10，64/64 采样点命中面板内部，鼠标事件不穿透到 canvas，无误挖）；背包开着时 Esc 能关；`vaultPrompt`/`npcPrompt`/`hud` 均已隐藏、不与背包叠压；点击非当前快捷栏格子能正确切栏并移动高亮；无 `TODO`/`FIXME` 遗留、无游离 `console.log`（仅自测报告内）、无无上限增长的容器；`updateVaultPrompt` 未改（实测无叠压，加 `bagOpen` 属于无证据改动）。
+
+**How:** 新增 `noiseBufs`(Map) + `noiseCtx` + `noiseBuf(len, shape)` + `freeChain(src, ...nodes)` 放在 `initAudio()` 之后；`sfxBreak`/`sfxBrush`/`sfxStep` 改为 `src.buffer=noiseBuf(len, ...)` + `src.start(t,0,len)` + `freeChain(...)`；`noiseCtx!==actx2` 时清空缓存（防 AudioContext 被换掉后旧缓冲作废）。`toggleCraft` 签名加 `noRelock`。其余为删除与清单补项。
+
+**Verification:** `node tools/headless.mjs selftest` **493/493** 于默认世界与 `?seed=424242`（新增 7 条断言，486→493）。新增断言覆盖：Tab 在暂停菜单/死亡时不弹背包、真实游戏态可开可关、从 B 面板切过来不再申请指针锁、共享缓冲 560 次发声后条目不增长、噪声源带 `onended` 且触发不抛错、`freeChain` 对已断开节点重复调用不抛错、自测结束后现场已还原。
+
+**踩到并修掉的一个测试陷阱：** 自动化自测里没有用户手势，`actx2` 从未初始化，导致前两版音频断言走了"跳过"分支、**空跑通过**。已改为在断言前 `initAudio()`，且上下文建不出来时**判失败而非跳过**；修改后复测 `actx2.state==="running"`、断言真实执行。
+
+`tools/headless.mjs eval` 实测：Tab 真值表 `{暂停菜单:false, 拖动模式:true, 指针锁定:true, 死亡:false, 开着再按Tab:false}`；竞态 `enterPointerLock` 调用 1→**0**；560 次 `sfxStep` 只生成 **6** 个缓冲（按 6 种时长去重），再 280 次仍为 6；真实主循环走 1.6 秒 + 刷沙一次，总共只建 **2** 个缓冲；同口径基准（只比"取一段指定长度噪声"，预热后各 560 次）**0.20ms vs 48.10ms（≈240×）**，分配 0 次 vs 560 次，且采样总数完全一致（`same_total_samples:true`）；`sfxBreak`/`sfxBrush` 及 7 种脚步材质的缓冲采样数与滤波类型/音量逐项核对全对，缓存条目恒为 8。**未能人工确认：**本环境模型不支持读图，未做视觉审查（本轮无视觉改动）；改动集中在音频与键位，**音色的主观感受与音量平衡、以及 Tab 手感需真人试玩确认**；上述 ≈240× 只覆盖缓冲获取一段，不等于端到端音频性能提升。
+
 ## 2026-10-05 — 沙海奇境 第三十六轮·本地：按材质脚步声 + NPC 对白气泡 + Tab 背包总览
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) only。三项手感/可读性增量，零新方块/图集/存档字段/新系统依赖。
