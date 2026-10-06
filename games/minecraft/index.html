@@ -5927,7 +5927,9 @@ const RECIPES=[
   // 第二十四轮·本地: 遗迹远征石板——合成后立即开启一局可玩远征(解谜+3波战斗+幂等奖励)
   {name:"🏛 遗迹远征石板", desc:"刻有三符号谜面的石板，在合成台使用即可进入一局遗迹远征", cost:[[SANDSTONE,8],[GOLD_ORE,2],[GEM_ORE,1]],
    ok(){ return canStartRuinExpedition(); }, lockMsg:"正在远征/试炼/斗兽场中，或当前无法开启",
-   run(){ if(craftOpen) toggleCraft(); return startRuinExpedition()?"遗迹远征已开启！解开三符号机关，击退守卫":"无法开启遗迹远征"; }},
+   /* 第三十九轮·修: 传 noRelock —— startRuinExpedition() 内部会 exitPointerLock(),
+     紧接着的锁申请会被撤销, 两次异步请求打架。同 openStore/openFurnace/toggleEnch。 */
+   run(){ if(craftOpen) toggleCraft(true); return startRuinExpedition()?"遗迹远征已开启！解开三符号机关，击退守卫":"无法开启遗迹远征"; }},
   // 第三十轮·本地: 主动战技(核心解锁+升级, 按 Z/Q 释放)
   {name:"⚡ 战技·大地震颤", get desc(){ return "按 Z 震荡大地：8 格内敌人受击退与伤害（"+quakeLevel()+"/3 级，冷却 "+quakeCooldown()+" 秒）"; },
    get coreCost(){ return quakeLevel()===0?6:(4+2*(quakeLevel()-1)); }, cost:[],
@@ -6106,12 +6108,14 @@ function renderEnch(){
   for(const el of document.querySelectorAll("#enchList .recipe[data-k]")) el.onclick=()=>doEnchant(el.dataset.k);
   for(const el of document.querySelectorAll("#enchList .recipe[data-repair]")) el.onclick=()=>repairGear(el.dataset.repair);
 }
-function toggleEnch(){
-  if(craftOpen) toggleCraft();
+/* noRelock: 第三十九轮加。与 toggleCraft 同义 —— "本函数收尾马上要退指针锁/开别的面板",
+   所以关面板时别去申请锁(否则申请与撤销两次异步请求打架)。不传时行为与从前逐字一致。 */
+function toggleEnch(noRelock){
+  if(craftOpen) toggleCraft(true);
   enchOpen=!enchOpen;
   document.getElementById("enchPanel").style.display=enchOpen?"flex":"none";
   if(enchOpen){ renderEnch(); if(document.pointerLockElement) document.exitPointerLock(); }
-  else if(!softLock) enterPointerLock();
+  else if(!softLock && !noRelock) enterPointerLock();
 }
 function toggleCraft(noRelock){
   if(enchOpen) toggleEnch();
@@ -6130,7 +6134,7 @@ function toggleCraft(noRelock){
    刻意"只读" —— 物品搬运仍走储物箱/收纳袋, 避免两套交互规则互相打架;
    快捷栏格子可点, 直接切到那一栏(点完不关面板, 方便连点)。
    ========================================================= */
-let bagOpen=false;
+let bagOpen=false, bagPanelRefreshT=0;   // 第三十九轮: 背包面板的重绘节流计时器
 /* 快捷栏格子的名字要和底部快捷栏一致: 数字格=方块名(带背包数量), 字符串格=装备/道具名 */
 const hotbarCellName=id=>typeof id==="number" ? bagItemName(id)
   : ((GEAR_DEFS[id]&&GEAR_DEFS[id].name) || (ITEMS[id]&&ITEMS[id].name) || String(id));
@@ -6168,11 +6172,11 @@ function openBagPanel(){
   if(document.pointerLockElement) document.exitPointerLock();
   return true;
 }
-function closeBagPanel(){
+function closeBagPanel(noRelock){
   if(!bagOpen) return false;
   bagOpen=false;
   const el=document.getElementById("bagPanel"); if(el) el.style.display="none";
-  if(!softLock) enterPointerLock();
+  if(!softLock && !noRelock) enterPointerLock();
   return true;
 }
 function toggleBagPanel(){ return bagOpen ? (closeBagPanel(), false) : openBagPanel(); }
@@ -6222,13 +6226,13 @@ function renderPotions(){
     +'<div class="recipe'+((fishState.fish>0||fishState.cooked>0)?"":" locked")+'" data-k="fish"><div><div class="rn">5. 🐟 吃鱼</div><div class="rd">先吃熔炉烤鱼（+'+FISH_COOKED_HEAL+'），没有再吃生鱼（+5）· X 钓鱼</div></div><div class="rc">烤 x'+(fishState.cooked|0)+' · 生 x'+fishState.fish+'</div></div>';
   for(const el of document.querySelectorAll("#potionList .recipe")) el.onclick=()=>el.dataset.k==="fish"?eatFish():drinkPotion(el.dataset.k);
 }
-function togglePotions(){
-  if(craftOpen) toggleCraft();
-  if(enchOpen) toggleEnch();
+function togglePotions(noRelock){
+  if(craftOpen) toggleCraft(true);   // 第三十九轮·修: 同 toggleEnch —— 紧接着 exitPointerLock(), 别抢锁
+  if(enchOpen) toggleEnch(true);
   potionOpen=!potionOpen;
   document.getElementById("potionPanel").style.display=potionOpen?"flex":"none";
   if(potionOpen){ renderPotions(); if(document.pointerLockElement) document.exitPointerLock(); }
-  else if(!softLock) enterPointerLock();
+  else if(!softLock && !noRelock) enterPointerLock();
 }
 
 /* =========================================================
@@ -6320,7 +6324,10 @@ let chestOpen=null;                       // 当前打开的: {key, store, title
 const chestKey=(x,y,z)=>x+","+y+","+z;
 function storeTypes(st){ return Object.keys(st).filter(k=>st[k]>0).length; }
 function openStore(key, store, title, cap){
-  if(craftOpen) toggleCraft(); if(enchOpen) toggleEnch(); if(potionOpen) togglePotions(); if(typeof furnaceOpen!=="undefined" && furnaceOpen) closeFurnace();
+  /* 第三十九轮·修: 这一串"收起别的面板"之后紧接着就 exitPointerLock()。
+     收尾时申请锁、然后又撤销锁 —— 两次异步请求打架, 申请若晚到玩家会莫名被指针捕获,
+     鼠标点不到快捷栏格子。全部传 noRelock。 */
+  if(craftOpen) toggleCraft(true); if(enchOpen) toggleEnch(true); if(potionOpen) togglePotions(true); if(typeof furnaceOpen!=="undefined" && furnaceOpen) closeFurnace();
   chestOpen={key, store, title, cap};
   document.getElementById("chestTitle").textContent=title;
   document.getElementById("chestPanel").style.display="flex";
@@ -6333,7 +6340,7 @@ function openChest(x,y,z){
   openStore(k, chests[k], "📦 储物箱", 27);
 }
 function openBundle(){ if(!bundleState.owned) return false; openStore("bundle", bundleState.items, "👜 收纳袋", BUNDLE_SLOTS); return true; }
-function closeChest(){ chestOpen=null; document.getElementById("chestPanel").style.display="none"; if(!softLock) enterPointerLock(); }
+function closeChest(noRelock){ chestOpen=null; document.getElementById("chestPanel").style.display="none"; if(!softLock && !noRelock) enterPointerLock(); }
 function storeMove(id, toStore, n){       // 在背包与当前储物之间搬运; 返回搬了多少
   const C=chestOpen; if(!C) return 0;
   id=+id; const st=C.store;
@@ -6515,7 +6522,10 @@ function tickFurnaces(dt){
 }
 function openFurnace(x,y,z){
   const k=chestKey(x,y,z); if(!furnaces[k]) furnaces[k]=newFurnace();
-  if(craftOpen) toggleCraft(); if(enchOpen) toggleEnch(); if(potionOpen) togglePotions(); if(chestOpen) closeChest(); if(bagOpen) closeBagPanel();   // 第三十六轮·本地: 开熔炉时收起 Tab 背包, 免得两个面板叠在一起
+  /* 第三十六轮: 开熔炉时收起 Tab 背包, 免得两个面板叠在一起。
+     第三十九轮·修: 这一串收尾全部传 noRelock —— 紧接着下面就 exitPointerLock()。
+     closeBagPanel() 原本也会申请锁, 同样要传。 */
+  if(craftOpen) toggleCraft(true); if(enchOpen) toggleEnch(true); if(potionOpen) togglePotions(true); if(chestOpen) closeChest(true); if(bagOpen) closeBagPanel(true);
   furnaceOpen=k;
   document.getElementById("furnacePanel").style.display="flex";
   renderFurnace(true);
@@ -7572,8 +7582,17 @@ document.addEventListener("keydown",e=>{
      第三十七轮·修: 守卫从 "!softLock" 收紧为"正在游戏且没有遮罩"。
      原守卫在暂停菜单打开(softLock=false)和死亡后也会放行 → 玩家在主菜单上按 Tab 会凭空
      弹出一个背包面板, 还会吃掉菜单的键盘焦点导航。现在: 背包已开着时 Tab 一律可关;
-     想新开必须处于真实游戏态(playing() && !dead && 无遮罩)。 */
-  if(e.code==="Tab" && !e.repeat && (bagOpen || (playing() && !dead && overlay.style.display==="none"))){ e.preventDefault(); toggleBagPanel(); return; }
+     想新开必须处于真实游戏态(playing() && !dead && 无遮罩)。
+
+     第三十九轮·修: craftOpen 也是"真实游戏态"的一种。实测开合成面板会退指针锁 ->
+     pauseGame() -> playing() 变假, 于是"开着合成面板按 Tab 切到背包"这条路被守卫拦死,
+     而 openBagPanel() 里那句 if(craftOpen) toggleCraft(true) 恰恰是为这条路准备的 ——
+     两者互相矛盾。这里显式放行 craftOpen, 且要求"除合成面板外没有别的面板打开"
+     (遮罩不查: 指针锁模式下开合成面板时游戏本就暂停、遮罩显示着, 这恰好是要切背包的
+     正常画面; 主菜单上 craftOpen 不可能为真, 不会凭空弹背包), 死亡画面仍由 !dead 拦住。 */
+  const onlyCraft=(craftOpen && !enchOpen && !potionOpen && !chestOpen && !bagOpen
+                   && (typeof furnaceOpen==="undefined" || !furnaceOpen));
+  if(e.code==="Tab" && !e.repeat && (bagOpen || (playing() && !dead && overlay.style.display==="none") || (onlyCraft && !dead))){ e.preventDefault(); toggleBagPanel(); return; }
   if(e.code==="KeyL" && !e.repeat){                                          // 须在 playing() 之前: 开面板会退指针锁并暂停, 否则再按 L 关不掉
     e.preventDefault();
     const lp=document.getElementById("lamp-panel");
@@ -8008,7 +8027,10 @@ function noiseBuf(len, env, v){
   if(noiseCtx!==actx2){ noiseBufs.clear(); noiseCtx=actx2; }   // AudioContext 若被换掉, 旧缓冲作废
   const key=len+"|"+env;
   let arr=noiseBufs.get(key);
-  if(!arr){ arr=[]; noiseBufs.set(key,arr); }
+  /* 第三十九轮·修: 先生成、后入表 —— 原来先把空数组塞进缓存再调 makeNoiseBuf,
+     包络名拼错抛错时会留下 "0.1|sine -> []" 这种脏键(独立审计发现), 这里改成
+     生成成功后才把键写进缓存, 抛错时缓存保持干净。 */
+  if(!arr){ const b=makeNoiseBuf(len,env); arr=[]; arr[v]=b; noiseBufs.set(key,arr); return b; }
   if(arr[v]===undefined) arr[v]=makeNoiseBuf(len,env);
   return arr[v];
 }
@@ -13277,11 +13299,20 @@ function frame(now){
     musicTick(dt);
     questTick(dt);
     updateNPC(dt);
-    /* 第三十七轮·删: 原来这里有一行 if(bagOpen) renderBagPanel(); 它是死代码 ——
-       打开背包会退指针锁 → pauseGame() → softLock=false → playing() 为假, 整个
-       if(playing()) 块(含这一行)根本不执行(实测静置 1 秒, 容器 innerHTML 写入 0 次)。
-       留着会给人"面板会实时刷新"的错觉。实测背包开着时游戏完全冻结(数字键/移动键失效、
-       生命值不变), 面板内容本来就不会过期; 真正需要刷新的两处(打开、切格高亮)已显式调用。 */
+    /* 第三十七轮·删 / 第三十九轮·恢复: 原来这里有一行 if(bagOpen) renderBagPanel();
+       第三十七轮认定它是死代码, 理由是"打开背包会退指针锁 → pauseGame() → playing() 为假,
+       整个 if(playing()) 块根本不执行"。独立审计 agent 推翻了这个理由, 我复核确认它成立:
+       **在拖拽/软锁模式下根本没有 document.pointerLockElement**, openBagPanel() 里的
+       exitPointerLock() 是空操作, 不触发 pointerlockchange, pauseGame() 也就不会被调用 ——
+       实测 drag 模式下 {bagOpen:true, playing:true, softLock:true}, 而这行位于
+       if(playing()) 之内, 于是它**真的会执行**。实测删掉它之后: 背包开着时改内存里的
+       能量核心, 跑 33 帧真实主循环, 面板 innerHTML 纹丝不动 → 面板显示的是打开那一刻的快照,
+       和真实背包不一致。
+       (第三十七轮声称的"背包开着时游戏完全冻结、数字键失效"只在指针锁模式下成立 ——
+        拖拽模式下 7603 行的 if(!playing()) return; 拦不住数字键, 世界照常推进。)
+       现恢复这一行, 但加了节流: renderBagPanel() 会整块重建 innerHTML, 每帧调 60 次
+       既费又会打断面板内的滚动/悬停, 故每 0.25 秒最多重绘一次, 且只在玩家真的还开着背包时。 */
+    if(bagOpen && (!softLock || playing())){ bagPanelRefreshT=(bagPanelRefreshT||0)-dt; if(bagPanelRefreshT<=0){ bagPanelRefreshT=0.25; renderBagPanel(); } }
     updateArch(dt);
     updateGeysers(dt);
     updateTutorial(dt);
@@ -18870,16 +18901,30 @@ function selftest(){
         ["sfxStep",()=>sfxStep(SAND)],
       ];
       /* 上一版这条断言写的是 SFX38.length===15 —— 断言的是本地硬编码数组自己的长度,
-           跟游戏代码零关联, 永远不可能失败(恒真)。改成真的从源码里点名:
-           全文件搜出一共有多少个"建噪声缓冲 + 接 destination"的发声函数, 逐个点名。 */
-      const ALLSFX=["sfxBreak","sfxBrush","sfxStep","sfxSunSweep","sfxHit","sfxEat","sfxHiss",
-                    "sfxExplode","sfxGun","sfxRocket","sfxStoneGrind","sfxGeyser","sfxFirework",
-                    "sfxFlame","sfxThunder"];
+           跟游戏代码零关联, 永远不可能失败(恒真)。后来又依赖硬编码 ALLSFX 列表(第三十九轮
+           独立审计实测: 在游戏代码里新增第 16 个带坏包络名的发声函数, 硬编码对照照过)。
+           现在真的从源码里点名: 扫本页内联脚本源码, 找出所有"函数体里调了 noisePick( 建噪声
+           缓冲、且接了 actx2.destination"的 sfx* 顶层函数名, 再逐个对照 SFX38。 */
+      const pageSrc=Array.from(document.scripts||[]).map(s=>s.textContent||"").join("\n");
+      const ALLSFX=[];
+      const sfxRe=/function\s+(sfx\w+)\s*\(/g, mRep=[];
+      {
+        let mc; const seen=new Set();
+        while((mc=sfxRe.exec(pageSrc))!==null){
+          const name=mc[1];
+          if(seen.has(name)) continue; seen.add(name);
+          const fnSrc=String(eval(name));
+          if(fnSrc.includes("noisePick(") && fnSrc.includes("actx2.destination")) ALLSFX.push(name);
+          else { const hits=(fnSrc.match(/noisePick\(/g)||[]).length;
+                 mRep.push(name+"(noisePick×"+hits+", dest="+fnSrc.includes("actx2.destination")+")"); }
+        }
+      }
       const uncovered=[];
       for(const n of ALLSFX){ if(!SFX38.some(p=>p[0]===n)) uncovered.push(n); }
-      ok("第三十八轮: 15 个发声函数逐个点名, 无一漏列(上一版断言的是硬编码数组自身长度, 恒真)",
-         SFX38.length===15 && uncovered.length===0,
-         "实到="+SFX38.length+" 漏列="+(uncovered.join(",")||"无"));
+      ok("第三十八轮: 源码提取的建噪声发声函数("+ALLSFX.length+"个="+ALLSFX.sort().join("|")+")全部在 SFX38 里",
+         SFX38.length===ALLSFX.length && uncovered.length===0,
+         "SFX38="+SFX38.length+" 源码提取="+ALLSFX.length+" 漏列="+(uncovered.join(",")||"无")+
+         " 非噪声sfx*("+mRep.length+"): "+(mRep.join(",")||"无"));
 
       if(actx2){
         // 1) 核心: 每个函数各调 5 轮, createBuffer 增量必须为 0(预热已把变体备齐)
@@ -18944,13 +18989,17 @@ function selftest(){
         const winRMS=(d,x0,x1)=>{ const n=d.length,a=Math.floor(x0*n),b=Math.floor(x1*n);
                                   let s=0; for(let i=a;i<b;i++) s+=d[i]*d[i];
                                   return Math.sqrt(s/Math.max(1,b-a)); };
-        /* 每个包络量 3 个变体再取平均: 单份缓冲的采样噪声会被比值放大
-           (sin 的 head 幅度是 9 种里最低的, 单份 sd≈0.085), 取 3 份平均把 sd 压到 ≈0.05。 */
+        /* 每个包络量取多个变体再平均: 单份缓冲的采样噪声会被比值放大
+           (sin 的 head 幅度是 9 种里最低的, 单份 sd≈0.085)。第三十八轮取 3 份(sd≈0.05),
+           但 p16/p15 这对 3 份平均后的间隙 sd 实测≈0.0049, 而两者真实间隔只有 ≈0.023 ——
+           40% 的门槛(0.008)距均值只剩 ~3σ, ?seed=7 实测仍会随机红(我复现: 一次跑出 0.007)。
+           这里改取 9 份平均: 间隙 sd 降到 ≈0.0028, 门槛 0.008 距均值 ≥5.3σ(≈6e-8/次,
+           不再随机红); 而索引整体写反时间隙≈−0.024、必反号, 仍 100% 抓到(变异测试保持通过)。 */
         noiseBufs.clear(); noiseCtx=actx2;
         const envM={};
         for(const env of Object.keys(NOISE_ENV)){
           const accM=[], accT=[];
-          for(let v=0;v<3;v++){
+          for(let v=0;v<9;v++){
             const d=noiseBuf(0.4, env, v).getChannelData(0);
             const head=winRMS(d,0.02,0.10);
             accM.push(winRMS(d,0.45,0.55)/head); accT.push(winRMS(d,0.90,0.98)/head);
@@ -18968,12 +19017,12 @@ function selftest(){
            但把绝对容差放宽到 ±0.30 之后, 变异测试又显示"把 p22 的指数误写成 1.6"
            (实测 0.363 vs 期望 0.25, 差 0.113) 反而**抓不到**了。
            改成 ±12% 后两类缺陷都能覆盖:
-             · sin 的 mid/head≈5, 3 份平均后 sd≈0.05 → ±12%≈±0.6≈±12σ, 足够稳
-             · lin 的 mid/head≈0.53, sd≈0.008 → ±12%≈±0.06≈±7σ, 足够稳
+             · sin 的 mid/head≈5, 9 份平均后 sd≈0.028 → ±12%≈±0.6≈±21σ, 足够稳
+             · lin 的 mid/head≈0.53, 9 份平均后 sd≈0.003 → ±12%≈±0.06≈±20σ, 足够稳
              · p22 被误写成 1.6 → 0.363 > 0.25×1.12=0.28, 抓到
              · p2 被误写成 1.5 → 0.363 > 0.29×1.12=0.325, 抓到
            p16/p15 这对只差 5%, 相对容差盖不住(也确实不该靠这条盖) —— 指数互换由下面的
-           "严格递增"专门负责, 职责分开。tail 因为数值极小(0.004~0.135), 用 max(0.02, 15%)。 */
+           "指数次序"专门负责, 职责分开。tail 因为数值极小(0.004~0.135), 用 max(0.02, 15%)。 */
         const want38={lin:[0.53,0.07], flat:[1.00,1.00], sin:[5.00,1.00], p12:[0.47,0.04],
                       p15:[0.39,0.02], p16:[0.37,0.015], p2:[0.29,0.006], p22:[0.25,0.004],
                       gey:[1.06,0.135]};
@@ -18986,13 +19035,23 @@ function selftest(){
         }
         ok("包络逐项核对: 9 种包络的 mid/head、tail/head 都与实测标定值相符",
            envBad.length===0, envBad.join("; ")||JSON.stringify(envM));
-        /* 严格单调: 指数越大衰减越快。
-           加 0.01 的最小间隔: 相邻两项(p16 0.37 vs p15 0.39)真实只差 0.02, 而合成 sd≈0.007,
-           零容差等于靠运气(约 2.6σ)。0.01 的间隔既保留了真实次序, 又不会被采样噪声压塌。
-           注意: 这条只管"注册表内部指数有没有互相写反", 调用点接错名字由 6b 负责。 */
-        const chain=["p22","p2","p16","p15","p12"].map(e=>envM[e].midOverHead);
-        let mono=true; for(let i=1;i<chain.length;i++) if(!(chain[i]>chain[i-1]+0.01)) mono=false;
-        ok("包络指数无串味: 衰减速度按 p22<p2<p16<p15<p12 严格递增(含 0.01 最小间隔)", mono, chain.join(" < "));
+        /* 指数次序: 指数越大衰减越快, 所以 mid/head 应按 p22<p2<p16<p15<p12 递增。
+           这一条原先写成"带 0.01 最小间隔的严格递增", 实测 ?seed=7 跑 10 次红 1 次 ——
+           每项取 3 份平均时 p16/p15 的间距 sd 实测≈0.0049, 而两者真实间隔只有 ≈0.020,
+           0.01 的门槛(真实间隔的一半)距均值只剩 ~2σ, 会被噪声压塌。
+           第三十九轮: 包络测量已改 9 份平均(见上), 间距 sd 降到 ≈0.0028, 门槛取期望间隔的
+           40%(p16→p15 即 0.008)距均值 ≈5.3σ(≈6e-8/次, 不再随机红); 而索引整体写反时间隙
+           会反号(≈−0.024), 必被任何正门槛抓到(变异测试保持通过)。 */
+        const chain=[["p22","p2"],["p2","p16"],["p16","p15"],["p15","p12"]], orderBad=[];
+        for(const [a,b] of chain){
+          const gap=envM[b].midOverHead-envM[a].midOverHead;
+          /* 期望间隔取自 want38 的标定值差(确定性, 不受本次采样噪声影响) */
+          const expGap=want38[b][0]-want38[a][0];
+          if(gap < expGap*0.4) orderBad.push(a+"→"+b+" 实测间距="+gap.toFixed(3)+" 期望≈"+expGap.toFixed(3));
+        }
+        ok("包络指数无串味: 相邻指数的衰减速度次序符合 p22<p2<p16<p15<p12(容差按期望间距的 40%, 不随机红)",
+           orderBad.length===0,
+           orderBad.join("; ")||["p22","p2","p16","p15","p12"].map(e=>e+"="+envM[e].midOverHead).join(" < "));
         // 变体必须是彼此独立的缓冲(否则等于只有一份, 又变回机械音)
         let dupEnv=[];
         for(const env of Object.keys(NOISE_ENV)){
@@ -19002,50 +19061,72 @@ function selftest(){
         }
         ok("每种包络备的 3 个变体是彼此独立的缓冲(不是同一份)", dupEnv.length===0, dupEnv.join(",")||"9/9 各 3 份互不相同");
 
-        /* 6b) 包络名接线检查 —— 这一条是被独立审计逼出来的
-           审计发现: 上面两条包络断言都只遍历 Object.keys(NOISE_ENV)、直接调 noiseBuf(0.4,env,0),
-           从头到尾没检查过 15 个调用点实际传进去的字符串。于是 sfxBrush 误写成 "sine"
-           (注册表里的键叫 "sin"), 又被 makeNoiseBuf 的 || NOISE_ENV.lin 静默兜底吃掉,
-           刷子音效的包络整个从 sin(pi*x) 静默换成了 1-x —— 而上面 11 条断言**全部照过**。
-           这里改成两头都验: (a) 字符串必须是注册表里真实存在的键; (b) 更进一步, 直接量
-           该函数真实播放出去的缓冲, 它的 mid/head 必须与期望值相符 —— 不依赖名字, 只认波形。 */
-        const nameBad=[], playedBad=[];
+        /* 6b) 包络名接线检查 —— 独立审计两轮逼出来的
+           (a) 第一轮: 上面两条包络断言都只遍历注册表, 从没查 15 个调用点实际传的字符串,
+               sfxBrush 误写 "sine"(键叫 "sin")被静默兜底吃掉都能全绿。于是加了:
+               名字必须是真实键 + 能量波形必须与期望包络相符。
+           (b) 第二轮(本次): 6b(b) 旧版期望值按源码里读出的名字作键 want38[m[1]] ——
+               "合法名互换"(M1: sfxBrush sin→lin; M7: sfxHit lin↔sfxGun p2 调用点互换)
+               波形对得上互换后的期望, 506/506 照过。这版给每个调用点写死期望包络
+               EXPECT38(不随名字漂移): 名字必须与接线表一致、波形必须与接线表期望一致。
+           (c) 行为级复核: 播放后 src.onended 必须被 freeChain 赋成函数(注释里冒充
+               "freeChain(" 骗不过这条); 播放的缓冲必须命中共享缓存(每次新建/别名绕过
+               立刻暴露)。 */
+        const EXPECT38={ "sfxBreak":"lin", "sfxBrush":"sin", "sfxStep":"lin", "sfxSunSweep":"p15",
+                         "sfxHit":"lin", "sfxEat":"lin", "sfxHiss":"flat", "sfxExplode":"p16",
+                         "sfxGun":"p2", "sfxRocket":"lin", "sfxStoneGrind":"sin", "sfxGeyser":"gey",
+                         "sfxFirework":"p22", "sfxFlame":"lin", "sfxThunder":"p12" };
+        const nameBad=[], wireBad=[], playedBad=[], hookBad=[];
         noiseBufs.clear(); noiseCtx=actx2;
         for(const [fn38,call38] of SFX38){
+          const exp=EXPECT38[fn38];
+          if(!exp){ nameBad.push(fn38+"=不在 EXPECT38 接线表里(新函数? 请补表)"); continue; }
           const m=String(eval(fn38)).match(/noisePick\([^,]+,"([^"]+)"/);
           if(!m){ nameBad.push(fn38+"=源码里没有 noisePick 调用"); continue; }
-          if(!NOISE_ENV[m[1]]){ nameBad.push(fn38+"=\""+m[1]+"\" 不在 NOISE_ENV 里"); continue; }
+          if(m[1]!==exp){ wireBad.push(fn38+"=传的名字\""+m[1]+"\"≠接线表\""+exp+"\"(合法名互换)"); continue; }
           let played=null;
           const r1=actx2.createBufferSource.bind(actx2);
           actx2.createBufferSource=function(){ const s=r1(); if(!played) played=s; return s; };
           try{ call38(); }catch(e){ nameBad.push(fn38+"() 调用抛错: "+(e&&e.message||e)); }
           actx2.createBufferSource=r1;
           if(!played||!played.buffer){ nameBad.push(fn38+"=没拿到它用的 buffer"); continue; }
+          /* freeChain 行为级: 断链=src.onended 真的被赋了函数, 看运行产物不看源码字符串 */
+          if(typeof played.onended!=="function") hookBad.push(fn38+"=src 没挂 onended 断链(freeChain 未生效)");
+          /* "不再每次新建"行为级: 播放的缓冲必须命中共享缓存(自己 createBuffer 的进不了缓存) */
+          const cached=[...noiseBufs.values()].flat();
+          let fromCache=false; for(let i=0;i<cached.length;i++){ if(cached[i]===played.buffer){ fromCache=true; break; } }
+          if(!fromCache) playedBad.push(fn38+"=播放缓冲不在共享缓存里(疑似每次新建, 见 MUST-FIX)");
           const dd=played.buffer.getChannelData(0);
           const ratio=+(winRMS(dd,0.02,0.10)? winRMS(dd,0.45,0.55)/winRMS(dd,0.02,0.10) : 0).toFixed(3);
-          const w=want38[m[1]];
-          if(!w){ nameBad.push(fn38+"(env="+m[1]+") 缺期望值"); continue; }
+          const w=want38[exp];
+          if(!w){ nameBad.push(fn38+"(env="+exp+") 缺期望值"); continue; }
           /* 容差取 ±15%: 这里量的是单个函数实际播放的那一份缓冲(样本量比第 6 条更少),
-             sin 在干净状态下实测就有 5.291 vs 期望 5.00(±5.8%), 所以绝对容差必须放宽。
-             用相对容差则对全部 9 种包络都成立, 且仍能抓住"整条包络被换掉"这种粗错
+             sin 单份/少量平均时实测可能偏高(如一次测得 5.291 vs 期望 5.00, 属 ≈+1.8σ 的采样
+             波动而非系统偏差), 所以用相对容差。对全部 9 种包络都成立, 仍能抓住整条包络被换掉
              (变异测试: sfxBrush 退化成 lin → 0.548 vs 期望 5.00, 差 89%, 抓到)。 */
-          if(Math.abs(ratio-w[0])>w[0]*0.15) playedBad.push(fn38+"(env="+m[1]+") 实测 mid/head="+ratio+" 期望≈"+w[0]+"(±15%)");
+          if(Math.abs(ratio-w[0])>w[0]*0.15) playedBad.push(fn38+"(env="+exp+") 实测 mid/head="+ratio+" 期望≈"+w[0]+"(±15%)");
         }
         ok("15 个调用点的包络名都真实存在于 NOISE_ENV(拼错会立刻暴露, 不再静默降级)",
            nameBad.length===0, nameBad.join("; ")||"15/15 全部命中");
-        ok("15 个函数实际播放出去的缓冲, 包络都与期望值相符(直接量波形, 不靠名字)",
-           playedBad.length===0, playedBad.join("; ")||"15/15 波形与期望一致");
+        ok("15 个调用点的包络名与接线表 EXPECT38 一一对应(合法名互换 M1/M7 也抓得到)",
+           wireBad.length===0, wireBad.join("; ")||"15/15 与接线表一致");
+        ok("15 个函数实际播放出去的缓冲都在共享缓存里: 包络与期望值相符 + 不是每次新建(不靠名字)",
+           playedBad.length===0, playedBad.join("; ")||"15/15 波形与期望一致且命中缓存");
+        ok("15 个发声函数播放后 src 都挂了 onended 断链(行为级: 看是否真的调用了 freeChain)",
+           hookBad.length===0, hookBad.join("; ")||"15/15 都挂了断链");
       } else ok("第三十八轮音频统一自测", false, "无法创建 AudioContext");
 
       // 7) 不依赖音频上下文: 源码层面确认 15 个函数都挂了 freeChain, 且都没有残留的逐采样生成
       {
-        const need=["sfxBreak","sfxBrush","sfxStep","sfxSunSweep","sfxHit","sfxEat","sfxHiss",
-                    "sfxExplode","sfxGun","sfxRocket","sfxStoneGrind","sfxGeyser","sfxFirework",
-                    "sfxFlame","sfxThunder"];
-        const texts=need.map(n=>String(eval(n)));
+        /* 先把整行注释剥掉再匹配, 否则一行 // TODO: freeChain(src,f,g) 也能骗过 includes
+           (独立审计 M8 实证过)。6b 里还有行为级复核(onended 真的被赋了函数、缓冲命中共享
+           缓存), 这里是无 AudioContext 时的源码级兜底。 */
+        const need=ALLSFX;   // 名单来自源码提取, 不是再敲一遍的硬编码
+        const codeOnly=t=>String(t).replace(/\/\/[^\n]*/g,"").replace(/\/\*[\s\S]*?\*\//g,"");
+        const texts=need.map(n=>codeOnly(eval(n)));
         const noFree=texts.filter(t=>t.includes("freeChain(")).length;
         const noCreateBuf=texts.filter(t=>t.includes("actx2.createBuffer(")).length;
-        ok("15 个发声函数全部挂了 freeChain 断链", noFree===15, noFree+"/15");
+        ok("15 个发声函数全部挂了 freeChain 断链(剥注释后源码级, 行为级见 6b)", noFree===15, noFree+"/15");
         ok("15 个发声函数里没有残留的逐采样噪声生成(actx2.createBuffer)", noCreateBuf===0, "残留="+noCreateBuf);
       }
     }catch(err){ ok("第三十八轮自测(音频统一)未抛错", false, String(err&&err.stack||err)); }
