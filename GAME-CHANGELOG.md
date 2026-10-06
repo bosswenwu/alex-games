@@ -2,6 +2,23 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-10-06 — 沙海奇境 第四十轮·补充（「收尾四件套」机器可执行部分全自动实测）：移动端视口性能模拟 4 格 + PR C 数值预算（真实状态机单局时长 / 单波受击预算 / 回响经济闭环实测）+ 触屏操作模拟 26/26 + 堆内存平台无增长
+
+**Scope:** **`games/minecraft/index.html` 本轮依旧零改动**。依据「你自己做所有」：把上一条目（第四十轮清单）里第②③④项**机器可自动执行的部分全部真实执行并归档**——所有模拟一律驱动真实游戏代码（真实状态机 `startRuinExpedition/pickExpeditionRoute/tickRuinExpedition`、真实击杀路径 `hurtMob`（含远征词缀加成）、真实受击常数（`foeStrike/MOB_DEFS/预警与攻速常量`）、真实经济函数（`claimRuinExpeditionReward/buyMastery`）），数据写入清单文档新增 §7。真机 GPU 帧率、真机触屏手感、真人首通/撤离数据仍是交接项（清单 §2.2/§4.3/§3.3）。
+
+| 项 | 内容 |
+| --- | --- |
+| 📱 **② 移动端视口·设备模拟性能基线（新增 4 格）** | `390×844 idle/gfx0`、`390×844 charge3/gfx0`、`844×390 charge3/gfx0`、`390×844 charge3/gfx1`（预热 8 s + 采样 20 s×3，seed 424242）：**全部 p50 16.7 ms / p95 16.8 ms / 60 FPS / 粒子峰值 52–167（cap 420）/ 无长任务 / ≥33.3ms 帧占比 0% / 未自动降档 / `runtimeErrors:[]`**；电荷载格堆内存三跑 `35.6→37.1 / 35.6→37.1 / 37.5→34.7 MB` 平台无增长。**诚实修订**：实测 `renderer` 为 `ANGLE (NVIDIA RTX 5060 Ti) D3D11`——无头实走主机 GPU，「SwiftShader」是工具通用警告标签（r39 桌面格同理）；此为移动视口下的桌面参考，非真机移动 GPU |
+| ⚖️ **③ PR C：机器可执行的数值预算（本轮新增）** | **实测单局战斗时长**（真实状态机进战斗→结算）：fresh 安全 16.7 s / 精英 21.5 s，mid 12.7 / 15.9 s，fullMastery 11.9 / 14.0 s，maxed 10.8 / 12.4 s（纯战斗段，不含赶路/石板，解谜另估 10–25 s）。**单波受击预算**（S1 站桩上界 / S2 走位预期，常数全取自代码）：安全线新档全流程 S2 ≈18 ≤ 20 可通；**最陡悬崖 = 精英线第 2 波（anubis+serqet）新档 S2 21 > 20 满血即死**（mid 9、endgame 3，成长无断层）→ 列为真人调参重点（优先动该波数值，只调数值不动概率）。**回响经济闭环实测**（真实领奖+购买，0 回响→三树 12 节点需 51）：安全线 **25 局** / 精英线 **17 局**。**实录发现**：`runId` 不随存档持久化 → 会话内每局按首通计、刷新后下一局按重复计 |
+| 🕹 **④ 手机端触屏操作模拟（26/26 PASS）** | 强制触屏环境→`initTouchUI()`→经真实监听器派发合成 `TouchEvent`：摇杆按下/满程 moveY=1/斜向 0.71/释放归中/nub 归位；视角滑区 yaw·pitch 增量与<260ms 轻点=挖掘；Jump/Break 按住-释放语义、Fly 切换、SlotL/R 切物品栏、Dodge 沙步位移+0.35s 无敌窗、Z/Q 未习得 locked 不崩溃；沙步的 `playing()/面板/落点` 三重拦截如实验证。`performance.memory` 可用（≈43–49 MB） |
+| ✍️ **诚实边界** | DPR≥2 的 backing-store 成本（CDP 强制 DPR=1）无头测不到、真机触感（延迟/跟手）与低端 GPU 帧率、真人首通率/撤离率等经验指标——均按清单交接项保持不动，本轮不新增承诺 |
+
+**How:** 仅追加修改清单文档 `docs/SANDSEA-FINAL-FOUR-CHECKLIST-2026-10-06.md`（新增 §7 机器实测附录）与 `GAME-CHANGELOG.md`（本条目）。未触碰 `games/minecraft/index.html`。一次性审计脚本与输出（`balance-sim.js/touch-sim.js/perf-mobile-*.json` 等）留存于 `<Temp>/opencode/`，不入库。
+
+**Verification:** 自测基线 `node tools/headless.mjs selftest` 仍 **508/508**（无源码变更，回归确认）；触屏模拟 26/26；平衡模拟 4 档案 × 2 路线真实状态机均实测通关（明细见清单 §7.2）；性能 4 格阈值全过、无 `runtimeErrors`；对拍：单局战斗时长随成长单调递减（16.7→12.7→11.9→10.8 s），与经济成长曲线一致。
+
+**未能人工确认（交接项不变）：** 低端真机帧率/堆内存 20 分钟长跑（②）、PR C 真人首通率·撤离率·手感与 kiting 可行性（③）、真机触屏触感/DPR≥2（④）——按清单对应小节步骤执行即可闭环。
+
 ## 2026-10-06 — 沙海奇境 第四十轮·收尾四件套：具体执行清单 + 存档迁移全量矩阵实测（67/67）+ 桌面性能参考基线 + 手机端无头视口审计
 
 **Scope:** `games/minecraft/index.html` **本轮零改动**（无玩法/素材/方块/存档字段/自测变更）。交付物 = ① 收尾四件套的**具体执行清单** `docs/SANDSEA-FINAL-FOUR-CHECKLIST-2026-10-06.md`（对应 `ROADMAP.md` 阶段四剩余项）；② 能无头实测的部分立即实测并归档；③ 必须真机/真人的部分写成可交接步骤。另存档移动端视口截图 2 张（`artifacts/sandsea-final-four/`）。

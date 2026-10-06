@@ -267,3 +267,96 @@ node tools/headless.mjs shot "games/minecraft/?seed=424242" <artifacts>/final-fo
 - 触屏手感、低端 GPU 帧率与内存长跑属**待真机**（§4.3 清单）。
 
 **③ PR C 真人数值调参：**本轮无真人数据，交接清单见 §3（可执行步骤 + 观测指标 + 当前实装数值表）。
+
+---
+
+## 7. 第四十轮补充：机器可执行部分全自动实测（追加于 `7a1c673` 之后）
+
+> **依据「你自己做所有」：**把第②③④项中**机器能自动执行的部分全部真实执行**——模拟一律驱动**真实游戏代码**（真实状态机 `startRuinExpedition`/`pickExpeditionRoute`/`tickRuinExpedition`、真实击杀路径 `hurtMob`（含远征词缀加成）、真实受击常数（`foeStrike`/`MOB_DEFS`/预警与攻速常量）、真实经济函数（`claimRuinExpeditionReward`/`buyMastery`））。**下列内容均为本轮新增机器实测**；真机 GPU 帧率、真机触屏手感、真人首通/撤离数据仍是交接项（§2.2/§4.3/§3.3）。
+
+### 7.1 ② 移动端视口·设备模拟性能基线（新增 4 格）
+
+命令（每格 = 预热 8 s + 采样 20 s × 3 次新浏览器，`seed 424242`，`tools/sandsea-perf/baseline.mjs`）：
+
+```
+node tools/sandsea-perf/baseline.mjs --repo <repo> --scenario idle    --gfx 0 --seed 424242 --size 390x844 --warmup 8 --duration 20 --repeat 3 --device mobile-emu-swiftshader --out <temp>/perf-mobile-idle-390x844-gfx0.json
+node tools/sandsea-perf/baseline.mjs --repo <repo> --scenario charge3 --gfx 0 --seed 424242 --size 390x844 --warmup 8 --duration 20 --repeat 3 --device mobile-emu-swiftshader --out <temp>/perf-mobile-charge3-390x844-gfx0.json
+node tools/sandsea-perf/baseline.mjs --repo <repo> --scenario charge3 --gfx 0 --seed 424242 --size 844x390 --warmup 8 --duration 20 --repeat 3 --device mobile-emu-swiftshader --out <temp>/perf-mobile-charge3-844x390-gfx0.json
+node tools/sandsea-perf/baseline.mjs --repo <repo> --scenario charge3 --gfx 1 --seed 424242 --size 390x844 --warmup 8 --duration 20 --repeat 3 --device mobile-emu-swiftshader --out <temp>/perf-mobile-charge3-390x844-gfx1.json
+```
+
+| 格 | 视口 | gfx | 场景 | p50 | p95 | rAF FPS | 粒子峰值(cap 420) | 长任务 | ≥33.3ms 帧占比 | 自动降档 | runtimeErrors |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| idle-390×844 | 390×844 | 0 低 | idle | 16.7 ms | 16.8 ms | 60 | 52 | 0 | 0% | 无 | [] |
+| charge3-390×844 | 390×844 | 0 低 | charge3 | 16.7 ms | 16.8 ms | 60 | 78 | 0 | 0% | 无 | [] |
+| charge3-844×390 | 844×390 | 0 低 | charge3 | 16.7 ms | 16.8 ms | 60 | 86 | 0 | 0% | 无 | [] |
+| charge3-390×844 | 390×844 | 1 中 | charge3 | 16.7 ms | 16.8 ms | 60 | 167 | 0 | 0% | 无 | [] |
+
+- **堆内存（charge3-390×844-gfx0 三跑实测）：** `heapStart→heapEnd` = 35.6→37.1 / 35.6→37.1 / 37.5→34.7 MB，采样窗内**无增长趋势**（平台震荡），与 r39 桌面行为一致。
+- **诚实标注（修订 §2.1/§6 的「SwiftShader」说法）：** JSON 实测 `renderer` 为 `ANGLE (NVIDIA, NVIDIA GeForce RTX 5060 Ti …) Direct3D11` —— 本机无头 Chrome **实际走主机 GPU（D3D11）**，「headless + SwiftShader」只是 baseline.mjs 的通用警告标签，r39 两个桌面格同理。**结论口径：**这是**桌面 Chrome 主机 GPU**在移动视口下的参考，非真机移动 GPU；低端真机帧率仍按 §2.2/§4.3 交接。
+- **已知无法无头覆盖：** CDP 强制 `deviceScaleFactor=1`，DPR≥2 的 canvas backing-store 成本测不到（headless.mjs 无此开关，不为此改工具）；真机 DPR 负载留待真机。
+
+### 7.2 ③ PR C：机器可执行的数值预算（本轮新增）
+
+方法 = **真实状态机全流程模拟**（每档案每路线真实跑通进战斗→结算并领奖）+ **真实常数受击预算**（S1 站桩最坏上界 / S2 走位预期，伤害与攻速全部取自已读到的代码常量，精英怪伤 ×1.5、阿努比斯 boss 无 elite 标记故伤仍 ×1、Day1 `foeDmgMul=1`、护甲 0）+ **经济闭环实测**（真实领奖与购买）。假定：新档挥剑 12×dmgMul、按住左键 0.25 s/次（锁定模式 `actTimer` 阈值）。
+
+**实测单局战斗时长（真实状态机，进战斗→结算领奖的游戏内秒数；不含赶路/制作石板；解谜按「机器即解」跳过，真人解谜估 10–25 s 另计）：**
+
+| 档案 | 安全线 | 精英线 | 说明 |
+|---|---:|---:|---|
+| fresh 新档 Lv1（12 伤 / 48 DPS / 20 血） | 16.7 s | 21.5 s | 两线均实测通关 ✅ |
+| mid 中期 Lv6（19 伤 / 76 DPS / 30 血） | 12.7 s | 15.9 s | ✅ |
+| fullMastery Lv10+12 专精（25 伤 / 100 DPS / 38 血） | 11.9 s | 14.0 s | ✅ |
+| maxed +神话武器护符（砂刃Ⅱ+破甲印Ⅱ等） | 10.8 s | 12.4 s | ✅ |
+
+**单波受击预算（关键波；S1=站桩最坏上界，S2=走位预期，含毒伤）：**
+
+| 档案 | 路线 | 波次 | 构成 | 池HP | TTK(模型) | S1 / S2 | 判定（vs 该档案满血） |
+|---|---|---|---:|---:|---|---|
+| fresh | 安全 | W2 | mummy+skeleton+serqet | 80 | 1.7 s | 13 / 4 | ✅ |
+| fresh | 安全 | W3 | anubis+mummy+scarab | 144 | 3.0 s | 29 / 8 | ⚠️ S1 必死；S2 可过（需走位/沙步） |
+| fresh | 安全 | boss | anubis×1.4 | 154 | 3.2 s | 18 / 6 | ✅ |
+| fresh | 精英 | W2 | anubis+serqet | 222 | 4.6 s | **42 / 21** | ❌ **S2 21 > 20 满血**：新档精英线第 2 波合理走位也必死 |
+| fresh | 精英 | W3 | anubis+scarab | 177 | 3.7 s | 27 / 9 | ⚠️ S1 必死；S2 险 |
+| mid Lv6 | 精英 | W2 | anubis+serqet | 222 | 2.9 s | 30 / 9 | ⚠️ S2 9 ≤ 30 可过（贴脸刚需走位） |
+| fullMastery | 精英 | W2 | anubis+serqet | 222 | 2.2 s | 21 / 3 | ✅（盐甲 -5% 后更低） |
+
+**平衡结论（机器测算，供真人校准）：**
+1. 设计意图「新档安全线可通、精英线留作中后期」**成立**：安全线全流程 S2 合计 ≈18 ≤ 20，需基础走位/沙步即可；全站桩（S1 合计 ≈68）必死——战斗设计上本来就要求走位，非缺陷。
+2. **当前最陡的悬崖 = 精英线第 2 波（anubis+serqet）**：新档 S2 预算 21 > 满血 20。这正是第三十一轮「末波轻量化」想消除的那类叠压图景（这次在 W2 boss+毒蝎组合）。**真人调参重点**：确认玩家是否可用 kiting 处理（boss 近战+毒蝎贴脸），若首通率数据证明劝退，优先动该波（减一只/降毒/拉开双怪距离），且只调数值不动概率（§3.3 流程）。
+3. mid→endgame 曲线平滑（W2 S2：21→9→3），说明成长路线无断层。
+
+**回响经济闭环（真实领奖+购买，从 0 回响跑到三树全满 12 节点需 51 回响）：**
+
+| 路线 | 实测局数 | 实得回响 | 收入模型 |
+|---|---:|---:|---|
+| 安全线 | **25 局** | 52 | 每局 +2（新局号皆按首通计）+ 文书封存每 3 局 +1 |
+| 精英线 | **17 局** | 53 | 每局 +3（首通 2 + 精英 1）+ 文书封存每 3 局 +1 |
+
+- **实测发现（值得记录）：** `ruinExpeditionState.runId` **不随存档持久化**，`ruinExpeditionSave.runs` 持久化 → 同一会话内每局新 `runId` 都按「首通」结算；**刷新页面后 `runId` 归零 → 下一局命中已结算 `runId`，按「重复通关」计**（+1/+2 而非首通）。局内收益比设计稿「首通+2/重复+1」更慷慨、跨会话回档比想象更严，真人数据阶段可复核此边界是否符合预期。
+- 单局战斗时长（§7.2）远低于设计稿 8–12 分钟的「单局时长」口径——设计稿口径含赶路/备料/探索的完整循环，战斗仅为其中一段；建议真人对「进入远征→领奖」整体计时，勿把纯战斗段当设计目标。
+
+### 7.3 ④ 手机端触屏操作模拟（新增，26/26 PASS）
+
+方法：headless 无触摸硬件且 `IS_TOUCH` 初始为假 → 先强制触屏环境（`navigator.maxTouchPoints` stub + `matchMedia(pointer:fine)=false`）并调用 `initTouchUI()` 装载移动端 UI，再**经真实监听器**派发合成 `Touch/TouchEvent` 断言交互语义：
+
+| 组 | 覆盖 | 结果 |
+|---|---|---|
+| UI 装载 | `#touchui.on`、`RENDER≤4`、粒子 0.4、`touch-action:none` | ✅ |
+| 虚拟摇杆 | 按下激活 / 下拉满程 moveY=1 / 斜向归一 0.71 / 释放归中 / nub 归位 | ✅ 5/5 |
+| 视角滑区 | yaw+=dx·0.0055、pitch+=dy·0.0055、<260ms 无位移轻点→doBreak | ✅ 3/3 |
+| 按钮 | Jump 按住/释放（keys.Space）、Break 按住/释放（breaking）、Fly 切换、SlotL/R 切物品栏、Dodge 沙步位移+0.35s 无敌窗、Z/Q 未习得 locked 且按下不崩溃 | ✅ 9/9 |
+| 语义门槛 | 沙步在启动 overlay/面板/无落点时正确拦截（`playing()`+`sandStepPanelOpen()`+落点检测），进游玩态+开阔地后正常触发 | ✅（如实记录） |
+
+- 堆内存快照：`performance.memory` 可用（≈43–49 MB）；长程趋势见 §7.1 堆数据（平台无增长）。
+- **诚实边界：** 合成事件验证的是**接线与状态语义**；真机的触感（响应延迟/跟手率/防误触）与 DPR≥2 渲染负载仍需真机（§4.3）。
+
+### 7.4 本轮补充的诚实边界（与既有交接项不变）
+
+| 项 | 机器已做（本轮新增） | 仍需真人/真机 |
+|---|---|---|
+| ② 真机性能 | 移动视口 4 格模拟 + 堆内存平台数据 + renderer 如实标注 | 低端真机 3 台样本、DPR≥2、20 分钟内存长跑 |
+| ③ PR C | 真实状态机单局时长、单波受击预算曲线、经济闭环局数、runId 回档边界实测 | 首通率/撤离率/手感等经验指标、kiting 可行性确认 |
+| ④ 手机端 | 触屏操作 26/26 接线语义模拟 | 真机触感、低端 GPU 帧率、横竖屏真机布局走查 |
+
+输出（一次性审计脚本，不入库）：`<Temp>/opencode/balance-sim.js`、`<Temp>/opencode/touch-sim.js` 及 `balance-sim-out.json`、`touch-sim-out.json`、`perf-mobile-*.json/.csv`。
