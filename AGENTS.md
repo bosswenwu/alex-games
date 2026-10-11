@@ -7,7 +7,9 @@
 - Preserve each game's core loop, existing controls, save compatibility, and mobile behavior unless a task explicitly asks to change them.
 - Validate the affected game in a browser where possible. Check gameplay state through its debug API, console errors, and relevant desktop/mobile layouts; report any checks that could not be performed.
 - For every user-visible game change, update `GAME-CHANGELOG.md` in the same change. Record the game, player-visible behavior, affected files, and verification performed. Keep older entries rather than replacing the history.
-- Do not commit or push unless the user asks for it.
+- User standing instruction: after requested updates are implemented and relevant checks pass, commit and push them to `origin/main` without asking again. Stage only files in the current task; never include unrelated work.
+- Before pushing, fetch `origin` and confirm the work is based on the latest `main`. Push normally, never force-push. If the branch has diverged or checks fail, stop and report instead of bypassing the issue.
+- Do not commit or push when the user explicitly asks not to, or when the task is read-only/advisory and has no requested repository changes.
 
 ## Repository notes
 
