@@ -5381,14 +5381,17 @@ function sandRiposteDamage(target,baseDamage){
   refreshSandStepButton();
   return {damage:baseDamage+bonus+extra,bonus:bonus+extra};
 }
-function sandStepPanelOpen(){
+function modalPanelOpen(){          // 是否有居中模态面板(箱子/熔炉/背包/合成/附魔/药水/NPC/集市/图鉴…)正开着
   const ids=["craftPanel","enchPanel","potionPanel","chestPanel","furnacePanel","npcPanel","fullhelp","settingsPanel",
-    "bazaar-panel","pottery-panel","mythic-panel","lamp-panel","sphinx-panel","ruin-glyph-panel","expedition-route","meta-panel","caravan-panel","bagPanel"];   // 第三十六轮·本地: bagPanel 也算"有面板开着"
+    "bazaar-panel","pottery-panel","mythic-panel","lamp-panel","sphinx-panel","ruin-glyph-panel","expedition-route","meta-panel","caravan-panel","bagPanel"];
   return ids.some(id=>{
     const el=document.getElementById(id); if(!el) return false;
     const cs=getComputedStyle(el);
     return el.classList.contains("on") || (cs.display!=="none" && cs.visibility!=="hidden" && +cs.opacity>0);
-  }) || document.getElementById("overlay")?.style.display!=="none";
+  });
+}
+function sandStepPanelOpen(){
+  return modalPanelOpen() || document.getElementById("overlay")?.style.display!=="none";
 }
 function sandStepDirection(overrideX,overrideZ){
   if(Number.isFinite(overrideX) && Number.isFinite(overrideZ)){
@@ -7523,6 +7526,9 @@ function pauseGame(){
   clearSandRiposte();
   for(const k in keys) keys[k]=false;
   mouseHeld=-1; dragLook=false;
+  // 指针锁丢失若是为了打开某个面板(右键箱子/熔炉、Tab 背包、B 合成…)而非真的退出, 就别弹"游戏暂停"菜单:
+  // 面板是居中模态, 其下方若拉起全屏暂停遮罩, 面板四周会露出"游戏暂停"+按钮 → 看起来像右键把游戏退了(用户报的 bug)。
+  if(modalPanelOpen()) return;
   document.getElementById("title").textContent="游戏暂停";
   startbtn.textContent="继续游戏";
   startbtn.disabled=false;
@@ -18842,6 +18848,26 @@ function selftest(){
       closeBagPanel(); enterPointerLock=realEnter37; cleanUp();
       ok("Tab 背包: 从 B 面板切过来时不再申请指针锁(修掉与 exitPointerLock 的竞态)",
          raceCalls===0 && craftOpen===false, "enterPointerLock="+raceCalls);
+
+      // 5b) 右键开面板不该弹"游戏暂停": 开箱/熔炉/背包等会 exitPointerLock, 随后 pointerlockchange 丢锁;
+      //     若正开着面板, 丢锁是去开面板而非退出, 不应拉起暂停菜单(面板是居中模态, 暂停遮罩会从四周露出 → 用户报"右键有时退出游戏")。无面板丢锁仍应暂停。
+      {
+        const ovD=overlay.style.display, ovC=overlay.className, hudD=document.getElementById("hud").style.display,
+              chD=document.getElementById("chestPanel").style.display, lk0=locked, sl0=softLock, dd0=dead;
+        dead=false; softLock=false;
+        overlay.style.display="none"; overlay.classList.remove("pause-menu"); document.getElementById("hud").style.display="block";
+        document.getElementById("chestPanel").style.display="flex"; chestOpen={key:"st",store:{},title:"st",cap:27};
+        document.dispatchEvent(new Event("pointerlockchange"));                 // 模拟开箱后浏览器释放指针锁
+        const panelNoPause = overlay.style.display==="none" && !overlay.classList.contains("pause-menu");
+        chestOpen=null; document.getElementById("chestPanel").style.display="none";
+        overlay.style.display="none"; overlay.classList.remove("pause-menu");
+        document.dispatchEvent(new Event("pointerlockchange"));                 // 无面板时丢锁 → 真退出, 仍应暂停
+        const barePauses = overlay.style.display!=="none" && overlay.classList.contains("pause-menu");
+        overlay.style.display=ovD; overlay.className=ovC; document.getElementById("hud").style.display=hudD;
+        document.getElementById("chestPanel").style.display=chD; locked=lk0; softLock=sl0; dead=dd0;
+        ok("右键开面板不弹游戏暂停: 开着面板丢指针锁不退游戏, 真退出(无面板)仍暂停",
+           panelNoPause && barePauses, "面板态未暂停="+panelNoPause+" 裸退出暂停="+barePauses);
+      }
 
       // 5) 共享噪声缓冲: 反复触发所有材质, 缓冲区数量不随触发次数增长
       /* 关键: 正常游戏里 actx2 是玩家第一次手势时才建的, 自动化自测没有手势 → actx2 为 null。

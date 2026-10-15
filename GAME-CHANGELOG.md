@@ -2,6 +2,21 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-10-15 — 沙海奇境：修「右键有时把游戏退成暂停菜单」（bug 修复会话）
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only. Input/pointer-lock bug fix; no new keys, blocks, atlas tiles or save fields. Did not touch the C-key dodge / `foeStrike()` / global key handler, or shaders/render/water.
+
+**Symptom (user report, Chrome/Edge, normal mouse):** right-clicking sometimes brought up the 「游戏暂停」 menu.
+
+**Root cause:** right-clicking a chest / furnace (common while building or looting near them) calls `doPlace()` → opens the panel → `exitPointerLock()`. The resulting `pointerlockchange` ran `pauseGame()` because its only guard was `!softLock && !dead` — it never checked whether the lock was dropped *to open an in-game panel*. The panels are centered modal boxes (`z-index:40`) sitting over the full-screen pause overlay (`z-index:10`), so the 「游戏暂停」 title/buttons and dim backdrop showed around the panel — looking like the right-click had exited the game.
+
+| Change | Details | Files |
+| --- | --- | --- |
+| Don't show the pause menu when a modal panel is open | `pauseGame()` keeps its input cleanup (clears held keys / mouse) but returns before building the pause-menu chrome when `modalPanelOpen()` is true. Losing the lock to open chest/furnace/bag/craft/enchant/potion/NPC/… no longer pops 「游戏暂停」; a genuine exit (Esc / alt-tab with no panel open) still pauses as before. | `games/minecraft/index.html` |
+| `modalPanelOpen()` extracted | Factored the modal-panel id scan out of `sandStepPanelOpen()` (which now returns `modalPanelOpen() || overlay visible`) so the pause guard and the sand-step guard share one list. | `games/minecraft/index.html` |
+
+**Verification (`tools/headless.mjs`, SwiftShader):** `vm.Script` compile-check clean. A probe driving `pointerlockchange`: with a chest/bag panel open the pause menu does **not** appear (`overlay:none`), while with no panel open it still does (`overlay:flex`, pause-menu). New self-test 「右键开面板不弹游戏暂停…」 asserts both directions. `?selftest=1` **509/509** (was 508) on seeds 1 / 42.
+
 ## 2026-10-06 — 沙海奇境 第四十轮·补充（「收尾四件套」机器可执行部分全自动实测）：移动端视口性能模拟 4 格 + PR C 数值预算（真实状态机单局时长 / 单波受击预算 / 回响经济闭环实测）+ 触屏操作模拟 26/26 + 堆内存平台无增长
 
 **Scope:** **`games/minecraft/index.html` 本轮依旧零改动**。依据「你自己做所有」：把上一条目（第四十轮清单）里第②③④项**机器可自动执行的部分全部真实执行并归档**——所有模拟一律驱动真实游戏代码（真实状态机 `startRuinExpedition/pickExpeditionRoute/tickRuinExpedition`、真实击杀路径 `hurtMob`（含远征词缀加成）、真实受击常数（`foeStrike/MOB_DEFS/预警与攻速常量`）、真实经济函数（`claimRuinExpeditionReward/buyMastery`）），数据写入清单文档新增 §7。真机 GPU 帧率、真机触屏手感、真人首通/撤离数据仍是交接项（清单 §2.2/§4.3/§3.3）。
