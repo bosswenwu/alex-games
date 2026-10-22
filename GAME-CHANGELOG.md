@@ -2,6 +2,17 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-10-22 — 沙海奇境：Esc 关大地图 / 编年史不再落入暂停菜单
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only. Same branch as the Boss 血条 / 震颤 / 大地图 fix. No new keys, blocks, atlas tiles, or save fields.
+
+| Bug | Symptom | Cause | Fix |
+| --- | --- | --- | --- |
+| Esc 关大地图 | 地图标题写着按 N / Esc 关闭。指针锁定中打开地图后按 Esc，地图关掉，大约三百毫秒后仍出现「游戏暂停」。按 N 关闭会回到游戏。 | 关闭路径在 Esc 的 keydown 里调用 `requestPointerLock()`。这次手势能拿到锁，但浏览器随后仍把这次 Esc 当成「退出指针锁」，大约 300ms 后丢掉刚拿到的锁。`pointerlockchange` 到来时地图已经关上，`pauseGame()` 就弹出菜单。 | Esc 关闭直接 `enterSoft()`（拖动瞄准），不申请锁。N 或点击关闭仍 `requestPointerLock()`。Chrome 拒绝申请时走 `enterPointerLock` 自己的 catch，进入拖动瞄准，没有单独的暂停菜单超时。 |
+| 编年史 (T) | 指针锁定中按 T 打开编年史，半透明底后面露出「游戏暂停」。 | `#chronicle` 不在 `modalPanelOpen()` 里。打开时若丢掉指针锁，`pointerlockchange` 会 `pauseGame()`。 | 与大地图同一套：打开时记下是否持有锁并 `exitPointerLock()`；编年史算进模态面板；Esc 关闭进入拖动瞄准，T 或点击关闭尝试要回指针锁。说明文字补上 Esc。 |
+
+**Verification:** `node tools/headless.mjs selftest` 在 `?seed=424242` 与 `?seed=1` 均为 **514/514**（本条新增 2 条：Esc 关地图不申请锁且随后丢锁不暂停、编年史打开时丢锁不暂停且 Esc 关闭同样不申请锁）。另用有界面的 Chrome（软件 WebGL）做真实指针锁：可信点击后 `document.pointerLockElement` 为画布，再发可信的 T / N / Esc。编年史和大地图打开时都没有暂停菜单；Esc 之后连续观察超过 1 秒，暂停菜单没有出现，Esc 期间 `requestPointerLock` 调用次数为 0，结束时为拖动瞄准（`softLock`）。
+
 ## 2026-10-22 — 沙海奇境：Boss 血条按最大生命、震颤贴脸不再写出 NaN、大地图不再误弹暂停
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) only. Bug fixes found by running the game; no new keys, blocks, atlas tiles, or save fields.
@@ -10,7 +21,7 @@ Persistent handoff notes for future agents. Add a new entry for each user-visibl
 | --- | --- | --- | --- |
 | Boss 血条 | 天数加成、不祥试炼或远征强化把首领 `maxHp` 抬过 `def.hp` 后，满血血条画出格子（例如第 12 天阿努比斯 171/110 → 宽度 155%），要先打掉一截才开始下降；百分比文字也被抹掉。页面里还有第二条同 id 的血条，`getElementById` 永远改不到它。 | 每帧先 `updateBossBar()`（按 `maxHp`，带百分比），紧接着 `updateStatsHUD()` 用 `hp/def.hp` 把宽度和标题覆写掉。 | 血条只走 `updateBossBar()`。轨道加 `overflow:hidden`。删掉重复的 `#bossbar`。 |
 | 大地震颤 | 敌人脚底和玩家重合时按 Z，该生物的击退和坐标变成 NaN，之后一直停在坏坐标上。 | `dx/d` 在距离为 0 时是 NaN，`hurtMob` 把它加进 `kbx`。同文件的号角/烈阳横扫已经避开了这个除法。 | 距离小于 0.001 时照常造成伤害，击退记 0。 |
-| 大地图 | 指针锁定中按 N 打开大地图，半透明底后面露出「游戏暂停」；关掉地图后暂停菜单还在。 | 开地图会 `exitPointerLock()`。`pointerlockchange` 调用 `pauseGame()`，而 `bigmap` 不在 `modalPanelOpen()` 的名单里，丢锁被当成真的退出。 | 把 `bigmap` 算进模态面板。关掉地图后尝试把指针锁要回来；若浏览器没有把锁还回来，再落到暂停菜单，避免既没锁也没菜单。 |
+| 大地图 | 指针锁定中按 N 打开大地图，半透明底后面露出「游戏暂停」；关掉地图后暂停菜单还在。 | 开地图会 `exitPointerLock()`。`pointerlockchange` 调用 `pauseGame()`，而 `bigmap` 不在 `modalPanelOpen()` 的名单里，丢锁被当成真的退出。 | 把 `bigmap` 算进模态面板。N 或点击关闭时尝试要回指针锁；Chrome 若拒绝这次申请，`enterPointerLock` 的 catch 进入拖动瞄准，不会另弹暂停菜单。Esc 关闭不申请锁（见下一条）。 |
 
 **Verification:** `node tools/headless.mjs selftest` 在 `?seed=424242` 与 `?seed=1` 均为 **512/512**（本轮新增 3 条）。另用 eval 复核：强化首领满血条宽 100%、半血 50%；贴脸震颤后坐标为有限数；大地图打开时派发 `pointerlockchange`，暂停遮罩保持关闭。
 

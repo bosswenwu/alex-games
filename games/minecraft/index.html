@@ -5380,9 +5380,9 @@ function sandRiposteDamage(target,baseDamage){
   refreshSandStepButton();
   return {damage:baseDamage+bonus+extra,bonus:bonus+extra};
 }
-function modalPanelOpen(){          // 是否有居中模态面板(箱子/熔炉/背包/合成/附魔/药水/NPC/集市/图鉴/大地图…)正开着
+function modalPanelOpen(){          // 是否有居中模态面板(箱子/熔炉/背包/合成/附魔/药水/NPC/集市/图鉴/大地图/编年史…)正开着
   const ids=["craftPanel","enchPanel","potionPanel","chestPanel","furnacePanel","npcPanel","fullhelp","settingsPanel",
-    "bazaar-panel","pottery-panel","mythic-panel","lamp-panel","sphinx-panel","ruin-glyph-panel","expedition-route","meta-panel","caravan-panel","bagPanel","bigmap"];
+    "bazaar-panel","pottery-panel","mythic-panel","lamp-panel","sphinx-panel","ruin-glyph-panel","expedition-route","meta-panel","caravan-panel","bagPanel","bigmap","chronicle"];
   return ids.some(id=>{
     const el=document.getElementById(id); if(!el) return false;
     const cs=getComputedStyle(el);
@@ -7354,13 +7354,21 @@ function chronicleHTML(){
       +(ruinExpeditionState.active?(' · '+(ruinExpeditionState.phase==="puzzle"?'解谜中':(ruinExpeditionState.phase==="route"?'选路线':(ruinExpeditionState.phase==="combat"?('战斗第 '+ruinExpeditionState.wave+' 波'):'结算中')))):''))
     + row('🌑 亡者之夜', (undeadNight.active?('围城中 · 剩'+Math.ceil(undeadNight.t)+'s'):'平静')+' · 幸存 '+undeadNight.survived+' 夜')
     + row('✨ 神话遗物', mythicState.done.length+' / '+MYTHIC.length+'（碎片 '+Object.values(mythicState.frags).reduce((a,b)=>a+b,0)+'）· 按 K')
-    + '<div style="margin-top:12px;color:#c9b98a;font-size:12px">按 <b style="color:#ffd23f">T</b> 关闭 · <b>P</b> 陶片图鉴 · <b>K</b> 神话遗物 · 声望随行为涨落，天象/集市/远征会自行降临</div>';
+    + '<div style="margin-top:12px;color:#c9b98a;font-size:12px">按 <b style="color:#ffd23f">T</b> / <b style="color:#ffd23f">Esc</b> 关闭 · <b>P</b> 陶片图鉴 · <b>K</b> 神话遗物 · 声望随行为涨落，天象/集市/远征会自行降临</div>';
 }
-function toggleChronicle(){
+let chronicleWasLocked=false;
+function toggleChronicle(viaEsc){
   const el=document.getElementById("chronicle"); if(!el) return;
   const show=!el.classList.contains("on");
-  if(show){ el.querySelector(".cr-card").innerHTML=chronicleHTML(); el.classList.add("on"); }
-  else el.classList.remove("on");
+  if(show){
+    el.querySelector(".cr-card").innerHTML=chronicleHTML(); el.classList.add("on");
+    chronicleWasLocked=!!document.pointerLockElement;
+    if(document.pointerLockElement) document.exitPointerLock();   // 和地图一样: 打开时丢锁, 丢锁发生在面板还开着时才不会被当成暂停
+  } else {
+    el.classList.remove("on");
+    const resume=chronicleWasLocked; chronicleWasLocked=false;
+    resumeAfterOverlay(resume, viaEsc===true);
+  }
 }
 function toggleFullHelp(){
   const el=document.getElementById("fullhelp");
@@ -7520,7 +7528,7 @@ function pauseGame(){
   clearSandRiposte();
   for(const k in keys) keys[k]=false;
   mouseHeld=-1; dragLook=false;
-  // 指针锁丢失若是为了打开某个面板(右键箱子/熔炉、Tab 背包、B 合成、N 大地图…)而非真的退出, 就别弹"游戏暂停"菜单:
+  // 指针锁丢失若是为了打开某个面板(右键箱子/熔炉、Tab 背包、B 合成、N 大地图、T 编年史…)而非真的退出, 就别弹"游戏暂停"菜单:
   // 面板是居中模态, 其下方若拉起全屏暂停遮罩, 面板四周会露出"游戏暂停"+按钮 → 看起来像右键/开地图把游戏退了。
   if(modalPanelOpen()) return;
   document.getElementById("title").textContent="游戏暂停";
@@ -7530,6 +7538,15 @@ function pauseGame(){
   overlay.classList.add("pause-menu");
   continuebtn.style.display="none"; newworldbtn.style.display="none";
   overlay.style.display="flex"; hud.style.display="none";
+}
+/* 全屏层(大地图 / 编年史)打开时故意丢掉的指针锁, 关掉之后怎么回到游戏。
+   N 或点击: 这次手势不是 Esc, 可以立刻 requestPointerLock。Chrome 若拒绝, enterPointerLock 的 catch 会 enterSoft(拖动瞄准), 不会另弹暂停菜单。
+   Esc: 浏览器会在这次 Esc 之后约 300ms 把指针锁强制退出。若在 Esc 的 keydown 里申请锁, 锁会被夺走,
+   等 pointerlockchange 到来时面板已经关上, pauseGame 就会弹出。所以 Esc 关闭直接进入拖动瞄准, 不申请锁。 */
+function resumeAfterOverlay(wasLocked, viaEsc){
+  if(!wasLocked || dead || softLock) return;
+  if(viaEsc) enterSoft();
+  else enterPointerLock();
 }
 function enterSoft(){ // 指针锁定不可用时的降级模式(用鼠标指针瞄准)
   softLock=true; enterGame();
@@ -7618,6 +7635,7 @@ document.addEventListener("keydown",e=>{
   if(e.code==="Escape" && sxEl && sxEl.classList.contains("on")){ closeSphinxPanel(); return; }
   { const mp4=document.getElementById("meta-panel"); if(e.code==="Escape" && mp4 && mp4.classList.contains("on")){ closeMetaPanel(); return; } }
   { const erEl=document.getElementById("expedition-route"); if(e.code==="Escape" && erEl && erEl.classList.contains("on")){ pickExpeditionRoute("safe"); return; } }   // 未选路线按 Esc: 默认稳扎稳打
+  if(e.code==="Escape"){ const chEsc=document.getElementById("chronicle"); if(chEsc && chEsc.classList.contains("on")){ e.preventDefault(); toggleChronicle(true); return; } }
   if(e.code==="Escape" && softLock){ pauseGame(); return; }
   if(!playing()) return;
   if(e.code==="KeyM" && !e.repeat){ const on=setMusicEnabled(!musicOn); showName("音乐: "+(on?"开":"关")); }
@@ -18923,6 +18941,111 @@ function selftest(){
            mapNoPause && mapClosed, "开图未暂停="+mapNoPause+" 关掉="+mapClosed);
       }
 
+      // 5d) Esc 关大地图: 不能在这次 Esc 的 keydown 里 requestPointerLock。
+      //     浏览器会在 Esc 之后约 300ms 把刚申请到的锁强制退出, 那时地图已经关上, pointerlockchange 会 pauseGame。
+      //     Esc 应直接进入拖动瞄准; 随后再丢一次锁也不弹菜单。N 关闭仍申请指针锁(拒绝时由 enterPointerLock 自己进拖动, 不另弹暂停)。
+      {
+        const ovD=overlay.style.display, ovC=overlay.className, hudD=document.getElementById("hud").style.display;
+        const title0=document.getElementById("title").textContent, sb=document.getElementById("startbtn");
+        const sbt=sb.textContent, sbd=sb.disabled, mapWas=MM.bigOpen, lk0=locked, sl0=softLock, dd0=dead;
+        const intro0=_introShown, tut0=tut.active, cur0=canvas.style.cursor;
+        const cross=document.getElementById("cross"), cross0=cross.style.display;
+        const nameEl=document.getElementById("itemname"), name0=nameEl.textContent, nameOp=nameEl.style.opacity;
+        const ss0=Object.assign({}, sandStepState), key0={};
+        for(const k in keys) key0[k]=keys[k];
+        const realEPL=enterPointerLock; let epl=0;
+        enterPointerLock=function(){ epl++; };
+        const arm=()=>{
+          dead=false; softLock=false; locked=false; _introShown=true; tut.active=false;
+          overlay.style.display="none"; overlay.classList.remove("pause-menu");
+          document.getElementById("title").textContent="沙海奇境";
+          document.getElementById("hud").style.display="block";
+          if(MM.bigOpen){ MM.bigWasLocked=false; toggleBigMap(false); }
+          toggleBigMap(true); MM.bigWasLocked=true; epl=0;
+        };
+        let escOk=false, lateOk=false, nOk=false, detail="";
+        try{
+          arm();
+          window.dispatchEvent(new KeyboardEvent("keydown",{code:"Escape",key:"Escape",bubbles:true,cancelable:true}));
+          escOk=!MM.bigOpen && epl===0 && softLock===true && overlay.style.display==="none"
+            && !overlay.classList.contains("pause-menu") && document.getElementById("title").textContent==="沙海奇境";
+          document.dispatchEvent(new Event("pointerlockchange"));   // 模拟 Esc 约 300ms 后浏览器强制丢锁
+          lateOk=softLock===true && overlay.style.display==="none" && !overlay.classList.contains("pause-menu")
+            && document.getElementById("title").textContent==="沙海奇境";
+          arm();
+          window.dispatchEvent(new KeyboardEvent("keydown",{code:"KeyN",key:"n",bubbles:true,cancelable:true}));
+          nOk=!MM.bigOpen && epl===1 && softLock===false && overlay.style.display==="none" && !overlay.classList.contains("pause-menu");
+          detail="Esc进拖动且未申请锁="+escOk+" 迟到丢锁不暂停="+lateOk+" N申请一次锁="+nOk+"(epl="+epl+")";
+        } finally {
+          enterPointerLock=realEPL;
+          if(MM.bigOpen){ MM.bigWasLocked=false; toggleBigMap(false); }
+          clearTimeout(nameTimer); nameEl.textContent=name0; nameEl.style.opacity=nameOp;
+          overlay.style.display=ovD; overlay.className=ovC; document.getElementById("hud").style.display=hudD;
+          document.getElementById("title").textContent=title0; sb.textContent=sbt; sb.disabled=sbd;
+          canvas.style.cursor=cur0; cross.style.display=cross0;
+          locked=lk0; softLock=sl0; dead=dd0; _introShown=intro0; tut.active=tut0;
+          Object.assign(sandStepState, ss0);
+          for(const k in keys) keys[k]=false;
+          for(const k in key0) keys[k]=key0[k];
+          if(mapWas){ MM.bigWasLocked=false; toggleBigMap(true); }
+        }
+        ok("Esc 关大地图不申请指针锁并进入拖动瞄准, 随后丢锁也不弹暂停; N 关闭仍申请指针锁",
+           escOk && lateOk && nOk, detail);
+      }
+
+      // 5e) 编年史(T) 不在模态名单里时, 开着它丢锁会把暂停菜单透出半透明底。Esc 关闭与大地图同一条路。
+      {
+        const el=document.getElementById("chronicle");
+        const ovD=overlay.style.display, ovC=overlay.className, hudD=document.getElementById("hud").style.display;
+        const title0=document.getElementById("title").textContent, sb=document.getElementById("startbtn");
+        const sbt=sb.textContent, sbd=sb.disabled, mapWas=MM.bigOpen, chWas=el.classList.contains("on");
+        const lk0=locked, sl0=softLock, dd0=dead, intro0=_introShown, tut0=tut.active, cur0=canvas.style.cursor;
+        const cross=document.getElementById("cross"), cross0=cross.style.display;
+        const nameEl=document.getElementById("itemname"), name0=nameEl.textContent, nameOp=nameEl.style.opacity;
+        const chLock0=chronicleWasLocked, ss0=Object.assign({}, sandStepState), key0={};
+        for(const k in keys) key0[k]=keys[k];
+        const realEPL=enterPointerLock; let epl=0;
+        enterPointerLock=function(){ epl++; };
+        let openNoPause=false, escOk=false, lateOk=false, detail="";
+        try{
+          dead=false; softLock=false; locked=false; _introShown=true; tut.active=false;
+          overlay.style.display="none"; overlay.classList.remove("pause-menu");
+          document.getElementById("title").textContent="沙海奇境";
+          document.getElementById("hud").style.display="block";
+          if(MM.bigOpen){ MM.bigWasLocked=false; toggleBigMap(false); }
+          if(el.classList.contains("on")){ chronicleWasLocked=false; el.classList.remove("on"); }
+          toggleChronicle();
+          document.dispatchEvent(new Event("pointerlockchange"));
+          openNoPause=el.classList.contains("on") && modalPanelOpen() && overlay.style.display==="none"
+            && !overlay.classList.contains("pause-menu") && document.getElementById("title").textContent==="沙海奇境";
+          chronicleWasLocked=true; epl=0; softLock=false;
+          document.dispatchEvent(new KeyboardEvent("keydown",{code:"Escape",key:"Escape",bubbles:true,cancelable:true}));
+          escOk=!el.classList.contains("on") && epl===0 && softLock===true && overlay.style.display==="none"
+            && !overlay.classList.contains("pause-menu") && document.getElementById("title").textContent==="沙海奇境";
+          document.dispatchEvent(new Event("pointerlockchange"));
+          lateOk=softLock===true && !el.classList.contains("on") && overlay.style.display==="none"
+            && !overlay.classList.contains("pause-menu") && document.getElementById("title").textContent==="沙海奇境";
+          detail="开着不暂停="+openNoPause+" Esc进拖动且未申请锁="+escOk+" 迟到丢锁不暂停="+lateOk+"(epl="+epl+")";
+        } finally {
+          enterPointerLock=realEPL;
+          chronicleWasLocked=false;
+          if(el.classList.contains("on")) el.classList.remove("on");
+          if(MM.bigOpen){ MM.bigWasLocked=false; toggleBigMap(false); }
+          clearTimeout(nameTimer); nameEl.textContent=name0; nameEl.style.opacity=nameOp;
+          overlay.style.display=ovD; overlay.className=ovC; document.getElementById("hud").style.display=hudD;
+          document.getElementById("title").textContent=title0; sb.textContent=sbt; sb.disabled=sbd;
+          canvas.style.cursor=cur0; cross.style.display=cross0;
+          locked=lk0; softLock=sl0; dead=dd0; _introShown=intro0; tut.active=tut0; chronicleWasLocked=chLock0;
+          Object.assign(sandStepState, ss0);
+          for(const k in keys) keys[k]=false;
+          for(const k in key0) keys[k]=key0[k];
+          if(chWas) el.classList.add("on");
+          if(mapWas){ MM.bigWasLocked=false; toggleBigMap(true); }
+        }
+        ok("编年史打开时丢指针锁不弹暂停; Esc 关闭不申请指针锁, 进入拖动瞄准, 随后丢锁也不暂停",
+           openNoPause && escOk && lateOk, detail);
+      }
+
       // 5) 共享噪声缓冲: 反复触发所有材质, 缓冲区数量不随触发次数增长
       /* 关键: 正常游戏里 actx2 是玩家第一次手势时才建的, 自动化自测没有手势 → actx2 为 null。
          不主动 initAudio() 的话下面两条断言会走"跳过"分支变成空跑通过(已实测踩过)。 */
@@ -19507,7 +19630,7 @@ function mmDrawBig(now){
     +'<br><span style="color:#e04a3a">■</span> 建筑　<span style="color:#ff4a4a">●</span> 敌对生物　<span style="color:#ffd23f">●</span> 驯服骆驼　'
     +'<span style="color:#e8bb6a">◯</span> 已探访地标　<span style="opacity:.6">◯</span> 未探访　<span style="color:#ffd23f">▲</span> 指南针目标　网格 64 格';
 }
-function toggleBigMap(force){
+function toggleBigMap(force, viaEsc){
   const show = force===undefined ? !MM.bigOpen : !!force;
   if(show===MM.bigOpen) return MM.bigOpen;
   MM.bigOpen=show;
@@ -19522,17 +19645,9 @@ function toggleBigMap(force){
     if(document.pointerLockElement) document.exitPointerLock();
   } else {
     MM.bigEl.classList.remove("on");
-    const resume=MM.bigWasLocked && !dead && !softLock;
+    const resume=MM.bigWasLocked;
     MM.bigWasLocked=false;
-    if(resume){
-      // 开地图时故意丢掉的指针锁: 丢锁发生在地图还开着时, pauseGame 会因为 bigmap 在模态列表里直接返回, 暂停遮罩不会出现。
-      // 关掉后把锁要回来。锁若没回来(浏览器拒绝/旧实现不回调), 不要留在「没锁、没暂停、输入全死」的状态。
-      enterPointerLock();
-      setTimeout(()=>{
-        if(MM.bigOpen || dead || softLock || locked || document.pointerLockElement || modalPanelOpen()) return;
-        if(overlay.style.display==="none") pauseGame();
-      }, 500);
-    }
+    resumeAfterOverlay(resume, viaEsc===true);
   }
   return MM.bigOpen;
 }
@@ -19621,7 +19736,7 @@ function mmUpdate(now){
       else if(playing() && !dead){ e.preventDefault(); e.stopImmediatePropagation(); toggleBigMap(true); }
       return;
     }
-    if(e.code==="Escape" && MM.bigOpen){ e.preventDefault(); e.stopImmediatePropagation(); toggleBigMap(false); }
+    if(e.code==="Escape" && MM.bigOpen){ e.preventDefault(); e.stopImmediatePropagation(); toggleBigMap(false, true); }
   },true);
   function mmFrame(now){
     requestAnimationFrame(mmFrame);
