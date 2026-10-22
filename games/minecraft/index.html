@@ -182,7 +182,7 @@
   #fullhelp .fh-title { font-size:17px; font-weight:bold; color:#fff; margin-bottom:10px; cursor:pointer; text-align:center; }
   #bossbar { position:absolute; left:50%; top:18px; transform:translateX(-50%); width:min(560px,74%); display:none; text-align:center; }
   #bossbar .bn { color:#e050e0; font:bold 17px "Microsoft YaHei",sans-serif; text-shadow:2px 2px 0 #000; letter-spacing:2px; margin-bottom:3px; }
-  #bossbar .bg { height:15px; background:rgba(0,0,0,.55); border:2px solid #000; box-shadow:0 0 0 1px #555; }
+  #bossbar .bg { height:15px; background:rgba(0,0,0,.55); border:2px solid #000; box-shadow:0 0 0 1px #555; overflow:hidden; }
   #bossbar .bf { height:100%; width:100%; background:linear-gradient(#d24bd2,#7a1e7a); transition:width .15s; }
   #viewmodel { position:absolute; right:2%; bottom:0; width:260px; height:260px; pointer-events:none; transform-origin:80% 100%; }
   #viewmodel canvas { width:100%; height:100%; image-rendering:pixelated; }
@@ -531,7 +531,6 @@
     <div id="bountybar"><i id="bountyFill"></i></div>
     <div id="bountyNum" style="font-size:11px;opacity:.72;margin-top:3px"></div>
   </div>
-  <div id="bossbar"><div class="bn">—</div><div class="bt"><i class="bf"></i></div></div>
   <div id="hearts"></div>
   <div id="hotbar"></div>
   <div id="viewmodel"></div>
@@ -5381,9 +5380,9 @@ function sandRiposteDamage(target,baseDamage){
   refreshSandStepButton();
   return {damage:baseDamage+bonus+extra,bonus:bonus+extra};
 }
-function modalPanelOpen(){          // 是否有居中模态面板(箱子/熔炉/背包/合成/附魔/药水/NPC/集市/图鉴…)正开着
+function modalPanelOpen(){          // 是否有居中模态面板(箱子/熔炉/背包/合成/附魔/药水/NPC/集市/图鉴/大地图…)正开着
   const ids=["craftPanel","enchPanel","potionPanel","chestPanel","furnacePanel","npcPanel","fullhelp","settingsPanel",
-    "bazaar-panel","pottery-panel","mythic-panel","lamp-panel","sphinx-panel","ruin-glyph-panel","expedition-route","meta-panel","caravan-panel","bagPanel"];
+    "bazaar-panel","pottery-panel","mythic-panel","lamp-panel","sphinx-panel","ruin-glyph-panel","expedition-route","meta-panel","caravan-panel","bagPanel","bigmap"];
   return ids.some(id=>{
     const el=document.getElementById(id); if(!el) return false;
     const cs=getComputedStyle(el);
@@ -7030,12 +7029,7 @@ function updateStatsHUD(){
                + (armor>0 ? `<br><span style="color:#9fd8ff">🛡 护甲 ${armor}/5</span>` : ``)
                + `<br><span style="color:${sandStepColor}">💨 C 沙步 · ${sandStepStatusLabel()}</span>`;
   refreshSandStepButton();
-  const bb=document.getElementById("bossbar");
-  if(boss){
-    bb.style.display="block";
-    bb.querySelector(".bn").textContent="⚔ "+boss.def.name+" ⚔";
-    bb.querySelector(".bf").style.width=Math.max(0,boss.hp/boss.def.hp*100)+"%";
-  } else bb.style.display="none";
+  updateBossBar();   // 血条只按 maxHp 画。这里若改用 def.hp, 会在 updateBossBar() 之后把天数加成/不祥/远征强化的满血画成 >100%
 }
 let hurtTintTimer=null;
 function damagePlayer(d,kx,kz){
@@ -7526,8 +7520,8 @@ function pauseGame(){
   clearSandRiposte();
   for(const k in keys) keys[k]=false;
   mouseHeld=-1; dragLook=false;
-  // 指针锁丢失若是为了打开某个面板(右键箱子/熔炉、Tab 背包、B 合成…)而非真的退出, 就别弹"游戏暂停"菜单:
-  // 面板是居中模态, 其下方若拉起全屏暂停遮罩, 面板四周会露出"游戏暂停"+按钮 → 看起来像右键把游戏退了(用户报的 bug)。
+  // 指针锁丢失若是为了打开某个面板(右键箱子/熔炉、Tab 背包、B 合成、N 大地图…)而非真的退出, 就别弹"游戏暂停"菜单:
+  // 面板是居中模态, 其下方若拉起全屏暂停遮罩, 面板四周会露出"游戏暂停"+按钮 → 看起来像右键/开地图把游戏退了。
   if(modalPanelOpen()) return;
   document.getElementById("title").textContent="游戏暂停";
   startbtn.textContent="继续游戏";
@@ -15261,8 +15255,8 @@ function useQuake(force){                                // 大地震颤: 以脚
     if(m.hp<=0) continue;
     const dx=m.x-player.x, dz=m.z-player.z, d=Math.hypot(dx,dz);
     if(d>8 || Math.abs(m.y-player.y)>4) continue;
-    const kb=12*(1-d/9)+4;
-    hurtMob(m, dmg, dx/d*kb, dz/d*kb, hit>0); hit++;
+    const kb=12*(1-d/9)+4, inv=d>1e-3?kb/d:0;   // 贴在同一格时 d=0, dx/d 会把击退写成 NaN, 下一帧坐标跟着坏掉
+    hurtMob(m, dmg, dx*inv, dz*inv, hit>0); hit++;
   }
   for(let i=0;i<26;i++){ const a=i/26*6.283;             // 冲击环粒子
     particles.push({x:player.x+Math.cos(a)*1.2, y:player.y+0.15, z:player.z+Math.sin(a)*1.2,
@@ -16668,6 +16662,17 @@ function selftest(){
         ok("大地震颤: 冷却期内再按被拒", useQuake()===false);
         combatMastery.quake=2; quakeCd=0;
         ok("大地震颤: 2 级伤害 12、冷却 19 秒", quakeCooldown()===19 && (()=>{ mq.hp=mq.maxHp=500; useQuake(); return mq.maxHp-mq.hp; })()===12, "cd="+quakeCooldown());
+        { // 贴脸重合: d=0 时击退方向不能写成 NaN, 否则下一帧坐标跟着坏
+          const keepQ=mobs.slice(), qLv=combatMastery.quake, qCd=quakeCd, bossQ=boss;
+          mobs.length=0;
+          const mz={type:"mummy",def:MOB_DEFS.mummy,x:player.x,y:player.y,z:player.z,hp:80,maxHp:80,vx:0,vy:0,vz:0,kbx:0,kbz:0,yaw:0,tgtYaw:0,hurtT:0,animT:0,t:9,atkCd:2,burnT:0,swingT:0,groanT:0,fleeT:0,onGround:true,pause:false,burning:false};
+          mobs.push(mz); combatMastery.quake=1;
+          useQuake(true); updateMobs(0.016);
+          const finite=mz.hp<80 && mz.hp>0 && Number.isFinite(mz.kbx) && Number.isFinite(mz.kbz) && Number.isFinite(mz.x) && Number.isFinite(mz.z);
+          ok("大地震颤: 与玩家重合时仍造成伤害, 击退和坐标保持有限", finite, "hp="+mz.hp+" kbx="+mz.kbx+" x="+mz.x);
+          mobs.length=0; for(const q of keepQ) mobs.push(q);
+          combatMastery.quake=qLv; quakeCd=qCd; boss=bossQ;
+        }
         // 回沙卷盘: 重置沙步冷却连招(前提固化: softLock=游戏中, 与种子无关)
         const slR30=softLock; softLock=true;
         combatMastery.recall=0;
@@ -18269,6 +18274,27 @@ function selftest(){
       const bs=bossBarState();
       ok("有Boss时血条显示且半血≈50%", bs.visible && Math.abs(bs.pct-0.5)<0.02 && bs.name===MOB_DEFS.king.name, "pct="+bs.pct.toFixed(2)+" name="+bs.name);
       mobs.length=mlen0;
+      { // 天数加成 / 不祥 / 远征强化会把 maxHp 抬到 def.hp 以上。血条必须按 maxHp, 并且经得住每帧 updateStatsHUD 的再写。
+        const keepB=mobs.slice(), bossB=boss, stHTML=document.getElementById("stats").innerHTML;
+        const compB=document.getElementById("compass"), compD=compB.style.display;
+        mobs.length=0;
+        const defB=MOB_DEFS.anubis, mxB=Math.round(defB.hp*1.55);
+        mobs.push({type:"anubis",def:defB,x:player.x+4,y:player.y,z:player.z,hp:mxB,maxHp:mxB,vx:0,vy:0,vz:0,kbx:0,kbz:0,yaw:0,tgtYaw:0,hurtT:0,animT:0,t:0,atkCd:1,burnT:0,swingT:0,groanT:0,fleeT:0,onGround:true,pause:false,burning:false,elite:false});
+        boss=mobs[0];
+        updateBossBar(); updateStatsHUD();
+        const barB=document.getElementById("bossbar");
+        const wFull=parseFloat(barB.querySelector(".bf").style.width);
+        const labFull=barB.querySelector(".bn").textContent;
+        mobs[0].hp=mxB/2;
+        updateBossBar(); updateStatsHUD();
+        const wHalf=parseFloat(barB.querySelector(".bf").style.width);
+        const oneBar=document.querySelectorAll("#bossbar").length===1;
+        ok("Boss 血条按最大生命计算: 强化后满血仍是 100%、半血 50%, 且只有一条血条",
+          oneBar && barB.style.display==="block" && Math.abs(wFull-100)<0.2 && Math.abs(wHalf-50)<0.2 && labFull.indexOf("100%")>=0,
+          "full="+wFull+" half="+wHalf+" label="+labFull+" n="+document.querySelectorAll("#bossbar").length);
+        mobs.length=0; for(const m of keepB) mobs.push(m);
+        boss=bossB; document.getElementById("stats").innerHTML=stHTML; compB.style.display=compD; updateBossBar();
+      }
       // 任务: 悬赏 —— 达标发奖轮换 / 分类计数 / 存档往返 / 老档归零
       const bI=bountyIdx,bP=bountyProg,bD=bountyDone, keyS=(typeof arenaState!=="undefined"?arenaState.keys:0),
             xpS=xp,lvlS=lvl,maxS=maxHp,hpS=hp,dmgS=dmgMul,dropS=drops.length;
@@ -18867,6 +18893,34 @@ function selftest(){
         document.getElementById("chestPanel").style.display=chD; locked=lk0; softLock=sl0; dead=dd0;
         ok("右键开面板不弹游戏暂停: 开着面板丢指针锁不退游戏, 真退出(无面板)仍暂停",
            panelNoPause && barePauses, "面板态未暂停="+panelNoPause+" 裸退出暂停="+barePauses);
+      }
+
+      // 5c) N 打开大地图也会 exitPointerLock。地图还开着时丢锁不该拉起暂停菜单(半透明底会透出「游戏暂停」), 关掉后菜单也不该残留。
+      {
+        const ovD=overlay.style.display, ovC=overlay.className, hudD=document.getElementById("hud").style.display;
+        const title0=document.getElementById("title").textContent, sb=document.getElementById("startbtn");
+        const sbt=sb.textContent, sbd=sb.disabled, mapWas=MM.bigOpen, lk0=locked, sl0=softLock, dd0=dead;
+        const ss0=Object.assign({}, sandStepState), key0={};
+        for(const k in keys) key0[k]=keys[k];
+        dead=false; softLock=false; locked=false;
+        overlay.style.display="none"; overlay.classList.remove("pause-menu");
+        document.getElementById("title").textContent="沙海奇境";   // 前面的暂停测试会把标题留成「游戏暂停」, 先写成已知值再看丢锁会不会改它
+        document.getElementById("hud").style.display="block";
+        if(MM.bigOpen) toggleBigMap(false);
+        toggleBigMap(true);
+        document.dispatchEvent(new Event("pointerlockchange"));
+        const mapNoPause=MM.bigOpen && overlay.style.display==="none" && !overlay.classList.contains("pause-menu") && document.getElementById("title").textContent==="沙海奇境";
+        toggleBigMap(false);
+        const mapClosed=!MM.bigOpen && overlay.style.display==="none" && !overlay.classList.contains("pause-menu");
+        overlay.style.display=ovD; overlay.className=ovC; document.getElementById("hud").style.display=hudD;
+        document.getElementById("title").textContent=title0; sb.textContent=sbt; sb.disabled=sbd;
+        locked=lk0; softLock=sl0; dead=dd0;
+        Object.assign(sandStepState, ss0);
+        for(const k in keys) keys[k]=false;
+        for(const k in key0) keys[k]=key0[k];
+        if(mapWas) toggleBigMap(true);
+        ok("大地图打开时丢指针锁不弹游戏暂停, 关掉后也不残留暂停菜单",
+           mapNoPause && mapClosed, "开图未暂停="+mapNoPause+" 关掉="+mapClosed);
       }
 
       // 5) 共享噪声缓冲: 反复触发所有材质, 缓冲区数量不随触发次数增长
@@ -19468,8 +19522,17 @@ function toggleBigMap(force){
     if(document.pointerLockElement) document.exitPointerLock();
   } else {
     MM.bigEl.classList.remove("on");
-    if(MM.bigWasLocked && !dead && !softLock) enterPointerLock();
+    const resume=MM.bigWasLocked && !dead && !softLock;
     MM.bigWasLocked=false;
+    if(resume){
+      // 开地图时故意丢掉的指针锁: 丢锁发生在地图还开着时, pauseGame 会因为 bigmap 在模态列表里直接返回, 暂停遮罩不会出现。
+      // 关掉后把锁要回来。锁若没回来(浏览器拒绝/旧实现不回调), 不要留在「没锁、没暂停、输入全死」的状态。
+      enterPointerLock();
+      setTimeout(()=>{
+        if(MM.bigOpen || dead || softLock || locked || document.pointerLockElement || modalPanelOpen()) return;
+        if(overlay.style.display==="none") pauseGame();
+      }, 500);
+    }
   }
   return MM.bigOpen;
 }

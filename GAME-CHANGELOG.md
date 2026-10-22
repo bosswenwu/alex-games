@@ -2,6 +2,18 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-10-22 — 沙海奇境：Boss 血条按最大生命、震颤贴脸不再写出 NaN、大地图不再误弹暂停
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`) only. Bug fixes found by running the game; no new keys, blocks, atlas tiles, or save fields.
+
+| Bug | Symptom | Cause | Fix |
+| --- | --- | --- | --- |
+| Boss 血条 | 天数加成、不祥试炼或远征强化把首领 `maxHp` 抬过 `def.hp` 后，满血血条画出格子（例如第 12 天阿努比斯 171/110 → 宽度 155%），要先打掉一截才开始下降；百分比文字也被抹掉。页面里还有第二条同 id 的血条，`getElementById` 永远改不到它。 | 每帧先 `updateBossBar()`（按 `maxHp`，带百分比），紧接着 `updateStatsHUD()` 用 `hp/def.hp` 把宽度和标题覆写掉。 | 血条只走 `updateBossBar()`。轨道加 `overflow:hidden`。删掉重复的 `#bossbar`。 |
+| 大地震颤 | 敌人脚底和玩家重合时按 Z，该生物的击退和坐标变成 NaN，之后一直停在坏坐标上。 | `dx/d` 在距离为 0 时是 NaN，`hurtMob` 把它加进 `kbx`。同文件的号角/烈阳横扫已经避开了这个除法。 | 距离小于 0.001 时照常造成伤害，击退记 0。 |
+| 大地图 | 指针锁定中按 N 打开大地图，半透明底后面露出「游戏暂停」；关掉地图后暂停菜单还在。 | 开地图会 `exitPointerLock()`。`pointerlockchange` 调用 `pauseGame()`，而 `bigmap` 不在 `modalPanelOpen()` 的名单里，丢锁被当成真的退出。 | 把 `bigmap` 算进模态面板。关掉地图后尝试把指针锁要回来；若浏览器没有把锁还回来，再落到暂停菜单，避免既没锁也没菜单。 |
+
+**Verification:** `node tools/headless.mjs selftest` 在 `?seed=424242` 与 `?seed=1` 均为 **512/512**（本轮新增 3 条）。另用 eval 复核：强化首领满血条宽 100%、半血 50%；贴脸震颤后坐标为有限数；大地图打开时派发 `pointerlockchange`，暂停遮罩保持关闭。
+
 ## 2026-10-15 — 沙海奇境：修「右键有时把游戏退成暂停菜单」（bug 修复会话）
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) only. Input/pointer-lock bug fix; no new keys, blocks, atlas tiles or save fields. Did not touch the C-key dodge / `foeStrike()` / global key handler, or shaders/render/water.
