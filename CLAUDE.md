@@ -34,7 +34,7 @@
 | 玩家技能 | `sandStep`（C 键沙步）、`sandStepDirection`、`sandStepPanelOpen` |
 | 输入 | 全局 `document.addEventListener("keydown", …)`；`playing()` = `locked \|\| softLock` |
 | 存档 | `SAVE_KEY`、`collectSave`、`saveGame`、`loadGame`。偏好设置（`sandsea_gfx`、`sandsea_music_*`）单独存，不写进世界存档 |
-| 调试 / 自测 | `window.__game`；`selftest()` 由 `?selftest=1` 触发，用 `ok(name, cond, detail)` 断言，2026-10 初约 365 条，以实际跑出来的为准 |
+| 调试 / 自测 | `window.__game`；自测代码在 `games/minecraft/selftest.js`（仅 `?selftest=1` 时动态加载，与主脚本共享全局词法环境），`selftest()` 用 `ok(name, cond, detail)` 断言，2026-10 初约 365 条，以实际跑出来的为准 |
 
 ## 验证
 
