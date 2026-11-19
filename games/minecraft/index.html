@@ -3016,7 +3016,9 @@ function drawVillageHouse(P,H,h,put){
 
 /* ---------- 世界存储 ---------- */
 const world = new Map();
-const key=(cx,cz)=>cx+","+cz;
+/* 数字打包键(与 ckey 同式, |区块坐标|<4M 内无冲突): 物理/AI/相机等热路径每帧成百上千次
+   world.get(key(...)), 字符串键意味着每次调用都分配一个新字符串(GC 抖动来源之一)。 */
+const key=(cx,cz)=>cx*8388608+cz;
 function ensureData(cx,cz){
   const k=key(cx,cz);
   let c=world.get(k);
@@ -5743,14 +5745,18 @@ const BOUNTIES=[
 ];
 let bountyIdx=0, bountyProg=0, bountyDone=0;
 function curBounty(){ return BOUNTIES[bountyIdx%BOUNTIES.length]; }
+let _btyBox=null, _btyDesc=null, _btyFill=null, _btyNum=null, _btyDescTxt=null, _btyW=null, _btyNumTxt=null;
 function updateBountyHUD(){
-  const box=document.getElementById("bountybox"); if(!box) return;
-  if(typeof playing==="function" && !playing()){ box.style.display="none"; return; }
+  if(!_btyBox){ _btyBox=document.getElementById("bountybox"); if(!_btyBox) return; _btyDesc=document.getElementById("bountyDesc"); _btyFill=document.getElementById("bountyFill"); _btyNum=document.getElementById("bountyNum"); }
+  const box=_btyBox;
+  if(typeof playing==="function" && !playing()){ if(box.style.display!=="none") box.style.display="none"; return; }
   const b=curBounty();
-  box.style.display="block";
-  document.getElementById("bountyDesc").textContent=b.desc;
-  document.getElementById("bountyFill").style.width=(Math.max(0,Math.min(1,bountyProg/b.goal))*100).toFixed(0)+"%";
-  document.getElementById("bountyNum").textContent=Math.min(bountyProg,b.goal)+" / "+b.goal+"　· 已完成 "+bountyDone+" 单 · 奖励 +"+b.xp+"xp "+(b.reward==="key"?"+宝库钥匙":"+能量核心");
+  if(box.style.display!=="block") box.style.display="block";
+  if(_btyDescTxt!==b.desc){ _btyDescTxt=b.desc; _btyDesc.textContent=b.desc; }   // 文本/进度只在变化时写(原来每帧无条件写)
+  const w=(Math.max(0,Math.min(1,bountyProg/b.goal))*100).toFixed(0)+"%";
+  if(w!==_btyW){ _btyW=w; _btyFill.style.width=w; }
+  const numTxt=Math.min(bountyProg,b.goal)+" / "+b.goal+"　· 已完成 "+bountyDone+" 单 · 奖励 +"+b.xp+"xp "+(b.reward==="key"?"+宝库钥匙":"+能量核心");
+  if(numTxt!==_btyNumTxt){ _btyNumTxt=numTxt; _btyNum.textContent=numTxt; }
 }
 function bountyProgress(id, value, mode){
   const b=curBounty(); if(!b || b.id!==id) return;
@@ -5776,13 +5782,17 @@ function bossBarState(){
   const mx=b.maxHp||b.def.hp||1;
   return {visible:true, pct:Math.max(0,Math.min(1,b.hp/mx)), name:b.def.name};
 }
+let _bossEl=null, _bossBn=null, _bossBf=null, _bossTxt=null, _bossW=null;
 function updateBossBar(){
-  const el=document.getElementById("bossbar"); if(!el) return;
+  if(!_bossEl){ _bossEl=document.getElementById("bossbar"); if(!_bossEl) return; _bossBn=_bossEl.querySelector(".bn"); _bossBf=_bossEl.querySelector(".bf"); }
+  const el=_bossEl;
   const s=bossBarState();
-  if(!s.visible){ el.style.display="none"; return; }
-  el.style.display="block";
-  el.querySelector(".bn").textContent="⚔ "+s.name+"　"+Math.ceil(s.pct*100)+"%";
-  el.querySelector(".bf").style.width=(s.pct*100).toFixed(1)+"%";
+  if(!s.visible){ if(el.style.display!=="none"){ el.style.display="none"; _bossTxt=_bossW=null; } return; }   // 变化时才写 display; 隐藏后清缓存, 下次显示强制重画
+  if(el.style.display!=="block") el.style.display="block";
+  const txt="⚔ "+s.name+"　"+Math.ceil(s.pct*100)+"%";     // 文本/宽度只在变化时写(原来每帧无条件写)
+  if(txt!==_bossTxt){ _bossTxt=txt; _bossBn.textContent=txt; }
+  const w=(s.pct*100).toFixed(1)+"%";
+  if(w!==_bossW){ _bossW=w; _bossBf.style.width=w; }
 }
 function showVictory(){
   const v=document.getElementById("victory"); if(!v) return;
@@ -6997,39 +7007,50 @@ function nearestLandmark(px,pz){
   _compass.land=best;
   return best;
 }
+let _compassEl=null, _cArrow=null, _cLabel=null, _cDist=null;   // 子元素引用只查一次(原来每帧 3 次 querySelector)
+let _cLabelTxt=null, _cDistTxt=null;
 function updateCompassHUD(){
-  const el=document.getElementById("compass");
+  if(!_compassEl){
+    _compassEl=document.getElementById("compass");
+    _cArrow=_compassEl.querySelector(".carrow"); _cLabel=_compassEl.querySelector(".clabel"); _cDist=_compassEl.querySelector(".cdist");
+  }
+  const el=_compassEl;
   let tx,tz,label,dist;
   if(typeof expeditionState!=="undefined" && expeditionState.active){   // 远征进行中: 指南针优先指向金羊毛宝藏(带倒计时)
     tx=expeditionState.tx; tz=expeditionState.tz; dist=expeditionDist(); label="🌊 金羊毛 "+Math.ceil(expeditionState.t)+"s";
   } else {
     const land=nearestLandmark(player.x,player.z);
-    if(!land){ el.style.display="none"; return; }
+    if(!land){ if(el.style.display!=="none") el.style.display="none"; return; }
     tx=land.x; tz=land.z; dist=land.dist; label=LANDMARKS[land.type];
   }
-  el.style.display="block";
+  if(el.style.display!=="block") el.style.display="block";
   const dx=tx-player.x, dz=tz-player.z;
   const bearing=Math.atan2(dx,-dz);        // forward=(sin yaw,-cos yaw) ⇒ 世界方位角
   const rel=bearing-player.yaw;             // 相对视线的角度; 0=正前方
-  el.querySelector(".carrow").style.transform="rotate("+rel+"rad)";
-  el.querySelector(".clabel").textContent=label;
+  _cArrow.style.transform="rotate("+rel+"rad)";   // transform 不触发布局, 每帧更新也便宜
+  if(_cLabelTxt!==label){ _cLabelTxt=label; _cLabel.textContent=label; }
   const m=Math.round(dist);
-  el.querySelector(".cdist").textContent = m>=1000 ? (m/1000).toFixed(1)+"km" : m+"m";
+  const distTxt = m>=1000 ? (m/1000).toFixed(1)+"km" : m+"m";
+  if(_cDistTxt!==distTxt){ _cDistTxt=distTxt; _cDist.textContent=distTxt; }
 }
+let _statsEl=null, _statsHtml=null, _statsMarks=0, _statsSeenN=-1;
 function updateStatsHUD(){
   updateCompassHUD();
-  const st=document.getElementById("stats");
+  if(!_statsEl) _statsEl=document.getElementById("stats");
+  const st=_statsEl;
   const tod = sunH<0.02 ? "🌙夜" : "☀昼";
   const bio=BIOME_NAME[biomeAt(Math.floor(player.x),Math.floor(player.z))];
-  const marks=landTypesSeen().size;
+  if(_statsSeenN!==landSeen.size){ _statsSeenN=landSeen.size; _statsMarks=landTypesSeen().size; }   // landTypesSeen 要 split 全部键, 只在记录数变化时重算
+  const marks=_statsMarks;
   const sandStepColor=sandStepState.counterT>0?"#ffd16c":sandStepState.counterHitT>0||sandStepState.feedbackT>0?"#fff0a5":sandStepState.cd>0?"#e8d6b6":"#a9e6b0";
-  st.innerHTML = `第 <b>${dayCount}</b> 天 ${tod} ${weatherName()}<br><span style="color:#a8e6a0">🌍 ${bio}</span>`
-               + `<br><span class="kills">☠ 击杀 ${kills}</span>`
-               + `<br><span style="color:#ffe0a0">📍 地标 ${marks}/${PAYOFF_N}</span>`
-               + (armor>0 ? `<br><span style="color:#9fd8ff">🛡 护甲 ${armor}/5</span>` : ``)
-               + `<br><span style="color:${sandStepColor}">💨 C 沙步 · ${sandStepStatusLabel()}</span>`;
+  const html = `第 <b>${dayCount}</b> 天 ${tod} ${weatherName()}<br><span style="color:#a8e6a0">🌍 ${bio}</span>`
+             + `<br><span class="kills">☠ 击杀 ${kills}</span>`
+             + `<br><span style="color:#ffe0a0">📍 地标 ${marks}/${PAYOFF_N}</span>`
+             + (armor>0 ? `<br><span style="color:#9fd8ff">🛡 护甲 ${armor}/5</span>` : ``)
+             + `<br><span style="color:${sandStepColor}">💨 C 沙步 · ${sandStepStatusLabel()}</span>`;
+  if(html!==_statsHtml){ _statsHtml=html; st.innerHTML=html; }   // 只在文本真的变化时重写 innerHTML(原来每帧整块重建, 触发 DOM 解析+排版)
   refreshSandStepButton();
-  updateBossBar();   // 血条只按 maxHp 画。这里若改用 def.hp, 会在 updateBossBar() 之后把天数加成/不祥/远征强化的满血画成 >100%
+  // updateBossBar() 由主循环统一调用, 不再在这里重复(它每帧只会写变化的部分)
 }
 let hurtTintTimer=null;
 function damagePlayer(d,kx,kz){
@@ -12445,9 +12466,10 @@ function renderReflection(pv, camX, camY, camZ, w, h, uw){
   refl.on=true; refl.frames++;
   return true;
 }
+let _tintW=null, _tintL=null, _tintF=null;
+function showEl(el,on){ const v=on?"block":"none"; if(el.style.display!==v) el.style.display=v; }   // 写前比对, 不变就不碰样式
 function render(now){
-  if(ctxLost) return;                       // 上下文丢失期间不绘制
-  // 宽高必须 >=1: 窗口最小化/面板隐藏时为 0 会让投影矩阵变 NaN → 白屏
+  if(ctxLost) return;                       // 上下文丢失期间不绘制  // 宽高必须 >=1: 窗口最小化/面板隐藏时为 0 会让投影矩阵变 NaN → 白屏
   const w=Math.max(1,innerWidth*devicePixelRatio|0), h=Math.max(1,innerHeight*devicePixelRatio|0);
   if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h; }
   postBegin(w,h);                           // 后处理: 场景先画进离屏 FBO(「低」档/WebGL1 直接画布)
@@ -12532,9 +12554,10 @@ function render(now){
   _sky.fogA += (0.06-_sky.fogA)*(uw?0:_sky.sand);
   _sky.fogB = 0.05+(0.02-0.05)*_sky.sand;      // 沙暴的雾墙更高
   _sky.oct = GFX_PRESETS[gfxLevel].clouds||5;
-  document.getElementById("watertint").style.display=uw?"block":"none";
-  document.getElementById("lavatint").style.display=eyeInLava()?"block":"none";
-  document.getElementById("firetint").style.display=(burnT>0&&!eyeInLava())?"block":"none";
+  // 屏幕色调层: 元素引用只查一次, 状态变化时才写 display(原来每帧 3 次 getElementById + 无条件写样式)
+  if(!_tintW){ _tintW=document.getElementById("watertint"); _tintL=document.getElementById("lavatint"); _tintF=document.getElementById("firetint"); }
+  const inLavaNow=eyeInLava();
+  showEl(_tintW,uw); showEl(_tintL,inLavaNow); showEl(_tintF,burnT>0&&!inLavaNow);
 
   gl.clearColor(sky[0],sky[1],sky[2],1);
   gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
@@ -19446,7 +19469,7 @@ function mmRenderTile(cx,cz){
     const p=i*4; d[p]=c>>16&255; d[p+1]=c>>8&255; d[p+2]=c&255; d[p+3]=255;
   }
   let t=MM.tiles.get(k);
-  if(!t){ const cv=document.createElement("canvas"); cv.width=cv.height=16; t={c:cv, x:null, st:0}; t.x=cv.getContext("2d"); MM.tiles.set(k,t); }
+  if(!t){ const cv=document.createElement("canvas"); cv.width=cv.height=16; t={c:cv, x:null, st:0, cx, cz}; t.x=cv.getContext("2d"); MM.tiles.set(k,t); }
   t.x.putImageData(_mmImg,0,0);
   t.st = ch ? 1 : 0;
 }
@@ -19476,8 +19499,8 @@ function mmPump(now,budget,rad){
     MM.bigDirty=true;
   }
   MM.complete=done; if(done) MM.lastScan=now;
-  if(MM.tiles.size>1500){                          // 淘汰远处瓦片
-    for(const [k,t] of MM.tiles){ const p=k.split(","); if(Math.max(Math.abs(p[0]-pcx),Math.abs(p[1]-pcz))>24) MM.tiles.delete(k); }
+  if(MM.tiles.size>1500){                          // 淘汰远处瓦片(瓦片自带坐标, 不用拆键)
+    for(const [k,t] of MM.tiles){ if(Math.max(Math.abs(t.cx-pcx),Math.abs(t.cz-pcz))>24) MM.tiles.delete(k); }
   }
   return done;
 }
