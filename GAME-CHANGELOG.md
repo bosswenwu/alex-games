@@ -2,6 +2,20 @@
 
 Persistent handoff notes for future agents. Add a new entry for each user-visible game change; do not remove earlier entries.
 
+## 2026-11-19 — 沙海奇境：页面瘦身 25%（自测代码外置）+ 存档 diff 按区块索引
+
+**Scope:** 沙海奇境 (`games/minecraft/index.html`, 新增 `games/minecraft/selftest.js`)。纯性能/工程改动，无新按键、方块、图集格或存档字段；玩法与 UI 零变化。
+
+| 项 | 改动前 | 改动后 |
+| --- | --- | --- |
+| 首屏下载/解析 | `index.html` 1,305,151 字节，其中自测代码约 323 KB（≈25%），每个玩家都要下载并解析，但只有 `?selftest=1` 才会运行 | 自测函数整体移至 `selftest.js`，仅自测模式动态加载；主文件降至 983,704 字节（−24.6%）。`selftest.js` 以经典脚本加载，与主脚本共享全局词法环境，断言逻辑逐字未动 |
+| 存档 diff 回贴 | `applyDiffToChunk` 每生成一个区块都遍历全量 `blockDiff` 并逐条 `split` 字符串，老存档下新区块生成越来越慢 | 新增按区块的二级索引 `diffByChunk`（与 `blockDiff` 同步维护：`setBlock` 热路径 O(1) 写入，读档/自测还原后整体重建），回贴只扫本区块的改动 |
+| 自测加载失败 | —— | `selftest.js` 拉取失败时标题置 FAIL 并写 `window.__selftest`，不会静默挂死等待 |
+
+注意：`window.__game` 末尾原本以 shorthand 形式暴露 `selftest` 函数，依赖主脚本内的函数声明提升；自测代码外置后该引用会在主脚本求值时抛 ReferenceError，已改为惰性 getter（`typeof selftest==="function" ? selftest : undefined`），自测模式下行为不变。
+
+**Verification:** 主脚本与 `selftest.js` 均通过 `node --check`；`node tools/headless.mjs selftest`（本地 GPU, ANGLE D3D11）514/514 PASS；正常模式（不带 `?selftest=1`）冒烟：页面可进入游戏、`selftest.js` 未被请求、改方块→卸载重载区块后改动经新索引正确贴回。
+
 ## 2026-10-22 — 沙海奇境：Esc 关大地图 / 编年史不再落入暂停菜单
 
 **Scope:** 沙海奇境 (`games/minecraft/index.html`) only. Same branch as the Boss 血条 / 震颤 / 大地图 fix. No new keys, blocks, atlas tiles, or save fields.
