@@ -8,7 +8,7 @@ Persistent handoff notes for future agents. Add a new entry for each user-visibl
 
 | 项 | 改动前 | 改动后 |
 | --- | --- | --- |
-| 首屏下载/解析 | `index.html` 1,305,151 字节，其中自测代码约 323 KB（≈25%），每个玩家都要下载并解析，但只有 `?selftest=1` 才会运行 | 自测函数整体移至 `selftest.js`，仅自测模式动态加载；主文件降至 983,704 字节（−24.6%）。`selftest.js` 以经典脚本加载，与主脚本共享全局词法环境，断言逻辑逐字未动 |
+| 首屏下载/解析 | `index.html` 1,305,151 字节，其中自测代码约 323 KB（≈25%），每个玩家都要下载并解析，但只有 `?selftest=1` 才会运行 | 自测函数整体移至 `selftest.js`，仅自测模式动态加载；主文件降至 983,892 字节（−24.6%）。`selftest.js` 以经典脚本加载，与主脚本共享全局词法环境，断言逻辑逐字未动 |
 | 存档 diff 回贴 | `applyDiffToChunk` 每生成一个区块都遍历全量 `blockDiff` 并逐条 `split` 字符串，老存档下新区块生成越来越慢 | 新增按区块的二级索引 `diffByChunk`（与 `blockDiff` 同步维护：`setBlock` 热路径 O(1) 写入，读档/自测还原后整体重建），回贴只扫本区块的改动 |
 | 自测加载失败 | —— | `selftest.js` 拉取失败时标题置 FAIL 并写 `window.__selftest`，不会静默挂死等待 |
 
